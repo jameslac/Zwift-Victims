@@ -1,0 +1,42 @@
+name: AI Holistic PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  ai-pr-review:
+    name: Holistic Repo & Diff Review
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full repository history
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Google GenAI SDK
+        run: pip install -U google-genai
+
+      - name: Run Holistic AI PR Reviewer
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          AI_REVIEW_MODEL: ${{ vars.AI_REVIEW_MODEL }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: python3 .github/scripts/ai_pr_reviewer.py
