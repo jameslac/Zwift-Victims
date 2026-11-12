@@ -21,6 +21,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from typing import Any
@@ -321,17 +322,29 @@ def call_gemini(api_key: str, model: str, user_prompt: str) -> dict[str, Any]:
     from google import genai
 
     client = genai.Client(api_key=api_key)
-    interaction = client.interactions.create(
-        model=model,
-        system_instruction=SYSTEM_PROMPT,
-        input=user_prompt,
-        response_format={
-            "type": "text",
-            "mime_type": "application/json",
-            "schema": REVIEW_JSON_SCHEMA,
-        },
-    )
-    return extract_json_object(interaction.output_text or "{}")
+    max_attempts = 4
+    for attempt in range(1, max_attempts + 1):
+        try:
+            interaction = client.interactions.create(
+                model=model,
+                system_instruction=SYSTEM_PROMPT,
+                input=user_prompt,
+                response_format={
+                    "type": "text",
+                    "mime_type": "application/json",
+                    "schema": REVIEW_JSON_SCHEMA,
+                },
+            )
+            return extract_json_object(interaction.output_text or "{}")
+        except Exception as exc:
+            err_str = str(exc)
+            is_transient = any(code in err_str for code in ("503", "429", "high demand", "service_unavailable"))
+            if not is_transient or attempt == max_attempts:
+                raise
+            wait_s = 10 * attempt
+            print(f"Gemini transient error (attempt {attempt}/{max_attempts}): {err_str}. Retrying in {wait_s}s...")
+            time.sleep(wait_s)
+    return {}
 
 
 def build_scale_meter_markdown(metrics: dict[str, int]) -> tuple[str, bool]:
