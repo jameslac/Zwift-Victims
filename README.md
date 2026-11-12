@@ -10,6 +10,15 @@ We document all architectural decisions, domain rules, and unofficial API refere
 - **[Zwift Ecosystem API Reference (`docs/API_REFERENCE.md`)](./docs/API_REFERENCE.md)**
   - Decision matrix and endpoint catalog for **Zwift Core API**, **ZwiftPower API**, **ZwiftRacing.app**, and **Static Game Data / Equipment Lookups**, including authentication flows and upstream community documentation links.
 
+## API Docs (quick links)
+Zwift has no official public API docs; these community references cover `/api/profiles/me` and the rest of the Core API. More detail and endpoint tables live in [`docs/API_REFERENCE.md`](./docs/API_REFERENCE.md).
+- [`strukturunion-mmw/zwift-api-documentation`](https://github.com/strukturunion-mmw/zwift-api-documentation) – endpoint documentation
+- [`Ogadai/zwift-mobile-api`](https://github.com/Ogadai/zwift-mobile-api) – mobile API client & protobuf reference
+- [`rally25rs/zwift-api-wrapper`](https://github.com/rally25rs/zwift-api-wrapper) – TypeScript wrapper & payload types
+- [`andipaetzold/zwift-data`](https://github.com/andipaetzold/zwift-data) – static routes/bikes/wheels data
+- [`puckdoug/zpdatafetch`](https://github.com/puckdoug/zpdatafetch) – ZwiftPower JSON structures
+- Tip: the profile page's "All profile data" section shows the live `/api/profiles/me` payload.
+
 ## Local Development & Deployment
 ```bash
 # Install dependencies
@@ -28,8 +37,8 @@ npm run deploy
 ## Initial Roadmap
 1. **Milestone 1: Foundation & Authentication**
    - [x] Scaffold Vite + React + TypeScript + Tailwind + PWA + Unified Cloudflare Worker (`wrangler.jsonc`).
-   - [ ] Implement `/api/zwift/*` and `/api/zwiftpower/*` proxy routes in `worker/index.ts`.
-   - [ ] Build the Login screen & local token management (`localStorage` + auto-refresh) and verify by fetching the logged-in user's Zwift profile and friends/followees list.
+   - [x] Implement `/api/zwift/*` proxy routes (token + allow-listed Core API) in `worker/index.ts`. (`/api/zwiftpower/*` still TODO)
+   - [x] Build the Login screen & local token management (`localStorage` + auto-refresh) and verify by fetching the logged-in user's Zwift profile and friends/followees list.
 2. **Milestone 2: Head-to-Head ("Zwift Victims") Win/Loss Tracker**
    - [ ] Select/manage the roster of friends (from Zwift followees or by Zwift ID search).
    - [ ] Fetch shared race history and compute pairwise `1v1` Win/Loss records across every multi-friend race.
