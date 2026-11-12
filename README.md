@@ -45,3 +45,4 @@ npm run deploy
    - [ ] Add race exclusion filters (e.g., team events like ZRL/TTT or manual race exclusions).
 3. **Milestone 3: Race Deep-Dive & Equipment Inspector**
    - [ ] Inspect individual races, power splits (`15s`, `1m`, `5m`, `20m`), and equipped bike frames/wheels.
+   - [ ] Build an in-app **Share / Snapshot export** feature to generate clean, full-view images for sharing on iOS and Android (since native OS long screenshots are not reliably supported in mobile Chrome or installed PWAs).
