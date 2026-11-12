@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zwift-victims",
+  "main": "worker/index.ts",
+  "compatibility_date": "2025-02-14",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
