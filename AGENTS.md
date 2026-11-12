@@ -7,6 +7,6 @@ is needed for it**, and either add it under `.github/workflows/` or note in the 
 
 ## Existing checks
 - `ci.yml`: ESLint, typecheck + build, validators (lockfile sync, npm audit, config parse, gitleaks).
-- `holistic-pr-review.yml`: Gemini-powered advisory PR review (needs `GEMINI_API_KEY` repo secret).
+- `ai-review.yml` + `.github/scripts/ai_pr_reviewer.py`: Full-repo + diff AI PR reviewer (runs on non-draft PRs; uses `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` and posts summary + inline PR review comments + context scale meter).
 
 Run locally before pushing: `npm run lint && npm run build`.
