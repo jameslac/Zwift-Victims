@@ -13,6 +13,17 @@ function Stat({ label, value }: { label: string; value: string | number | undefi
   );
 }
 
+/** Flatten nested JSON into dotted-key/value string pairs for display. */
+function flatten(obj: unknown, prefix = ''): [string, string][] {
+  if (obj === null || typeof obj !== 'object') return [[prefix, String(obj)]];
+  const entries = Object.entries(obj as Record<string, unknown>);
+  if (entries.length === 0) return [[prefix, Array.isArray(obj) ? '[]' : '{}']];
+  return entries.flatMap(([k, v]) => {
+    const key = prefix ? (Array.isArray(obj) ? `${prefix}[${k}]` : `${prefix}.${k}`) : k;
+    return v !== null && typeof v === 'object' ? flatten(v, key) : [[key, String(v)] as [string, string]];
+  });
+}
+
 export default function ProfilePage({ profile }: { profile: ZwiftProfile }) {
   const { logout } = useAuth();
   const { units, setUnits } = useUnits();
@@ -68,6 +79,22 @@ export default function ProfilePage({ profile }: { profile: ZwiftProfile }) {
           <Stat label="Height" value={formatHeight(profile.height, units)} />
           <Stat label="Racing Score" value={metrics?.racingScore} />
           <Stat label="Category" value={metrics?.category ?? metrics?.categoryWomen} />
+        </dl>
+      </section>
+
+      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8">
+        <h2 className="text-lg font-bold mb-3">All profile data</h2>
+        <p className="text-xs text-slate-400 mb-4">
+          Everything returned by Zwift&apos;s <code>/api/profiles/me</code>, as-is (weight in grams,
+          height in mm).
+        </p>
+        <dl className="divide-y divide-slate-800 text-sm">
+          {flatten(profile).map(([key, value]) => (
+            <div key={key} className="flex flex-col sm:flex-row sm:justify-between gap-1 py-2">
+              <dt className="font-mono text-slate-400 break-all">{key}</dt>
+              <dd className="font-mono sm:text-right break-all">{value}</dd>
+            </div>
+          ))}
         </dl>
       </section>
     </main>

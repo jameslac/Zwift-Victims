@@ -10,6 +10,15 @@ We document all architectural decisions, domain rules, and unofficial API refere
 - **[Zwift Ecosystem API Reference (`docs/API_REFERENCE.md`)](./docs/API_REFERENCE.md)**
   - Decision matrix and endpoint catalog for **Zwift Core API**, **ZwiftPower API**, **ZwiftRacing.app**, and **Static Game Data / Equipment Lookups**, including authentication flows and upstream community documentation links.
 
+## API Docs (quick links)
+Zwift has no official public API docs; these community references cover `/api/profiles/me` and the rest of the Core API. More detail and endpoint tables live in [`docs/API_REFERENCE.md`](./docs/API_REFERENCE.md).
+- [`strukturunion-mmw/zwift-api-documentation`](https://github.com/strukturunion-mmw/zwift-api-documentation) – endpoint documentation
+- [`Ogadai/zwift-mobile-api`](https://github.com/Ogadai/zwift-mobile-api) – mobile API client & protobuf reference
+- [`rally25rs/zwift-api-wrapper`](https://github.com/rally25rs/zwift-api-wrapper) – TypeScript wrapper & payload types
+- [`andipaetzold/zwift-data`](https://github.com/andipaetzold/zwift-data) – static routes/bikes/wheels data
+- [`puckdoug/zpdatafetch`](https://github.com/puckdoug/zpdatafetch) – ZwiftPower JSON structures
+- Tip: the profile page's "All profile data" section shows the live `/api/profiles/me` payload.
+
 ## Local Development & Deployment
 ```bash
 # Install dependencies

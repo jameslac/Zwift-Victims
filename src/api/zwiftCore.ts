@@ -21,6 +21,8 @@ export interface ZwiftProfile {
     category?: string;
     categoryWomen?: string;
   };
+  /** /api/profiles/me returns many more fields; keep them all accessible. */
+  [key: string]: unknown;
 }
 
 export class AuthError extends Error {}
