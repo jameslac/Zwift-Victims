@@ -34,7 +34,7 @@ export default function ProfilePage({ profile }: { profile: ZwiftProfile }) {
   const privateRows = rows.filter(([key]) => key.startsWith('privateAttributes'));
 
   return (
-    <main className="min-h-dvh max-w-3xl mx-auto p-4 sm:p-8 space-y-6">
+    <main className="max-w-3xl mx-auto p-4 sm:p-8 space-y-6">
       <header className="flex items-center justify-between gap-3">
         <span className="font-extrabold text-lg">Zwift Victims</span>
         <div className="flex items-center gap-2">

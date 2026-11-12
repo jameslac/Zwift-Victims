@@ -15,7 +15,7 @@ export default defineConfig({
         description: 'Head-to-Head Zwift Race Tracker & Analytics',
         theme_color: '#fc6719',
         background_color: '#0f172a',
-        display: 'standalone',
+        display: 'minimal-ui',
         icons: [
           {
             src: '/icon.svg',
