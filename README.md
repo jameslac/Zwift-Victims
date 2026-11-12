@@ -28,8 +28,8 @@ npm run deploy
 ## Initial Roadmap
 1. **Milestone 1: Foundation & Authentication**
    - [x] Scaffold Vite + React + TypeScript + Tailwind + PWA + Unified Cloudflare Worker (`wrangler.jsonc`).
-   - [ ] Implement `/api/zwift/*` and `/api/zwiftpower/*` proxy routes in `worker/index.ts`.
-   - [ ] Build the Login screen & local token management (`localStorage` + auto-refresh) and verify by fetching the logged-in user's Zwift profile and friends/followees list.
+   - [x] Implement `/api/zwift/*` proxy routes (token + allow-listed Core API) in `worker/index.ts`. (`/api/zwiftpower/*` still TODO)
+   - [x] Build the Login screen & local token management (`localStorage` + auto-refresh) and verify by fetching the logged-in user's Zwift profile and friends/followees list.
 2. **Milestone 2: Head-to-Head ("Zwift Victims") Win/Loss Tracker**
    - [ ] Select/manage the roster of friends (from Zwift followees or by Zwift ID search).
    - [ ] Fetch shared race history and compute pairwise `1v1` Win/Loss records across every multi-friend race.
