@@ -26,9 +26,12 @@ function flatten(obj: unknown, prefix = ''): [string, string][] {
 
 export default function ProfilePage({ profile }: { profile: ZwiftProfile }) {
   const { logout } = useAuth();
-  const { units, setUnits } = useUnits();
+  // Default to the rider's Zwift preference until they pick a unit system here.
+  const { units, setUnits } = useUnits(profile.useMetric === false ? 'imperial' : 'metric');
   const name = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Zwift rider';
   const metrics = profile.competitionMetrics;
+  const rows = flatten(profile);
+  const privateRows = rows.filter(([key]) => key.startsWith('privateAttributes'));
 
   return (
     <main className="min-h-dvh max-w-3xl mx-auto p-4 sm:p-8 space-y-6">
@@ -89,13 +92,28 @@ export default function ProfilePage({ profile }: { profile: ZwiftProfile }) {
           height in mm).
         </p>
         <dl className="divide-y divide-slate-800 text-sm">
-          {flatten(profile).map(([key, value]) => (
-            <div key={key} className="flex flex-col sm:flex-row sm:justify-between gap-1 py-2">
-              <dt className="font-mono text-slate-400 break-all">{key}</dt>
-              <dd className="font-mono sm:text-right break-all">{value}</dd>
-            </div>
-          ))}
+          {rows
+            .filter(([key]) => !key.startsWith('privateAttributes'))
+            .map(([key, value]) => (
+              <div key={key} className="flex flex-col sm:flex-row sm:justify-between gap-1 py-2">
+                <dt className="font-mono text-slate-400 break-all">{key}</dt>
+                <dd className="font-mono sm:text-right break-all">{value}</dd>
+              </div>
+            ))}
         </dl>
+        <details className="mt-4">
+          <summary className="cursor-pointer text-sm text-slate-400">
+            privateAttributes ({privateRows.length} internal Zwift values)
+          </summary>
+          <dl className="divide-y divide-slate-800 text-sm mt-2">
+            {privateRows.map(([key, value]) => (
+              <div key={key} className="flex flex-col sm:flex-row sm:justify-between gap-1 py-2">
+                <dt className="font-mono text-slate-400 break-all">{key}</dt>
+                <dd className="font-mono sm:text-right break-all">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
       </section>
     </main>
   );
