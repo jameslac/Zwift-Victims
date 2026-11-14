@@ -8,7 +8,13 @@ const ZWIFT_API_BASE = 'https://us-or-rly101.zwift.com';
 const ZWIFT_CLIENT_ID = 'Zwift_Mobile_Link';
 
 // Only these Zwift Core API paths may be relayed (keeps the proxy from being an open relay).
-const ZWIFT_API_ALLOWLIST = [/^\/api\/profiles\/me$/, /^\/api\/profiles\/\d+(\/followees)?$/];
+const ZWIFT_API_ALLOWLIST = [
+  /^\/api\/profiles\/me$/,
+  /^\/api\/profiles\/\d+(\/(followees|followers|activities(\/\d+)?))?$/,
+  /^\/api\/race-results\/entries$/,
+  /^\/api\/public\/events\/\d+$/,
+];
+const ALLOWED_QUERY_PARAMS = new Set(['start', 'limit', 'event_subgroup_id']);
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -53,14 +59,27 @@ async function handleToken(request: Request): Promise<Response> {
   });
 }
 
-async function handleCoreApi(request: Request, path: string): Promise<Response> {
+async function handleCoreApi(
+  request: Request,
+  path: string,
+  searchParams: URLSearchParams,
+): Promise<Response> {
   if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405);
   if (!ZWIFT_API_ALLOWLIST.some((re) => re.test(path))) return json({ error: 'not_allowed' }, 403);
 
   const auth = request.headers.get('Authorization');
   if (!auth) return json({ error: 'unauthorized' }, 401);
 
-  const upstream = await fetch(`${ZWIFT_API_BASE}${path}`, {
+  const forwardedParams = new URLSearchParams();
+  for (const [key, value] of searchParams) {
+    if (ALLOWED_QUERY_PARAMS.has(key) && /^\d+$/.test(value)) {
+      forwardedParams.set(key, value);
+    }
+  }
+  const queryString = forwardedParams.toString();
+  const targetUrl = `${ZWIFT_API_BASE}${path}${queryString ? `?${queryString}` : ''}`;
+
+  const upstream = await fetch(targetUrl, {
     headers: { Authorization: auth, Accept: 'application/json' },
   });
   return new Response(upstream.body, {
@@ -87,7 +106,7 @@ export default {
     if (url.pathname === '/api/zwift/auth/token') return handleToken(request);
 
     if (url.pathname.startsWith('/api/zwift/')) {
-      return handleCoreApi(request, url.pathname.slice('/api/zwift'.length));
+      return handleCoreApi(request, url.pathname.slice('/api/zwift'.length), url.searchParams);
     }
 
     if (url.pathname.startsWith('/api/')) return json({ error: 'not_found' }, 404);
