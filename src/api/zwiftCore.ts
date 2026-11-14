@@ -111,6 +111,52 @@ export interface ZwiftRaceResultEntry {
   [key: string]: unknown;
 }
 
+export interface ZwiftActivityDetail {
+  id?: number;
+  id_str?: string;
+  avgHeartRate?: number;
+  maxHeartRate?: number;
+  maxWatts?: number;
+  avgCadenceInRotationsPerMinute?: number;
+  maxCadenceInRotationsPerMinute?: number;
+  avgSpeedInMetersPerSecond?: number;
+  maxSpeedInMetersPerSecond?: number;
+  percentageCompleted?: number;
+  profileFtp?: number;
+  profileMaxHeartRate?: number;
+  fitnessData?: {
+    status?: string;
+    fullDataUrl?: string;
+    smallDataUrl?: string;
+    [key: string]: unknown;
+  };
+  eventInfo?: {
+    id?: number;
+    eventSubGroupId?: number;
+    name?: string;
+    durationInSeconds?: number;
+    distanceInMeters?: number;
+    laps?: number;
+    sport?: string;
+    subgroupTotalEntrantCount?: number;
+    subgroupEventLabel?: number;
+    eventSubgroups?: Array<{
+      id?: number;
+      name?: string;
+      label?: number;
+      [key: string]: unknown;
+    }>;
+    [key: string]: unknown;
+  };
+  subgroupResults?: {
+    topResults?: Array<Record<string, unknown>>;
+    nearPlayerResults?: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  };
+  /** /api/activities/{id} returns many more fields; keep them all accessible. */
+  [key: string]: unknown;
+}
+
 export class AuthError extends Error {}
 
 async function tokenRequest(params: Record<string, string>): Promise<TokenSet> {
@@ -150,6 +196,19 @@ async function fetchAuthorizedJson<T>(accessToken: string, url: string, label: s
 
 export const fetchMyProfile = (accessToken: string): Promise<ZwiftProfile> =>
   fetchAuthorizedJson<ZwiftProfile>(accessToken, '/api/zwift/api/profiles/me', 'profile');
+
+export const fetchProfileById = (accessToken: string, riderId: number): Promise<ZwiftProfile> =>
+  fetchAuthorizedJson<ZwiftProfile>(accessToken, `/api/zwift/api/profiles/${riderId}`, 'profile');
+
+export const fetchActivityDetail = (
+  accessToken: string,
+  activityIdStr: string,
+): Promise<ZwiftActivityDetail> =>
+  fetchAuthorizedJson<ZwiftActivityDetail>(
+    accessToken,
+    `/api/zwift/api/activities/${encodeURIComponent(activityIdStr)}?fetchSnapshots=true&fetchEvent=true`,
+    'activity detail',
+  );
 
 export async function fetchRiderActivities(
   accessToken: string,
