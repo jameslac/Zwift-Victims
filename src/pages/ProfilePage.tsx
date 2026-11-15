@@ -296,24 +296,19 @@ function ZwiftPowerTab({
                 <h3 className="font-bold text-base">{race.event_title || 'Untitled race'}</h3>
                 <p className="text-xs text-slate-400">
                   {formatUnixSeconds(race.event_date)}
+                  {race.category ? ` · Cat ${race.category}` : ''}
                   {race.zid ? ` · zid: ${race.zid}` : ''}
                   {race.tname ? ` · Team ${race.tname}` : ''}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
-                {race.category && (
-                  <span className="rounded-full bg-[#fc6719]/20 border border-[#fc6719]/40 px-2.5 py-0.5 text-xs font-semibold text-[#fc6719]">
-                    Cat {race.category}
-                  </span>
-                )}
+                <PlacingBadge
+                  zpPlace={typeof race.position_in_cat === 'number' ? race.position_in_cat : undefined}
+                  penalty={race.penalty}
+                />
                 {race.upg === 1 && (
                   <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-xs font-semibold text-amber-300">
                     UPG
-                  </span>
-                )}
-                {race.penalty && (
-                  <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-xs font-semibold text-red-300">
-                    {race.penalty}
                   </span>
                 )}
               </div>
@@ -400,14 +395,6 @@ function ZwiftRacingTab({
     [state],
   );
   const allKeys = useMemo(() => collectKeys(history), [history]);
-  const riderSummaryRows = useMemo(() => {
-    if (state.status !== 'loaded') return [];
-    const { rider, overview } = state.data;
-    const overviewSummary = overview
-      ? Object.fromEntries(Object.entries(overview).filter(([k]) => k !== 'history' && k !== 'latest'))
-      : null;
-    return flatten({ rider, overview: overviewSummary });
-  }, [state]);
 
   if (state.status === 'loading') {
     return <p className="text-sm text-slate-400">Loading ZwiftRacing.app data…</p>;
@@ -420,8 +407,7 @@ function ZwiftRacingTab({
     );
   }
 
-  const { rider, overview } = state.data;
-  if (!rider && !overview) {
+  if (!state.data.rider && !state.data.overview) {
     return (
       <p className="text-sm text-slate-400">
         No ZwiftRacing.app profile found for rider {profileId}.
@@ -432,44 +418,8 @@ function ZwiftRacingTab({
   return (
     <div className="space-y-4">
       <p className="text-xs text-slate-400">
-        Rider ratings and {history.length} races from <code>zwiftracing.app/riders/{profileId}</code>.
+        {history.length} races from <code>zwiftracing.app/riders/{profileId}</code>.
       </p>
-
-      {rider && (
-        <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-3">
-          <MetricGrid
-            items={[
-              {
-                label: 'vELO (v2)',
-                value: rider.velo?.race != null ? rider.velo.race.toFixed(1) : undefined,
-              },
-              {
-                label: 'Legacy vELO',
-                value:
-                  overview?.legacyRatings?.live != null
-                    ? overview.legacyRatings.live.toFixed(0)
-                    : undefined,
-              },
-              { label: 'Phenotype', value: rider.phenotype?.label },
-              {
-                label: 'Finishes / Wins',
-                value:
-                  rider.race?.finishes != null
-                    ? `${rider.race.finishes} / ${rider.race.wins ?? 0}`
-                    : undefined,
-              },
-              { label: 'Podiums / DNFs', value: rider.race ? `${rider.race.podiums ?? 0} / ${rider.race.dnfs ?? 0}` : undefined },
-              { label: 'Club', value: rider.club?.name },
-            ]}
-          />
-          <details>
-            <summary className="cursor-pointer text-xs text-slate-300 font-medium">
-              All ZwiftRacing rider profile attributes ({riderSummaryRows.length} fields)
-            </summary>
-            <AttributeList rows={riderSummaryRows} />
-          </details>
-        </div>
-      )}
 
       <AttributeKeysSummary
         label="All ZwiftRacing race attribute keys returned across history"
@@ -495,26 +445,19 @@ function ZwiftRacingTab({
                   <h3 className="font-bold text-base">{entry.event?.title || 'Untitled race'}</h3>
                   <p className="text-xs text-slate-400">
                     {formatUnixSeconds(entry.event?.time)}
+                    {entry.event?.subgroupId ? ` · Cat ${entry.event.subgroupId}` : ''}
+                    {entry.event?.subType ? ` · ${entry.event.subType}` : ''}
                     {entry.event?.routeName ? ` · ${entry.event.routeName}` : ''}
                     {entry.event?.eventId ? ` · eventId: ${entry.event.eventId}` : ''}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  {entry.event?.subgroupId && (
-                    <span className="rounded-full bg-[#fc6719]/20 border border-[#fc6719]/40 px-2.5 py-0.5 text-xs font-semibold text-[#fc6719]">
-                      Cat {entry.event.subgroupId}
-                    </span>
-                  )}
-                  {entry.place?.didNotFinish && (
-                    <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-xs font-semibold text-red-300">
-                      DNF
-                    </span>
-                  )}
-                  {entry.place?.disqualified && (
-                    <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-xs font-semibold text-red-300">
-                      DQ
-                    </span>
-                  )}
+                  <PlacingBadge
+                    truePlace={entry.place?.positionInCategory}
+                    fieldSize={entry.place?.penTotal}
+                    didNotFinish={entry.place?.didNotFinish}
+                    disqualified={entry.place?.disqualified}
+                  />
                 </div>
               </div>
 
@@ -893,12 +836,93 @@ function ordinal(n: number): string {
   return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
 }
 
+function PlacingBadge({
+  truePlace,
+  fieldSize,
+  zpPlace,
+  didNotFinish,
+  disqualified,
+  penalty,
+}: {
+  truePlace?: number;
+  fieldSize?: number;
+  zpPlace?: number;
+  didNotFinish?: boolean;
+  disqualified?: boolean;
+  penalty?: string;
+}) {
+  if (didNotFinish) {
+    return (
+      <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2.5 py-0.5 text-xs font-semibold text-red-300">
+        DNF
+      </span>
+    );
+  }
+  if (disqualified) {
+    return (
+      <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2.5 py-0.5 text-xs font-semibold text-red-300">
+        DQ
+      </span>
+    );
+  }
+  if (truePlace != null) {
+    const label = fieldSize ? `${ordinal(truePlace)} / ${fieldSize}` : ordinal(truePlace);
+    let tone = 'bg-slate-800/80 border-slate-600 text-slate-100';
+    if (truePlace === 1) {
+      tone = 'bg-amber-400/20 border-amber-400/50 text-amber-300';
+    } else if (truePlace === 2) {
+      tone = 'bg-slate-300/20 border-slate-300/50 text-slate-200';
+    } else if (truePlace === 3) {
+      tone = 'bg-orange-500/20 border-orange-500/50 text-orange-300';
+    }
+    return (
+      <span
+        className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${tone}`}
+        title="True category placing from ZwiftRacing (includes private riders)"
+      >
+        {label}
+      </span>
+    );
+  }
+  if (penalty) {
+    return (
+      <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2.5 py-0.5 text-xs font-semibold text-red-300">
+        {penalty}
+      </span>
+    );
+  }
+  if (zpPlace != null) {
+    return (
+      <span
+        className="rounded-full bg-slate-700/40 border border-slate-600 px-2.5 py-0.5 text-xs font-semibold text-slate-300"
+        title="ZwiftPower category placing (private/hidden riders excluded)"
+      >
+        {ordinal(zpPlace)} (ZP*)
+      </span>
+    );
+  }
+  return null;
+}
+
 function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }) {
   const { zp, zr } = race;
   const timeSec = zpVal(zp?.time) ?? zr?.race?.time;
   const avgPower = zpVal(zp?.avg_power);
   const np = zpVal(zp?.np);
   const avgWkg = zpVal(zp?.avg_wkg) ?? zr?.race?.wkgAvg?.toFixed(2);
+  const avgHr = zpVal(zp?.avg_hr);
+  const maxHr = zpVal(zp?.max_hr);
+  const w5 = zpVal(zp?.w5);
+  const wkg5Raw = zpVal(zp?.wkg5);
+  const wkg5 = wkg5Raw ?? (zr?.race?.wkg5 != null ? zr.race.wkg5.toFixed(1) : undefined);
+  const sprint5s =
+    w5 !== undefined && wkg5 !== undefined
+      ? `${w5} W (${wkg5} W/kg)`
+      : w5 !== undefined
+        ? `${w5} W`
+        : wkg5 !== undefined
+          ? `${wkg5} W/kg`
+          : undefined;
   const gap = zp?.gap ?? zr?.race?.gap;
   const distKm = zp?.distance ?? zr?.race?.distance ?? zr?.event?.distance;
   const inflated = (race.placeInflation ?? 0) > 0;
@@ -906,6 +930,7 @@ function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }
   const category = zp?.category ?? zr?.event?.subgroupId;
   const eloBefore = zr?.velo?.elo?.before;
   const eloAfter = zr?.velo?.elo?.after;
+  const sof = zr?.velo?.elo?.eventRating;
   const rows = flatten({ zwiftPower: zp ?? null, zwiftRacing: zr ?? null });
 
   return (
@@ -915,14 +940,33 @@ function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }
           <h3 className="font-bold text-base">{race.title}</h3>
           <p className="text-xs text-slate-400">
             {formatUnixSeconds(race.date)}
+            {category ? ` · Cat ${category}` : ''}
+            {zr?.event?.subType ? ` · ${zr.event.subType}` : ''}
             {zr?.event?.routeName ? ` · ${zr.event.routeName}` : ''}
+            {zp?.tname ? ` · Team ${zp.tname}` : ''}
             {race.eventId ? ` · event ${race.eventId}` : ''}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          {category && (
-            <span className="rounded-full bg-[#fc6719]/20 border border-[#fc6719]/40 px-2.5 py-0.5 text-xs font-semibold text-[#fc6719]">
-              Cat {category}
+          <PlacingBadge
+            truePlace={race.truePlace}
+            fieldSize={race.fieldSize}
+            zpPlace={race.zpPlace}
+            didNotFinish={zr?.place?.didNotFinish}
+            disqualified={zr?.place?.disqualified}
+            penalty={zp?.penalty}
+          />
+          {race.truePlace != null &&
+            !zr?.place?.didNotFinish &&
+            !zr?.place?.disqualified &&
+            zp?.penalty && (
+              <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-xs font-semibold text-red-300">
+                {zp.penalty}
+              </span>
+            )}
+          {zp?.upg === 1 && (
+            <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-xs font-semibold text-amber-300">
+              UPG
             </span>
           )}
           {!zp && (
@@ -933,11 +977,6 @@ function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }
           {zp && !zr && (
             <span className="rounded-full bg-slate-700/40 border border-slate-600 px-2 py-0.5 text-xs text-slate-300">
               No ZwiftRacing data
-            </span>
-          )}
-          {zr?.place?.didNotFinish && (
-            <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-xs font-semibold text-red-300">
-              DNF
             </span>
           )}
         </div>
@@ -987,15 +1026,20 @@ function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }
             label: 'Distance',
             value: typeof distKm === 'number' ? formatDistance(distKm * 1000, units) : undefined,
           },
+          { label: 'Elevation', value: formatElevation(zr?.event?.elevation, units) },
           { label: 'Avg Power', value: avgPower !== undefined ? `${avgPower} W` : undefined },
           { label: 'NP', value: np !== undefined ? `${np} W` : undefined },
-          { label: 'Avg W/kg', value: avgWkg !== undefined ? `${avgWkg}` : undefined },
+          { label: 'Avg W/kg', value: avgWkg !== undefined ? `${avgWkg} W/kg` : undefined },
           {
-            label: 'Overall Pos (ZP)',
-            value: zp?.pos,
+            label: 'Avg / Max HR',
+            value:
+              avgHr !== undefined || maxHr !== undefined
+                ? `${avgHr ?? '—'} / ${maxHr ?? '—'} bpm`
+                : undefined,
           },
+          { label: '5s Sprint', value: sprint5s },
           {
-            label: 'vELO Before → After',
+            label: 'vELO',
             value:
               eloBefore != null && eloAfter != null
                 ? `${eloBefore.toFixed(1)} → ${eloAfter.toFixed(1)}`
@@ -1008,10 +1052,7 @@ function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }
                 ? zr.velo.elo.expectedPosition.toFixed(1)
                 : undefined,
           },
-          {
-            label: 'Team',
-            value: zp?.tname || undefined,
-          },
+          { label: 'SOF', value: sof != null ? sof.toFixed(0) : undefined },
         ]}
       />
 
