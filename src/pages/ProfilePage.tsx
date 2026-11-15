@@ -28,7 +28,10 @@ import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
 import { fetchZwiftRacingRider } from '../api/zwiftRacing';
 import type { ZwiftRacingRaceEntry, ZwiftRacingRiderResponse } from '../api/zwiftRacing';
 
-type ProviderTab = 'zwiftpower' | 'zwiftracing' | 'core';
+import { isPodium, mergeRaces, summarize } from '../lib/raceHistory';
+import type { MergedRace } from '../lib/raceHistory';
+
+type ProviderTab = 'merged' | 'zwiftpower' | 'zwiftracing' | 'core';
 
 type AsyncState<T> =
   | { status: 'loading' }
@@ -884,6 +887,206 @@ function ZwiftCoreTab({
   );
 }
 
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
+}
+
+function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }) {
+  const { zp, zr } = race;
+  const timeSec = zpVal(zp?.time) ?? zr?.race?.time;
+  const avgPower = zpVal(zp?.avg_power);
+  const np = zpVal(zp?.np);
+  const avgWkg = zpVal(zp?.avg_wkg) ?? zr?.race?.wkgAvg?.toFixed(2);
+  const gap = zp?.gap ?? zr?.race?.gap;
+  const distKm = zp?.distance ?? zr?.race?.distance ?? zr?.event?.distance;
+  const inflated = (race.placeInflation ?? 0) > 0;
+  const podiumMismatch = isPodium(race.zpPlace) && !isPodium(race.truePlace) && race.truePlace != null;
+  const category = zp?.category ?? zr?.event?.subgroupId;
+  const eloBefore = zr?.velo?.elo?.before;
+  const eloAfter = zr?.velo?.elo?.after;
+  const rows = flatten({ zwiftPower: zp ?? null, zwiftRacing: zr ?? null });
+
+  return (
+    <article className="rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="font-bold text-base">{race.title}</h3>
+          <p className="text-xs text-slate-400">
+            {formatUnixSeconds(race.date)}
+            {zr?.event?.routeName ? ` · ${zr.event.routeName}` : ''}
+            {race.eventId ? ` · event ${race.eventId}` : ''}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {category && (
+            <span className="rounded-full bg-[#fc6719]/20 border border-[#fc6719]/40 px-2.5 py-0.5 text-xs font-semibold text-[#fc6719]">
+              Cat {category}
+            </span>
+          )}
+          {!zp && (
+            <span className="rounded-full bg-slate-700/40 border border-slate-600 px-2 py-0.5 text-xs text-slate-300">
+              ZwiftRacing only
+            </span>
+          )}
+          {zp && !zr && (
+            <span className="rounded-full bg-slate-700/40 border border-slate-600 px-2 py-0.5 text-xs text-slate-300">
+              No ZwiftRacing data
+            </span>
+          )}
+          {zr?.place?.didNotFinish && (
+            <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-xs font-semibold text-red-300">
+              DNF
+            </span>
+          )}
+        </div>
+      </div>
+
+      {race.truePlace != null ? (
+        <div
+          className={`rounded-lg border p-3 text-sm ${
+            inflated
+              ? 'bg-amber-500/10 border-amber-500/30'
+              : 'bg-slate-900/70 border-slate-800'
+          }`}
+        >
+          <p>
+            <span className="font-bold">Finished {ordinal(race.truePlace)}</span>
+            {race.fieldSize ? ` of ${race.fieldSize}` : ''} in category{' '}
+            <span className="text-xs text-slate-400">(ZwiftRacing — includes private riders)</span>
+          </p>
+          {race.zpPlace != null && (
+            <p className="text-xs text-slate-300 mt-1">
+              ZwiftPower shows {ordinal(race.zpPlace)}
+              {inflated
+                ? ` — ${race.placeInflation} place${race.placeInflation === 1 ? '' : 's'} better than reality because hidden riders are dropped${
+                    podiumMismatch ? ' (ZwiftPower shows a podium that wasn’t)' : ''
+                  }.`
+                : '.'}
+            </p>
+          )}
+        </div>
+      ) : (
+        zp && (
+          <p className="text-xs text-slate-400">
+            ZwiftPower category place: {zp.position_in_cat ?? '—'} (field may exclude hidden riders; no
+            ZwiftRacing result to verify — older than 90 days or unscored).
+          </p>
+        )
+      )}
+
+      <MetricGrid
+        items={[
+          {
+            label: 'Time',
+            value: typeof timeSec === 'number' ? formatDurationMs(timeSec * 1000) : undefined,
+          },
+          { label: 'Gap', value: formatGapSeconds(gap) },
+          {
+            label: 'Distance',
+            value: typeof distKm === 'number' ? formatDistance(distKm * 1000, units) : undefined,
+          },
+          { label: 'Avg Power', value: avgPower !== undefined ? `${avgPower} W` : undefined },
+          { label: 'NP', value: np !== undefined ? `${np} W` : undefined },
+          { label: 'Avg W/kg', value: avgWkg !== undefined ? `${avgWkg}` : undefined },
+          {
+            label: 'Overall Pos (ZP)',
+            value: zp?.pos,
+          },
+          {
+            label: 'vELO Before → After',
+            value:
+              eloBefore != null && eloAfter != null
+                ? `${eloBefore.toFixed(1)} → ${eloAfter.toFixed(1)}`
+                : undefined,
+          },
+          {
+            label: 'Expected Pos',
+            value:
+              zr?.velo?.elo?.expectedPosition != null
+                ? zr.velo.elo.expectedPosition.toFixed(1)
+                : undefined,
+          },
+          {
+            label: 'Team',
+            value: zp?.tname || undefined,
+          },
+        ]}
+      />
+
+      <details>
+        <summary className="cursor-pointer text-xs text-slate-300 font-medium">
+          All merged attributes ({rows.length} fields)
+        </summary>
+        <AttributeList rows={rows} />
+      </details>
+    </article>
+  );
+}
+
+function MergedTab({
+  zpState,
+  zrState,
+  units,
+}: {
+  zpState: AsyncState<ZwiftPowerRaceEntry[]>;
+  zrState: AsyncState<ZwiftRacingRiderResponse>;
+  units: UnitSystem;
+}) {
+  const merged = useMemo(() => {
+    if (zpState.status !== 'loaded') return [];
+    const zr = zrState.status === 'loaded' ? (zrState.data.overview?.history ?? []) : [];
+    return mergeRaces(zpState.data, zr);
+  }, [zpState, zrState]);
+  const summary = useMemo(() => summarize(merged), [merged]);
+
+  if (zpState.status === 'loading' || zrState.status === 'loading') {
+    return <p className="text-sm text-slate-400">Loading ZwiftPower + ZwiftRacing.app…</p>;
+  }
+  if (zpState.status === 'error') {
+    return (
+      <p role="alert" className="text-sm text-red-400">
+        {zpState.message}
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-slate-400">
+        ZwiftPower is the primary race list; each race is enriched from ZwiftRacing.app by event ID.
+        Placings come from ZwiftRacing.app when available because ZwiftPower drops private riders from
+        the standings.
+      </p>
+      {zrState.status === 'error' && (
+        <p role="alert" className="text-xs text-amber-400">
+          ZwiftRacing.app unavailable ({zrState.message}); showing ZwiftPower only.
+        </p>
+      )}
+
+      <MetricGrid
+        items={[
+          { label: 'Races', value: summary.total },
+          { label: 'Enriched', value: `${summary.enriched} / ${summary.total}` },
+          { label: 'Podiums (ZP)', value: summary.zpPodiums },
+          { label: 'Podiums (true)', value: summary.truePodiums },
+          { label: 'ZP overstates', value: `${summary.inflatedRaces} races` },
+        ]}
+      />
+      <p className="text-xs text-slate-500">
+        Podium counts cover only races present in both sources (ZwiftRacing.app history is ~90 days).
+      </p>
+
+      {merged.length === 0 ? (
+        <p className="text-sm text-slate-400">No races found.</p>
+      ) : (
+        merged.map((race) => <MergedRaceCard key={race.key} race={race} units={units} />)
+      )}
+    </div>
+  );
+}
+
 function RaceHistorySection({
   profileId,
   units,
@@ -893,7 +1096,7 @@ function RaceHistorySection({
   units: UnitSystem;
   getAccessToken: () => Promise<string>;
 }) {
-  const [activeTab, setActiveTab] = useState<ProviderTab>('zwiftpower');
+  const [activeTab, setActiveTab] = useState<ProviderTab>('merged');
   const [zpState, setZpState] = useState<AsyncState<ZwiftPowerRaceEntry[]>>({ status: 'loading' });
   const [zrState, setZrState] = useState<AsyncState<ZwiftRacingRiderResponse>>({
     status: 'loading',
@@ -956,6 +1159,7 @@ function RaceHistorySection({
   const coreCount = coreState.status === 'loaded' ? ` (${coreState.data.length})` : '';
 
   const tabs: Array<{ id: ProviderTab; label: string }> = [
+    { id: 'merged', label: 'Race History' },
     { id: 'zwiftpower', label: `ZwiftPower${zpCount}` },
     { id: 'zwiftracing', label: `ZwiftRacing.app${zrCount}` },
     { id: 'core', label: `Zwift Core${coreCount}` },
@@ -996,6 +1200,7 @@ function RaceHistorySection({
         </div>
       </div>
 
+      {activeTab === 'merged' && <MergedTab zpState={zpState} zrState={zrState} units={units} />}
       {activeTab === 'zwiftpower' && (
         <ZwiftPowerTab profileId={profileId} units={units} state={zpState} />
       )}
