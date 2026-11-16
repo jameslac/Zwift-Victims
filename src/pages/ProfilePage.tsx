@@ -24,7 +24,6 @@ import {
   buildZwiftToolsRaceReplayUrl,
   isPodium,
   mergeRaces,
-  resolveRaceActivityId,
   summarize,
 } from '../lib/raceHistory';
 import type { MergedRace } from '../lib/raceHistory';
@@ -220,142 +219,40 @@ function ReplayIcon({ className = 'w-4 h-4' }: { className?: string }) {
   );
 }
 
-const TOOL_ICON_BTN_CLASS =
-  'inline-flex items-center justify-center rounded-lg border border-slate-700/80 bg-slate-900/80 p-1.5 text-slate-300 hover:border-[#fc6719]/60 hover:text-[#fc6719] hover:bg-slate-800 transition-colors disabled:opacity-50';
+const TOOL_ICON_LINK_CLASS =
+  'inline-flex items-center justify-center rounded-lg border border-slate-700/80 bg-slate-900/80 p-1.5 text-slate-300 hover:border-[#fc6719]/60 hover:text-[#fc6719] hover:bg-slate-800 transition-colors';
 
-function ZwiftToolsLinks({
-  race,
-  profileId,
-  activities,
-  getAccessToken,
-  onStatusChange,
-}: {
-  race: MergedRace;
-  profileId: number;
-  activities: ZwiftActivity[];
-  getAccessToken: () => Promise<string>;
-  onStatusChange: (msg: string | null) => void;
-}) {
-  const [resolvedActivityId, setResolvedActivityId] = useState<string | null>(null);
-  const [resolvingTool, setResolvingTool] = useState<'bike' | 'replay' | null>(null);
-
-  const activityId = race.activityId ?? resolvedActivityId ?? undefined;
-
-  async function handleOpenZwiftTool(tool: 'bike' | 'replay') {
-    onStatusChange(null);
-    setResolvingTool(tool);
-
-    // Open synchronously inside the click handler so popup blockers allow the new window.
-    const popup = window.open('about:blank', '_blank');
-    if (popup) {
-      popup.opener = null;
-      try {
-        popup.document.title = 'Loading ZwiftTools…';
-      } catch {
-        // Ignore restricted window errors.
-      }
-    }
-
-    try {
-      const token = await getAccessToken();
-      const foundId = await resolveRaceActivityId(token, profileId, race, activities);
-      if (!foundId) {
-        if (popup && !popup.closed) popup.close();
-        onStatusChange('Zwift activity ID unavailable for this race.');
-        return;
-      }
-
-      setResolvedActivityId(foundId);
-      const targetUrl =
-        tool === 'bike'
-          ? buildZwiftToolsBikeComparisonUrl(foundId)
-          : buildZwiftToolsRaceReplayUrl(foundId);
-
-      if (popup && !popup.closed) {
-        popup.location.replace(targetUrl);
-      } else if (!popup) {
-        onStatusChange('Activity ID found — click the icon again to open ZwiftTools.');
-      }
-    } catch (err: unknown) {
-      if (popup && !popup.closed) popup.close();
-      onStatusChange(
-        err instanceof Error ? err.message : 'Failed to look up Zwift activity ID.',
-      );
-    } finally {
-      setResolvingTool(null);
-    }
-  }
-
-  if (activityId) {
-    return (
-      <>
-        <a
-          href={buildZwiftToolsBikeComparisonUrl(activityId)}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="ZwiftTools Bike Comparison"
-          aria-label="Open Bike Comparison on ZwiftTools"
-          className={TOOL_ICON_BTN_CLASS}
-        >
-          <BikeIcon />
-        </a>
-        <a
-          href={buildZwiftToolsRaceReplayUrl(activityId)}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="ZwiftTools Race Replay"
-          aria-label="Open Race Replay on ZwiftTools"
-          className={TOOL_ICON_BTN_CLASS}
-        >
-          <ReplayIcon />
-        </a>
-      </>
-    );
-  }
-
-  if (!race.eventId) return null;
+function ZwiftToolsLinks({ activityId }: { activityId?: string }) {
+  if (!activityId) return null;
 
   return (
-    <>
-      <button
-        type="button"
-        disabled={resolvingTool !== null}
-        onClick={() => handleOpenZwiftTool('bike')}
+    <footer className="border-t border-slate-800/80 pt-3 flex flex-wrap items-center justify-end gap-2">
+      <a
+        href={buildZwiftToolsBikeComparisonUrl(activityId)}
+        target="_blank"
+        rel="noopener noreferrer"
         title="ZwiftTools Bike Comparison"
         aria-label="Open Bike Comparison on ZwiftTools"
-        className={`${TOOL_ICON_BTN_CLASS} ${resolvingTool === 'bike' ? 'animate-pulse' : ''}`}
+        className={TOOL_ICON_LINK_CLASS}
       >
         <BikeIcon />
-      </button>
-      <button
-        type="button"
-        disabled={resolvingTool !== null}
-        onClick={() => handleOpenZwiftTool('replay')}
+      </a>
+      <a
+        href={buildZwiftToolsRaceReplayUrl(activityId)}
+        target="_blank"
+        rel="noopener noreferrer"
         title="ZwiftTools Race Replay"
         aria-label="Open Race Replay on ZwiftTools"
-        className={`${TOOL_ICON_BTN_CLASS} ${resolvingTool === 'replay' ? 'animate-pulse' : ''}`}
+        className={TOOL_ICON_LINK_CLASS}
       >
         <ReplayIcon />
-      </button>
-    </>
+      </a>
+    </footer>
   );
 }
 
-function MergedRaceCard({
-  race,
-  profileId,
-  units,
-  activities,
-  getAccessToken,
-}: {
-  race: MergedRace;
-  profileId: number;
-  units: UnitSystem;
-  activities: ZwiftActivity[];
-  getAccessToken: () => Promise<string>;
-}) {
+function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }) {
   const { zp, zr } = race;
-  const [toolStatus, setToolStatus] = useState<string | null>(null);
   const timeSec = zpVal(zp?.time) ?? zr?.race?.time;
   const avgPower = zpVal(zp?.avg_power);
   const np = zpVal(zp?.np);
@@ -428,21 +325,8 @@ function MergedRaceCard({
               No ZwiftRacing data
             </span>
           )}
-          <ZwiftToolsLinks
-            race={race}
-            profileId={profileId}
-            activities={activities}
-            getAccessToken={getAccessToken}
-            onStatusChange={setToolStatus}
-          />
         </div>
       </div>
-
-      {toolStatus && (
-        <p role="status" className="text-xs text-amber-400">
-          {toolStatus}
-        </p>
-      )}
 
       {race.truePlace != null ? (
         <div
@@ -517,6 +401,8 @@ function MergedRaceCard({
           { label: 'SOF', value: sof != null ? sof.toFixed(0) : undefined },
         ]}
       />
+
+      <ZwiftToolsLinks activityId={race.activityId} />
     </article>
   );
 }
@@ -525,16 +411,12 @@ function MergedTab({
   zpState,
   zrState,
   activitiesState,
-  profileId,
   units,
-  getAccessToken,
 }: {
   zpState: AsyncState<ZwiftPowerRaceEntry[]>;
   zrState: AsyncState<ZwiftRacingRiderResponse>;
   activitiesState: AsyncState<ZwiftActivity[]>;
-  profileId: number;
   units: UnitSystem;
-  getAccessToken: () => Promise<string>;
 }) {
   const activities = useMemo(
     () => (activitiesState.status === 'loaded' ? activitiesState.data : []),
@@ -582,16 +464,7 @@ function MergedTab({
       {merged.length === 0 ? (
         <p className="text-sm text-slate-400">No races found.</p>
       ) : (
-        merged.map((race) => (
-          <MergedRaceCard
-            key={race.key}
-            race={race}
-            profileId={profileId}
-            units={units}
-            activities={activities}
-            getAccessToken={getAccessToken}
-          />
-        ))
+        merged.map((race) => <MergedRaceCard key={race.key} race={race} units={units} />)
       )}
     </div>
   );
@@ -674,9 +547,7 @@ function RaceHistorySection({
         zpState={zpState}
         zrState={zrState}
         activitiesState={activitiesState}
-        profileId={profileId}
         units={units}
-        getAccessToken={getAccessToken}
       />
     </section>
   );

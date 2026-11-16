@@ -1,9 +1,4 @@
-import { AuthError, fetchPublicEvent, fetchRaceResults } from '../api/zwiftCore';
-import type {
-  ZwiftActivity,
-  ZwiftEventSubgroup,
-  ZwiftRaceResultEntry,
-} from '../api/zwiftCore';
+import type { ZwiftActivity } from '../api/zwiftCore';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
 import type { ZwiftRacingRaceEntry } from '../api/zwiftRacing';
 
@@ -33,13 +28,6 @@ export interface MergedRace {
 
 const MATCH_WINDOW_MS = 3 * 60 * 60 * 1000;
 const CLOCK_TOLERANCE_MS = 5 * 60 * 1000;
-const NUMERIC_SUBGROUP_LABELS: Record<number, string> = {
-  1: 'A',
-  2: 'B',
-  3: 'C',
-  4: 'D',
-  5: 'E',
-};
 
 export function buildZwiftToolsBikeComparisonUrl(activityId: string): string {
   return `https://zwifttools.azurewebsites.net/bike-comparison?activity=${encodeURIComponent(activityId)}`;
@@ -71,34 +59,6 @@ function zpNumericVal(v: unknown): number | undefined {
   if (raw === undefined || raw === null || raw === '') return undefined;
   const num = typeof raw === 'number' ? raw : Number(raw);
   return Number.isFinite(num) ? num : undefined;
-}
-
-function subgroupCategoryLabel(sg: ZwiftEventSubgroup): string | undefined {
-  if (typeof sg.subgroupLabel === 'string' && sg.subgroupLabel.trim()) {
-    return sg.subgroupLabel.trim().toUpperCase();
-  }
-  if (typeof sg.label === 'number' && NUMERIC_SUBGROUP_LABELS[sg.label]) {
-    return NUMERIC_SUBGROUP_LABELS[sg.label];
-  }
-  return undefined;
-}
-
-function resolveSubgroupForCategory(
-  subgroups: ZwiftEventSubgroup[] | undefined,
-  category: string | undefined,
-): ZwiftEventSubgroup | undefined {
-  if (!subgroups || subgroups.length === 0 || !category) return undefined;
-  const norm = category.trim().toUpperCase();
-  const base = norm.replace(/\+$/, '');
-  return (
-    subgroups.find((sg) => subgroupCategoryLabel(sg) === norm) ??
-    subgroups.find((sg) => subgroupCategoryLabel(sg) === base) ??
-    subgroups.find(
-      (sg) =>
-        typeof sg.name === 'string' &&
-        new RegExp(`\\(${base}\\)|\\bCat\\s*${base}\\b`, 'i').test(sg.name),
-    )
-  );
 }
 
 function assignActivityIds(races: MergedRace[], activities: ZwiftActivity[]): void {
@@ -222,70 +182,6 @@ export function mergeRaces(
   merged.sort((a, b) => (b.date ?? 0) - (a.date ?? 0));
   assignActivityIds(merged, activities);
   return merged;
-}
-
-export async function resolveRaceActivityId(
-  accessToken: string,
-  riderId: number,
-  race: MergedRace,
-  activities?: ZwiftActivity[],
-): Promise<string | null> {
-  if (race.activityId) return race.activityId;
-  if (!race.eventId || !/^\d+$/.test(race.eventId)) return null;
-
-  const publicEvent = await fetchPublicEvent(accessToken, race.eventId);
-  const subgroups = publicEvent.eventSubgroups ?? [];
-  if (subgroups.length === 0) return null;
-
-  if (activities && activities.length > 0) {
-    const subgroupIds = new Set(
-      subgroups.map((sg) => sg.id).filter((id) => Number.isFinite(id) && id > 0),
-    );
-    const matched = activities.find(
-      (a) => typeof a.eventSubgroupId === 'number' && subgroupIds.has(a.eventSubgroupId),
-    );
-    const matchedId = getActivityIdStr(matched);
-    if (matchedId) return matchedId;
-  }
-
-  const category = race.zp?.category ?? race.zr?.event?.subgroupId;
-  const preferred = resolveSubgroupForCategory(subgroups, category);
-  const orderedIds: number[] = [];
-  if (preferred?.id && Number.isFinite(preferred.id) && preferred.id > 0) {
-    orderedIds.push(preferred.id);
-  }
-  for (const sg of subgroups) {
-    if (Number.isFinite(sg.id) && sg.id > 0 && !orderedIds.includes(sg.id)) {
-      orderedIds.push(sg.id);
-    }
-  }
-
-  let anySucceeded = false;
-  let lastError: unknown = null;
-
-  for (const subgroupId of orderedIds) {
-    let entries: ZwiftRaceResultEntry[];
-    try {
-      entries = await fetchRaceResults(accessToken, subgroupId);
-      anySucceeded = true;
-    } catch (err) {
-      if (err instanceof AuthError) throw err;
-      lastError = err;
-      continue;
-    }
-
-    const entry = entries.find((e) => Number(e.profileId) === riderId);
-    if (entry) {
-      return (
-        asNumericIdString(entry.activityData?.activityIdStr) ??
-        asNumericIdString(entry.activityData?.activityId) ??
-        null
-      );
-    }
-  }
-
-  if (!anySucceeded && lastError) throw lastError;
-  return null;
 }
 
 function build(

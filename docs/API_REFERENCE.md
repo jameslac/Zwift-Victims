@@ -36,8 +36,8 @@ All browser calls hit same-origin `/api/*` endpoints exposed by [worker/index.ts
 | `GET /api/zwift/api/profiles/{riderId}/activities` | `start`, `limit` | `us-or-rly101.zwift.com` | `fetchRiderActivities` (`zwiftCore.ts`) | Returns activity feed (`ZwiftActivity[]`). |
 | `GET /api/zwift/api/profiles/{riderId}/activities/{activityId}` | — | `us-or-rly101.zwift.com` | *Allowlisted in Worker* | Alternate rider-scoped activity detail path. |
 | `GET /api/zwift/api/activities/{activityIdStr}` | `fetchSnapshots`, `fetchEvent` | `us-or-rly101.zwift.com` | `fetchActivityDetail` (`zwiftCore.ts`) | Calls with `?fetchSnapshots=true&fetchEvent=true`; always pass `id_str` (64-bit safe). |
-| `GET /api/zwift/api/race-results/entries` | `event_subgroup_id` | `us-or-rly101.zwift.com` | `fetchRaceResults` (`zwiftCore.ts`) | Unfiltered finisher entries for a category subgroup; `fetchAuthorizedJson` preserves 64-bit `activityId` as a string. |
-| `GET /api/zwift/api/public/events/{eventId}` | — | `us-or-rly101.zwift.com` | `fetchPublicEvent` (`zwiftCore.ts`) | Event details and `eventSubgroups` mapping. |
+| `GET /api/zwift/api/race-results/entries` | `event_subgroup_id` | `us-or-rly101.zwift.com` | `fetchRaceResults` (`zwiftCore.ts`) | Unfiltered finisher entries for a category subgroup. |
+| `GET /api/zwift/api/public/events/{eventId}` | — | `us-or-rly101.zwift.com` | *Allowlisted in Worker (no UI helper yet)* | Event details and `eventSubgroups` mapping. |
 | `GET /api/zwiftpower/cache3/profile/{riderId}_all.json` | — | `zwiftpower.com` | `fetchZwiftPowerRaces` (`zwiftPower.ts`) | Full rider race history; Worker seeds CloudFront cookies and retries once on `403`. |
 | `GET /api/zwiftpower/cache3/results/{eventId}_(view\|zwift).json` | — | `zwiftpower.com` | *Allowlisted in Worker (no UI helper yet)* | Filtered (`_view`) or unfiltered (`_zwift`) event results on ZwiftPower. |
 | `GET /api/zwiftracing/riders/{riderId}` | — | `zwiftracing.app/riders/{riderId}` | `fetchZwiftRacingRider` (`zwiftRacing.ts`) | Scrapes SSR HTML via [seroval.ts](../worker/seroval.ts) (`self.$R`) and returns `{ rider, overview }`. |
@@ -167,9 +167,9 @@ When the Zwift Core API returns an activity or race result, it identifies routes
 
 ## 5. External Tool Integrations (`zwifttools.azurewebsites.net`)
 
-Community external deep-dive views linked directly from Race History cards (`buildZwiftToolsBikeComparisonUrl` and `buildZwiftToolsRaceReplayUrl` in [src/lib/raceHistory.ts](../src/lib/raceHistory.ts)):
+Community external deep-dive views linked directly from Race History card footers when a matching Zwift activity ID is found (`buildZwiftToolsBikeComparisonUrl` and `buildZwiftToolsRaceReplayUrl` in [src/lib/raceHistory.ts](../src/lib/raceHistory.ts)):
 
 | Tool | URL Format | Required Identifier |
 | :--- | :--- | :--- |
-| **Bike Comparison** | `https://zwifttools.azurewebsites.net/bike-comparison?activity={activityIdStr}` | 64-bit Zwift activity ID (`id_str` or `activityData.activityId`) |
-| **Race Replay** | `https://zwifttools.azurewebsites.net/race-replay?activity_id={activityIdStr}` | 64-bit Zwift activity ID (`id_str` or `activityData.activityId`) |
+| **Bike Comparison** | `https://zwifttools.azurewebsites.net/bike-comparison?activity={activityIdStr}` | 64-bit Zwift activity ID (`id_str` from `/api/profiles/{riderId}/activities`) |
+| **Race Replay** | `https://zwifttools.azurewebsites.net/race-replay?activity_id={activityIdStr}` | 64-bit Zwift activity ID (`id_str` from `/api/profiles/{riderId}/activities`) |
