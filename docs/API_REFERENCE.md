@@ -29,8 +29,8 @@ All browser calls hit same-origin `/api/*` endpoints exposed by [worker/index.ts
 | :--- | :--- | :--- | :--- | :--- |
 | `GET /api/health` | — | Local Worker | — | Health check JSON (`{ status, service, timestamp }`). |
 | `POST /api/zwift/auth/token` | — | `secure.zwift.com/.../token` | `login`, `refresh` (`zwiftCore.ts`) | Relays `password` and `refresh_token` grants using `client_id: Zwift_Mobile_Link`. |
-| `GET /api/zwift/api/profiles/me` | — | `us-or-rly101.zwift.com` | `fetchMyProfile` (`zwiftCore.ts`) | Requires `Authorization: Bearer <token>`. |
-| `GET /api/zwift/api/profiles/{riderId}` | — | `us-or-rly101.zwift.com` | `fetchProfileById` (`zwiftCore.ts`) | Public profile lookup for any rider ID. |
+| `GET /api/zwift/api/profiles/me` | — | `us-or-rly101.zwift.com` | `fetchMyProfile` (`zwiftCore.ts`) | Requires `Authorization: Bearer <token>`. Falls back to `/api/profiles/{id}` and merges when `competitionMetrics` is null/missing. |
+| `GET /api/zwift/api/profiles/{riderId}` | — | `us-or-rly101.zwift.com` | `fetchProfileById` (`zwiftCore.ts`) | Public profile lookup for any rider ID (populates `competitionMetrics`). |
 | `GET /api/zwift/api/profiles/{riderId}/followees` | — | `us-or-rly101.zwift.com` | *Allowlisted in Worker (no UI helper yet)* | Riders followed by `{riderId}`. |
 | `GET /api/zwift/api/profiles/{riderId}/followers` | — | `us-or-rly101.zwift.com` | *Allowlisted in Worker (no UI helper yet)* | Riders following `{riderId}`. |
 | `GET /api/zwift/api/profiles/{riderId}/activities` | `start`, `limit` | `us-or-rly101.zwift.com` | `fetchRiderActivities` (`zwiftCore.ts`) | Returns activity feed (`ZwiftActivity[]`). |
@@ -69,8 +69,8 @@ The official backend used by the **Zwift Game Client** and **Zwift Companion App
 ### Key Endpoints (`https://us-or-rly101.zwift.com`) & Attribute Notes
 | Endpoint | Method | Key Attributes Returned & Caveats |
 | :--- | :--- | :--- |
-| `/api/profiles/me` | `GET` | `id`, `publicId`, `firstName`, `lastName`, `male`, `imageSrc`, `imageSrcLarge`, `countryAlpha3`, `countryCode`, `useMetric`, `weight` (grams), `height` (mm), `ftp`, `competitionMetrics` (`racingScore`, `category`, `categoryWomen`), `socialFacts`, `privacy`, `privateAttributes`. |
-| `/api/profiles/{riderId}` | `GET` | Public profile for any rider ID (same public fields as `/me`, excluding `privateAttributes`). |
+| `/api/profiles/me` | `GET` | `id`, `publicId`, `firstName`, `lastName`, `male`, `imageSrc`, `imageSrcLarge`, `countryAlpha3`, `countryCode`, `useMetric`, `weight` (grams), `height` (mm), `ftp`, `achievementLevel` (`level * 100 + progressPct`), `totalExperiencePoints`, `targetExperiencePoints` (often `0`), `totalGold` (Drops), `totalDistance` (meters), `totalDistanceClimbed` (meters), `socialFacts`, `privacy`, `privateAttributes`. **Caveat:** `competitionMetrics` (`racingScore`, `category`, `categoryWomen`) is returned as `null` here; `fetchMyProfile` fetches `/api/profiles/{me.id}` and merges `competitionMetrics` when missing. |
+| `/api/profiles/{riderId}` | `GET` | Public profile for any rider ID (same public fields as `/me`, excluding `privateAttributes` and account-private stats, while populating `competitionMetrics`: `racingScore`, `category`, `categoryWomen`). |
 | `/api/profiles/{riderId}/followees` | `GET` | List of riders that `{riderId}` follows (useful for auto-populating friends lists). |
 | `/api/profiles/{riderId}/followers` | `GET` | List of riders following `{riderId}`. |
 | `/api/profiles/{riderId}/activities?start=0&limit=20` | `GET` | `id_str`, `id`, `profileId`, `worldId`, `name`, `description`, `sport`, `startDate`, `endDate`, `duration`, `movingTimeInMs`, `distanceInMeters`, `totalElevation`, `avgWatts`, `calories`, `primaryImageUrl`, `fitFileBucket`, `fitFileKey`, `activityRideOnCount`, `activityCommentCount`, `privacy`, `utcOffsetMinutes`, nested `profile` snapshot. **Caveat:** `avgWatts` covers the entire recorded activity (including warm-up/cooldown) rather than race-only effort, and no race placing or category is returned here. |

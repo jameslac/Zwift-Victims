@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useUnits } from '../lib/UnitsContext';
 import {
   formatDistance,
+  formatDrops,
   formatDurationMs,
   formatElevation,
   formatHeight,
@@ -12,6 +13,7 @@ import {
   formatWkg,
 } from '../lib/units';
 import type { UnitSystem } from '../lib/units';
+import { getXpProgress } from '../lib/profileXp';
 import { fetchRiderActivities } from '../api/zwiftCore';
 import type { ZwiftActivity, ZwiftProfile } from '../api/zwiftCore';
 import { fetchZwiftPowerRaces } from '../api/zwiftPower';
@@ -46,27 +48,52 @@ function Stat({ label, value }: { label: string; value: string | number | undefi
   );
 }
 
-/** Flatten nested JSON into dotted-key/value string pairs for display. */
-function flatten(obj: unknown, prefix = ''): [string, string][] {
-  if (obj === null || typeof obj !== 'object') return [[prefix, String(obj)]];
-  const entries = Object.entries(obj as Record<string, unknown>);
-  if (entries.length === 0) return [[prefix, Array.isArray(obj) ? '[]' : '{}']];
-  return entries.flatMap(([k, v]) => {
-    const key = prefix ? (Array.isArray(obj) ? `${prefix}[${k}]` : `${prefix}.${k}`) : k;
-    return v !== null && typeof v === 'object' ? flatten(v, key) : [[key, String(v)] as [string, string]];
-  });
-}
+function XpProgressBar({ profile }: { profile: ZwiftProfile }) {
+  const xp = getXpProgress(profile);
+  if (!xp) return null;
 
-function AttributeList({ rows }: { rows: [string, string][] }) {
+  const xpLabel =
+    xp.totalXp !== null && xp.nextLevelXp !== null
+      ? `${xp.totalXp.toLocaleString()} / ${xp.nextLevelXp.toLocaleString()} XP`
+      : xp.totalXp !== null
+        ? `${xp.totalXp.toLocaleString()} XP`
+        : null;
+
   return (
-    <dl className="divide-y divide-slate-800 text-sm mt-2">
-      {rows.map(([key, value]) => (
-        <div key={key} className="flex flex-col sm:flex-row sm:justify-between gap-1 py-2">
-          <dt className="font-mono text-slate-400 break-all">{key}</dt>
-          <dd className="font-mono sm:text-right break-all">{value}</dd>
+    <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center rounded-full bg-[#fc6719]/20 border border-[#fc6719]/40 px-2.5 py-0.5 text-xs font-bold text-[#fc6719]">
+            {xp.level !== null ? `Level ${xp.level}` : 'XP Progress'}
+          </span>
+          {xpLabel && <span className="font-semibold text-slate-200">{xpLabel}</span>}
         </div>
-      ))}
-    </dl>
+        <div className="text-xs text-slate-400">
+          {xp.xpRemaining !== null && xp.level !== null && xp.xpRemaining > 0 ? (
+            <>
+              <span className="font-semibold text-slate-200">{xp.progressPct}%</span>
+              <span> · {xp.xpRemaining.toLocaleString()} XP to Level {xp.level + 1}</span>
+            </>
+          ) : (
+            <span className="font-semibold text-slate-200">{xp.progressPct}%</span>
+          )}
+        </div>
+      </div>
+
+      <div
+        role="progressbar"
+        aria-label={xp.level !== null ? `Level ${xp.level} XP progress` : 'XP progress'}
+        aria-valuenow={xp.progressPct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        className="h-2.5 w-full overflow-hidden rounded-full bg-slate-800"
+      >
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-[#fc6719] to-amber-400 transition-all"
+          style={{ width: `${xp.progressPct}%` }}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -704,9 +731,14 @@ export default function ProfilePage({
   const { units, setUnits } = useUnits(profile.useMetric === false ? 'imperial' : 'metric');
   const name = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Zwift rider';
   const metrics = profile.competitionMetrics;
-  const rows = flatten(profile);
-  const publicRows = rows.filter(([key]) => !key.startsWith('privateAttributes'));
-  const privateRows = rows.filter(([key]) => key.startsWith('privateAttributes'));
+  const racingScore =
+    metrics?.racingScore != null && Number.isFinite(metrics.racingScore)
+      ? Math.round(metrics.racingScore)
+      : undefined;
+  const riderCategory =
+    (profile.male === false
+      ? (metrics?.categoryWomen ?? metrics?.category)
+      : (metrics?.category ?? metrics?.categoryWomen)) ?? undefined;
 
   function handleLookupSubmit(e: FormEvent) {
     e.preventDefault();
@@ -796,35 +828,22 @@ export default function ProfilePage({
           </div>
         </div>
 
+        <XpProgressBar profile={profile} />
+
         <dl className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <Stat label="FTP" value={profile.ftp ? `${profile.ftp} W` : undefined} />
           <Stat label="W/kg" value={formatWkg(profile.ftp, profile.weight)} />
           <Stat label="Weight" value={formatWeight(profile.weight, units)} />
           <Stat label="Height" value={formatHeight(profile.height, units)} />
-          <Stat label="Racing Score" value={metrics?.racingScore} />
-          <Stat label="Category" value={metrics?.category ?? metrics?.categoryWomen} />
+          <Stat label="Racing Score" value={racingScore} />
+          <Stat label="Category" value={riderCategory} />
+          <Stat label="Total Distance" value={formatDistance(profile.totalDistance, units)} />
+          <Stat label="Total Climbed" value={formatElevation(profile.totalDistanceClimbed, units)} />
+          <Stat label="Drops" value={formatDrops(profile.totalGold)} />
         </dl>
       </section>
 
       <RaceHistorySection profileId={profile.id} units={units} />
-
-      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8">
-        <h2 className="text-lg font-bold mb-3">All profile data</h2>
-        <p className="text-xs text-slate-400 mb-4">
-          Everything returned by Zwift&apos;s{' '}
-          <code>{isOwnProfile ? '/api/profiles/me' : `/api/profiles/${profile.id}`}</code>, as-is
-          (weight in grams, height in mm).
-        </p>
-        <AttributeList rows={publicRows} />
-        {privateRows.length > 0 && (
-          <details className="mt-4">
-            <summary className="cursor-pointer text-sm text-slate-400">
-              privateAttributes ({privateRows.length} internal Zwift values)
-            </summary>
-            <AttributeList rows={privateRows} />
-          </details>
-        )}
-      </section>
     </main>
   );
 }
