@@ -20,7 +20,7 @@ When a web browser attempts to call `secure.zwift.com`, `us-or-rly101.zwift.com`
 
 By hosting both our React PWA and our stateless API Worker on **Cloudflare** under the **same domain**:
 1. **Zero Cross-Origin / CORS Hassle:** The frontend calls `/api/...` on its own origin (`same-origin`).
-2. **Automatic GitHub CI/CD + Preview URLs:** Pushing to `main` deploys production automatically, and every Pull Request gets its own isolated preview URL.
+2. **Automatic GitHub CI/CD + Preview URLs:** Pushing to `main` deploys production automatically, and every Pull Request gets its own isolated preview URL. When a PR is closed/merged or its branch is deleted, [`.github/workflows/cleanup-preview.yml`](../.github/workflows/cleanup-preview.yml) automatically removes the branch's Worker Preview via `wrangler preview delete` (requiring `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` GitHub Actions secrets).
 3. **Stateless Cookie & Token Relay:** `worker/index.ts` intercepts `/api/*` requests, forwards them server-to-server to Zwift/ZwiftPower/ZwiftRacing, translates cookies/headers as needed, and serves static React assets (`env.ASSETS`) for all other routes.
 
 ```mermaid
