@@ -105,6 +105,23 @@ ZwiftPower's native head-to-head and win-loss statistics often fail to count rac
    - **Team Events (e.g., ZRL / WTRL Team Time Trials or Points Races where friends ride as teammates):** Can be excluded automatically via event title/type tags (e.g. matching `ZRL`, `WTRL`, `TTT`) or toggled off via a manual "Exclude Race / Team Event" list.
    - **Category / Subgroup Options:** Support toggling whether comparisons apply only when racing in the **same category/subgroup** or across **overall event time**.
 
+### Feature 2: Race History (At-a-Glance) vs. Race Detail (Click-In)
+
+1. **Provider Roles for Race History:**
+   - **ZwiftPower (`/cache3/profile/{id}_all.json`) — Primary Race List:** Fast single fetch returning multi-year race history with power (`avg_power`, `np`), heart rate (`avg_hr`, `max_hr`), sprint/interval power (`w5`–`w1200`, `wkg5`–`wkg1200`), team (`tname`), `upg`, and penalties. *Caveat:* Drops private/non-ZwiftPower riders from standings, inflating category placings (`position_in_cat`) and sometimes reporting false podiums.
+   - **ZwiftRacing.app (`zwiftracing.app/riders/{id}` SSR) — Standings & Rating Enrichment:** Preserves private riders in `place.positionInCategory` and `place.penTotal`, and adds course metadata (`routeName`, `elevation`, `subType`), vELO metrics (`before`, `after`, `expectedPosition`, `eventRating` SOF, 6-factor breakdown), and finish status (`didNotFinish`, `disqualified`). *Caveat:* Public history covers roughly the past ~90 days. (Rider-level ZR profile attributes such as overall vELO and phenotype belong to a separate Rider Profile ticket.)
+   - **Zwift Core (`/api/profiles/{id}/activities`, `/api/race-results/entries`) — Click-In Race Detail & >90-Day Fallback (Future Ticket):** Avoided on list view to prevent N+1 calls and because activity `avgWatts` includes warm-up/cooldown. Reserved for the future Race Detail view to pull full `.fit` telemetry (`fitFileBucket`/`fitFileKey`), screenshots (`primaryImageUrl`), calories, and **unfiltered finisher lists (`/api/race-results/entries?event_subgroup_id=...`) so races older than ZwiftRacing's ~90-day window can still resolve true placings** with appropriate caveats.
+
+2. **Attribute Tiers:**
+   - **Tier 1 — At-a-Glance Race History Card:**
+     - *Placing & Integrity:* Top-right Placing Badge (`truePlace / fieldSize` from ZwiftRacing when available; muted `zpPlace (ZP*)` fallback when unscored or >90 days old; `DNF`/`DQ`/penalty states), hidden-rider inflation callout (`ZP shows X — N better than reality`), and >90-day disclaimer.
+     - *Identity & Subtitle:* `event_title` / `event.title`, date (`event_date` / `event.time`), `Cat {category}` (`subgroupId`), `subType`, `routeName`, `tname` (`Team`), `eventId`, `UPG`.
+     - *Core Metrics Grid (12 cards):* `Time`, `Gap`, `Distance`, `Elevation`, `Avg Power`, `NP`, `Avg W/kg`, `Avg / Max HR`, `5s Sprint` (`w5` / `wkg5`), `vELO` (`before → after`), `Expected Pos`, `SOF` (`eventRating`).
+   - **Tier 2 — Click-In Race Detail Page (Future Ticket):**
+     - *Full Standings:* Complete subgroup/overall leaderboard via Zwift Core `/api/race-results/entries` + ZwiftRacing + ZwiftPower (resolving true placings for >90-day races and highlighting tracked friends / hidden riders).
+     - *Full Power & Physiology Profile:* Power curve (`15s`, `30s`, `1m`, `2m`, `5m`, `20m` watts and W/kg), `wftp`/`wkg_ftp`, `hreff`/`hrr`, `power_type`/`src`, `is_guess`.
+     - *Rating & Event Internals:* ZR vELO `adjustedChange`/`rawChange`/`factors.*`, `velo.points`, `legacy`, `classement`, ZP `skill`/`skill_gain`/`div`/`pts`, ZR `event.imageUrl`, `laps`.
+     - *Zwift Core Telemetry & Activity Media:* `.fit` file stream & equipment (`fitFileBucket`/`fitFileKey`), `primaryImageUrl`, `worldId`, `calories`, `movingTimeInMs`, `activityRideOnCount`.
 
 ---
 

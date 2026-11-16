@@ -11,6 +11,7 @@ export default function App() {
         <AuthProvider>
           <Routes>
             <Route path="/" element={<HomePage />} />
+            <Route path="/riders/:riderId" element={<HomePage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

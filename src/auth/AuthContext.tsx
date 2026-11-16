@@ -20,6 +20,7 @@ interface AuthState {
   profile: ZwiftProfile | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
+  getAccessToken: () => Promise<string>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -33,15 +34,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
   }, []);
 
-  const loadWith = useCallback(async (tokens: TokenSet) => {
-    let active = tokens;
-    // Refresh slightly early so the profile call doesn't race expiry.
-    if (active.expiresAt - Date.now() < 60_000) {
-      active = await refresh(active.refreshToken);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(active));
+  const ensureFreshTokens = useCallback(
+    async (tokens: TokenSet): Promise<TokenSet> => {
+      // Refresh slightly early so API calls don't race expiry.
+      if (tokens.expiresAt - Date.now() >= 60_000) return tokens;
+      try {
+        const refreshed = await refresh(tokens.refreshToken);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(refreshed));
+        return refreshed;
+      } catch (e) {
+        if (e instanceof AuthError) logout();
+        throw e;
+      }
+    },
+    [logout],
+  );
+
+  const loadWith = useCallback(
+    async (tokens: TokenSet) => {
+      const active = await ensureFreshTokens(tokens);
+      setProfile(await fetchMyProfile(active.accessToken));
+    },
+    [ensureFreshTokens],
+  );
+
+  const getAccessToken = useCallback(async (): Promise<string> => {
+    const tokens = loadTokens();
+    if (!tokens) {
+      logout();
+      throw new AuthError('Not authenticated.');
     }
-    setProfile(await fetchMyProfile(active.accessToken));
-  }, []);
+    const active = await ensureFreshTokens(tokens);
+    return active.accessToken;
+  }, [ensureFreshTokens, logout]);
 
   // Restore session on startup.
   useEffect(() => {
@@ -64,8 +89,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ loading, profile, login, logout }),
-    [loading, profile, login, logout],
+    () => ({ loading, profile, login, logout, getAccessToken }),
+    [loading, profile, login, logout, getAccessToken],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
