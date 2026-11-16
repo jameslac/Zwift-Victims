@@ -42,35 +42,53 @@ export function isDqOrDnf(race: MergedRace): boolean {
   return false;
 }
 
-function resolvePlacement(race: MergedRace): ResolvedPlacement {
-  if (isDqOrDnf(race)) {
-    return {
-      status: race.zr?.place?.didNotFinish ? 'DNF' : race.zp?.penalty?.trim() || 'DQ',
-      usedTruePlace: false,
-    };
-  }
-  if (typeof race.truePlace === 'number' && race.truePlace > 0) {
-    return {
-      place: race.truePlace,
-      status: ordinal(race.truePlace),
-      usedTruePlace: true,
-    };
-  }
-  if (typeof race.zpPlace === 'number' && race.zpPlace > 0) {
-    return {
-      place: race.zpPlace,
-      status: ordinal(race.zpPlace),
-      usedTruePlace: false,
-    };
-  }
-  if (typeof race.zp?.pos === 'number' && race.zp.pos > 0) {
-    return {
-      place: race.zp.pos,
-      status: ordinal(race.zp.pos),
-      usedTruePlace: false,
-    };
+function validPlace(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function buildResolved(place: number | undefined, usedTruePlace: boolean): ResolvedPlacement {
+  if (place != null) {
+    return { place, status: ordinal(place), usedTruePlace };
   }
   return { status: '—', usedTruePlace: false };
+}
+
+function resolveSinglePlacement(race: MergedRace): ResolvedPlacement {
+  const truePlace = validPlace(race.truePlace);
+  if (truePlace != null) return buildResolved(truePlace, true);
+
+  const zpPlace = validPlace(race.zpPlace);
+  if (zpPlace != null) return buildResolved(zpPlace, false);
+
+  return buildResolved(validPlace(race.zp?.pos), false);
+}
+
+function resolvePairPlacements(
+  profileRace: MergedRace,
+  friendRace: MergedRace,
+): { profile: ResolvedPlacement; friend: ResolvedPlacement } {
+  const pTrue = validPlace(profileRace.truePlace);
+  const fTrue = validPlace(friendRace.truePlace);
+  if (pTrue != null && fTrue != null) {
+    return { profile: buildResolved(pTrue, true), friend: buildResolved(fTrue, true) };
+  }
+
+  const pZp = validPlace(profileRace.zpPlace);
+  const fZp = validPlace(friendRace.zpPlace);
+  if (pZp != null && fZp != null) {
+    return { profile: buildResolved(pZp, false), friend: buildResolved(fZp, false) };
+  }
+
+  const pPos = validPlace(profileRace.zp?.pos);
+  const fPos = validPlace(friendRace.zp?.pos);
+  if (pPos != null && fPos != null) {
+    return { profile: buildResolved(pPos, false), friend: buildResolved(fPos, false) };
+  }
+
+  return {
+    profile: resolveSinglePlacement(profileRace),
+    friend: resolveSinglePlacement(friendRace),
+  };
 }
 
 function extractRaceTimeSec(race: MergedRace): number | undefined {
@@ -85,21 +103,29 @@ function extractRaceTimeSec(race: MergedRace): number | undefined {
   return undefined;
 }
 
-function determineOutcome(
-  profileRace: MergedRace,
-  profilePlace: number,
-  friendRace: MergedRace,
-  friendPlace: number,
-): HeadToHeadOutcome {
-  if (profilePlace !== friendPlace) {
-    return profilePlace < friendPlace ? 'win' : 'loss';
-  }
+function compareRaceTimes(profileRace: MergedRace, friendRace: MergedRace): HeadToHeadOutcome | null {
   const profileTime = extractRaceTimeSec(profileRace);
   const friendTime = extractRaceTimeSec(friendRace);
   if (profileTime != null && friendTime != null && profileTime !== friendTime) {
     return profileTime < friendTime ? 'win' : 'loss';
   }
-  return 'tie';
+  return null;
+}
+
+function determineOutcome(
+  profileRace: MergedRace,
+  profilePlacement: ResolvedPlacement & { place: number },
+  friendRace: MergedRace,
+  friendPlacement: ResolvedPlacement & { place: number },
+): HeadToHeadOutcome {
+  if (profilePlacement.usedTruePlace !== friendPlacement.usedTruePlace) {
+    const timeOutcome = compareRaceTimes(profileRace, friendRace);
+    if (timeOutcome) return timeOutcome;
+  }
+  if (profilePlacement.place !== friendPlacement.place) {
+    return profilePlacement.place < friendPlacement.place ? 'win' : 'loss';
+  }
+  return compareRaceTimes(profileRace, friendRace) ?? 'tie';
 }
 
 export interface HeadToHeadOptions {
@@ -182,6 +208,9 @@ export function isSameCategory(profileRace: MergedRace, friendRace: MergedRace):
 
   const profileCat = profileZpCat || profileSubgroup;
   const friendCat = friendZpCat || friendSubgroup;
+  if (Boolean(profileCat) !== Boolean(friendCat)) {
+    return false;
+  }
   if (profileCat && friendCat) {
     return profileCat === friendCat;
   }
@@ -229,15 +258,17 @@ export function computeHeadToHead(
     if (!isSameCategory(profileRace, friendRace)) continue;
     if (isDqOrDnf(profileRace) || isDqOrDnf(friendRace)) continue;
 
-    const profilePlacement = resolvePlacement(profileRace);
-    const friendPlacement = resolvePlacement(friendRace);
+    const { profile: profilePlacement, friend: friendPlacement } = resolvePairPlacements(
+      profileRace,
+      friendRace,
+    );
     if (profilePlacement.place == null || friendPlacement.place == null) continue;
 
     const outcome = determineOutcome(
       profileRace,
-      profilePlacement.place,
+      { ...profilePlacement, place: profilePlacement.place },
       friendRace,
-      friendPlacement.place,
+      { ...friendPlacement, place: friendPlacement.place },
     );
     const title =
       profileRace.title && profileRace.title !== 'Untitled race'
