@@ -12,19 +12,20 @@ import {
   formatWkg,
 } from '../lib/units';
 import type { UnitSystem } from '../lib/units';
-import type { ZwiftProfile } from '../api/zwiftCore';
+import { fetchPowerProfile } from '../api/zwiftCore';
+import type { ZwiftPowerProfile, ZwiftProfile } from '../api/zwiftCore';
 import { fetchZwiftPowerRaces } from '../api/zwiftPower';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
 import { fetchZwiftRacingRider } from '../api/zwiftRacing';
 import type { ZwiftRacingRiderResponse } from '../api/zwiftRacing';
+import PowerBestsSection from '../components/PowerBestsSection';
+import ZwiftRacingProfileSection from '../components/ZwiftRacingProfileSection';
+import { AttributeList, MetricGrid } from '../components/ProfileShared';
+import { flatten, formatUnixSeconds } from '../lib/profileUtils';
+import type { AsyncState } from '../lib/profileUtils';
 
 import { isPodium, mergeRaces, summarize } from '../lib/raceHistory';
 import type { MergedRace } from '../lib/raceHistory';
-
-type AsyncState<T> =
-  | { status: 'loading' }
-  | { status: 'error'; message: string }
-  | { status: 'loaded'; data: T };
 
 function Stat({ label, value }: { label: string; value: string | number | undefined }) {
   return (
@@ -35,60 +36,11 @@ function Stat({ label, value }: { label: string; value: string | number | undefi
   );
 }
 
-/** Flatten nested JSON into dotted-key/value string pairs for display. */
-function flatten(obj: unknown, prefix = ''): [string, string][] {
-  if (obj === null || typeof obj !== 'object') return [[prefix, String(obj)]];
-  const entries = Object.entries(obj as Record<string, unknown>);
-  if (entries.length === 0) return [[prefix, Array.isArray(obj) ? '[]' : '{}']];
-  return entries.flatMap(([k, v]) => {
-    const key = prefix ? (Array.isArray(obj) ? `${prefix}[${k}]` : `${prefix}.${k}`) : k;
-    return v !== null && typeof v === 'object' ? flatten(v, key) : [[key, String(v)] as [string, string]];
-  });
-}
-
-function AttributeList({ rows }: { rows: [string, string][] }) {
-  return (
-    <dl className="divide-y divide-slate-800 text-sm mt-2">
-      {rows.map(([key, value]) => (
-        <div key={key} className="flex flex-col sm:flex-row sm:justify-between gap-1 py-2">
-          <dt className="font-mono text-slate-400 break-all">{key}</dt>
-          <dd className="font-mono sm:text-right break-all">{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function MetricGrid({
-  items,
-}: {
-  items: Array<{ label: string; value: string | number | undefined }>;
-}) {
-  return (
-    <dl className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
-      {items.map((item) => (
-        <div key={item.label} className="rounded-lg bg-slate-900/70 border border-slate-800/80 p-2">
-          <dt className="text-slate-400">{item.label}</dt>
-          <dd className="mt-0.5 font-semibold">{item.value ?? '—'}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
 function zpVal(v: unknown): string | number | undefined {
   const raw = Array.isArray(v) ? v[0] : v;
   if (raw === undefined || raw === null || raw === '') return undefined;
   if (typeof raw === 'string' || typeof raw === 'number') return raw;
   return String(raw);
-}
-
-function formatUnixSeconds(sec: number | undefined): string {
-  if (sec === undefined || sec === null || !Number.isFinite(sec)) return 'Unknown date';
-  return new Date(sec * 1000).toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
 }
 
 function formatGapSeconds(gap: number | undefined): string {
@@ -384,51 +336,14 @@ function MergedTab({
 }
 
 function RaceHistorySection({
-  profileId,
+  zpState,
+  zrState,
   units,
 }: {
-  profileId: number;
+  zpState: AsyncState<ZwiftPowerRaceEntry[]>;
+  zrState: AsyncState<ZwiftRacingRiderResponse>;
   units: UnitSystem;
 }) {
-  const [zpState, setZpState] = useState<AsyncState<ZwiftPowerRaceEntry[]>>({ status: 'loading' });
-  const [zrState, setZrState] = useState<AsyncState<ZwiftRacingRiderResponse>>({
-    status: 'loading',
-  });
-
-  useEffect(() => {
-    let cancelled = false;
-
-    fetchZwiftPowerRaces(profileId)
-      .then((data) => {
-        if (!cancelled) setZpState({ status: 'loaded', data });
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setZpState({
-            status: 'error',
-            message: err instanceof Error ? err.message : 'Failed to load ZwiftPower races.',
-          });
-        }
-      });
-
-    fetchZwiftRacingRider(profileId)
-      .then((data) => {
-        if (!cancelled) setZrState({ status: 'loaded', data });
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setZrState({
-            status: 'error',
-            message: err instanceof Error ? err.message : 'Failed to load ZwiftRacing.app data.',
-          });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [profileId]);
-
   return (
     <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-4">
       <div>
@@ -450,11 +365,69 @@ export default function ProfilePage({
   profile: ZwiftProfile;
   isOwnProfile?: boolean;
 }) {
-  const { logout } = useAuth();
+  const { logout, getAccessToken } = useAuth();
   const navigate = useNavigate();
   const [lookupId, setLookupId] = useState('');
   // Default to the rider's Zwift preference until they pick a unit system here.
   const { units, setUnits } = useUnits(profile.useMetric === false ? 'imperial' : 'metric');
+  const [zpState, setZpState] = useState<AsyncState<ZwiftPowerRaceEntry[]>>({ status: 'loading' });
+  const [zrState, setZrState] = useState<AsyncState<ZwiftRacingRiderResponse>>({
+    status: 'loading',
+  });
+  const [powerProfileState, setPowerProfileState] = useState<AsyncState<ZwiftPowerProfile> | null>(
+    () => (isOwnProfile ? { status: 'loading' } : null),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchZwiftPowerRaces(profile.id)
+      .then((data) => {
+        if (!cancelled) setZpState({ status: 'loaded', data });
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setZpState({
+            status: 'error',
+            message: err instanceof Error ? err.message : 'Failed to load ZwiftPower races.',
+          });
+        }
+      });
+
+    fetchZwiftRacingRider(profile.id)
+      .then((data) => {
+        if (!cancelled) setZrState({ status: 'loaded', data });
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setZrState({
+            status: 'error',
+            message: err instanceof Error ? err.message : 'Failed to load ZwiftRacing.app data.',
+          });
+        }
+      });
+
+    if (isOwnProfile) {
+      getAccessToken()
+        .then(fetchPowerProfile)
+        .then((data) => {
+          if (!cancelled) setPowerProfileState({ status: 'loaded', data });
+        })
+        .catch((err: unknown) => {
+          if (!cancelled) {
+            setPowerProfileState({
+              status: 'error',
+              message: err instanceof Error ? err.message : 'Failed to load Zwift power profile.',
+            });
+          }
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile.id, isOwnProfile, getAccessToken]);
+
   const name = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Zwift rider';
   const metrics = profile.competitionMetrics;
   const rows = flatten(profile);
@@ -470,7 +443,7 @@ export default function ProfilePage({
   }
 
   return (
-    <main className="min-h-dvh max-w-3xl mx-auto p-4 sm:p-8 space-y-6">
+    <main className="min-h-dvh max-w-4xl mx-auto p-4 sm:p-8 space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Link to="/" className="font-extrabold text-lg">
@@ -559,7 +532,17 @@ export default function ProfilePage({
         </dl>
       </section>
 
-      <RaceHistorySection profileId={profile.id} units={units} />
+      <PowerBestsSection
+        isOwnProfile={isOwnProfile}
+        weightGrams={profile.weight}
+        powerProfileState={powerProfileState}
+        zpState={zpState}
+        zrState={zrState}
+      />
+
+      <ZwiftRacingProfileSection profileId={profile.id} zrState={zrState} />
+
+      <RaceHistorySection zpState={zpState} zrState={zrState} units={units} />
 
       <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8">
         <h2 className="text-lg font-bold mb-3">All profile data</h2>
