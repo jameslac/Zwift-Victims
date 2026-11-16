@@ -31,22 +31,27 @@ export function ordinal(n: number): string {
 interface ResolvedPlacement {
   place?: number;
   status: string;
-  dnfOrDq: boolean;
   usedTruePlace: boolean;
 }
 
+export function isDqOrDnf(race: MergedRace): boolean {
+  if (race.zr?.place?.didNotFinish) return true;
+  if (race.zr?.place?.disqualified) return true;
+  if (typeof race.zp?.penalty === 'string' && race.zp.penalty.trim() !== '') return true;
+  return false;
+}
+
 function resolvePlacement(race: MergedRace): ResolvedPlacement {
-  if (race.zr?.place?.didNotFinish) {
-    return { status: 'DNF', dnfOrDq: true, usedTruePlace: false };
-  }
-  if (race.zr?.place?.disqualified || race.zp?.penalty === 'DQ') {
-    return { status: 'DQ', dnfOrDq: true, usedTruePlace: false };
+  if (isDqOrDnf(race)) {
+    return {
+      status: race.zr?.place?.didNotFinish ? 'DNF' : race.zp?.penalty?.trim() || 'DQ',
+      usedTruePlace: false,
+    };
   }
   if (typeof race.truePlace === 'number' && race.truePlace > 0) {
     return {
       place: race.truePlace,
       status: ordinal(race.truePlace),
-      dnfOrDq: false,
       usedTruePlace: true,
     };
   }
@@ -54,7 +59,6 @@ function resolvePlacement(race: MergedRace): ResolvedPlacement {
     return {
       place: race.zpPlace,
       status: ordinal(race.zpPlace),
-      dnfOrDq: false,
       usedTruePlace: false,
     };
   }
@@ -62,11 +66,10 @@ function resolvePlacement(race: MergedRace): ResolvedPlacement {
     return {
       place: race.zp.pos,
       status: ordinal(race.zp.pos),
-      dnfOrDq: false,
       usedTruePlace: false,
     };
   }
-  return { status: '—', dnfOrDq: false, usedTruePlace: false };
+  return { status: '—', usedTruePlace: false };
 }
 
 function extractRaceTimeSec(race: MergedRace): number | undefined {
@@ -83,26 +86,17 @@ function extractRaceTimeSec(race: MergedRace): number | undefined {
 
 function determineOutcome(
   profileRace: MergedRace,
-  profilePlacement: ResolvedPlacement,
+  profilePlace: number,
   friendRace: MergedRace,
-  friendPlacement: ResolvedPlacement,
+  friendPlace: number,
 ): HeadToHeadOutcome {
-  if (profilePlacement.place != null && friendPlacement.place != null) {
-    if (profilePlacement.place !== friendPlacement.place) {
-      return profilePlacement.place < friendPlacement.place ? 'win' : 'loss';
-    }
-    const profileTime = extractRaceTimeSec(profileRace);
-    const friendTime = extractRaceTimeSec(friendRace);
-    if (profileTime != null && friendTime != null && profileTime !== friendTime) {
-      return profileTime < friendTime ? 'win' : 'loss';
-    }
-    return 'tie';
+  if (profilePlace !== friendPlace) {
+    return profilePlace < friendPlace ? 'win' : 'loss';
   }
-  if (profilePlacement.place != null && friendPlacement.dnfOrDq) {
-    return 'win';
-  }
-  if (friendPlacement.place != null && profilePlacement.dnfOrDq) {
-    return 'loss';
+  const profileTime = extractRaceTimeSec(profileRace);
+  const friendTime = extractRaceTimeSec(friendRace);
+  if (profileTime != null && friendTime != null && profileTime !== friendTime) {
+    return profileTime < friendTime ? 'win' : 'loss';
   }
   return 'tie';
 }
@@ -192,10 +186,18 @@ export function computeHeadToHead(
 
     if (!includeTeamEvents && (isTeamEvent(profileRace) || isTeamEvent(friendRace))) continue;
     if (!isSameCategory(profileRace, friendRace)) continue;
+    if (isDqOrDnf(profileRace) || isDqOrDnf(friendRace)) continue;
 
     const profilePlacement = resolvePlacement(profileRace);
     const friendPlacement = resolvePlacement(friendRace);
-    const outcome = determineOutcome(profileRace, profilePlacement, friendRace, friendPlacement);
+    if (profilePlacement.place == null || friendPlacement.place == null) continue;
+
+    const outcome = determineOutcome(
+      profileRace,
+      profilePlacement.place,
+      friendRace,
+      friendPlacement.place,
+    );
     const title =
       profileRace.title && profileRace.title !== 'Untitled race'
         ? profileRace.title
