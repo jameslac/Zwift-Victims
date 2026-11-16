@@ -107,14 +107,54 @@ function determineOutcome(
   return 'tie';
 }
 
+export interface HeadToHeadOptions {
+  includeTeamEvents?: boolean;
+}
+
+export function isTeamEvent(race: MergedRace): boolean {
+  if (/\bttt\b/i.test(race.zr?.event?.subType ?? '')) return true;
+  if (/\bttt\b/i.test(race.zr?.event?.type ?? '')) return true;
+  if (/\bTYPE_TTT\b/i.test(race.zp?.f_t ?? '')) return true;
+  if (/\b(TTT|WTRL|ZRL|Team\s+Time\s+Trial)\b/i.test(race.title)) return true;
+  return false;
+}
+
+function normalizeCategory(value: string | undefined): string {
+  return typeof value === 'string' ? value.trim().toUpperCase() : '';
+}
+
+export function isSameCategory(profileRace: MergedRace, friendRace: MergedRace): boolean {
+  const profileSubgroup = normalizeCategory(profileRace.zr?.event?.subgroupId);
+  const friendSubgroup = normalizeCategory(friendRace.zr?.event?.subgroupId);
+  if (profileSubgroup && friendSubgroup) {
+    return profileSubgroup === friendSubgroup;
+  }
+
+  const profileZpCat = normalizeCategory(profileRace.zp?.category);
+  const friendZpCat = normalizeCategory(friendRace.zp?.category);
+  if (profileZpCat && friendZpCat) {
+    return profileZpCat === friendZpCat;
+  }
+
+  const profileCat = profileZpCat || profileSubgroup;
+  const friendCat = friendZpCat || friendSubgroup;
+  if (profileCat && friendCat) {
+    return profileCat === friendCat;
+  }
+
+  return true;
+}
+
 /**
  * Computes head-to-head race records between the profile rider and a friend
- * by matching shared `eventId` entries, ordered descending by race date.
+ * by matching shared `eventId` entries in the same category, ordered descending by race date.
  */
 export function computeHeadToHead(
   profileRaces: MergedRace[],
   friendRaces: MergedRace[],
+  options: HeadToHeadOptions = {},
 ): HeadToHeadSummary {
+  const { includeTeamEvents = false } = options;
   const friendByEventId = new Map<string, MergedRace>();
   for (const race of friendRaces) {
     if (!race.eventId) continue;
@@ -133,6 +173,9 @@ export function computeHeadToHead(
     const friendRace = friendByEventId.get(eventId);
     if (!friendRace) continue;
     seenEventIds.add(eventId);
+
+    if (!includeTeamEvents && (isTeamEvent(profileRace) || isTeamEvent(friendRace))) continue;
+    if (!isSameCategory(profileRace, friendRace)) continue;
 
     const profilePlacement = resolvePlacement(profileRace);
     const friendPlacement = resolvePlacement(friendRace);

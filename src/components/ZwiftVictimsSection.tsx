@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { fetchProfileById } from '../api/zwiftCore';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
 import type { ZwiftRacingRiderResponse } from '../api/zwiftRacing';
+import { useAuth } from '../auth/AuthContext';
+import { useFavorites } from '../lib/FavoritesContext';
 import type { FavoriteRider } from '../lib/FavoritesContext';
 import { computeHeadToHead } from '../lib/headToHead';
 import type { HeadToHeadOutcome } from '../lib/headToHead';
@@ -35,12 +39,14 @@ function placeTone(outcome: HeadToHeadOutcome, side: 'profile' | 'friend'): stri
 
 function VictimRow({
   friend,
+  includeTeamEvents,
   profileRaces,
   profileZpState,
   profileZrState,
   onRemove,
 }: {
   friend: FavoriteRider;
+  includeTeamEvents: boolean;
   profileRaces: MergedRace[];
   profileZpState: AsyncState<ZwiftPowerRaceEntry[]>;
   profileZrState: AsyncState<ZwiftRacingRiderResponse>;
@@ -68,8 +74,8 @@ function VictimRow({
 
   const summary = useMemo(() => {
     if (profileZpState.status !== 'loaded' || friendZpState.status !== 'loaded') return null;
-    return computeHeadToHead(profileRaces, friendRaces);
-  }, [profileZpState.status, friendZpState.status, profileRaces, friendRaces]);
+    return computeHeadToHead(profileRaces, friendRaces, { includeTeamEvents });
+  }, [profileZpState.status, friendZpState.status, profileRaces, friendRaces, includeTeamEvents]);
 
   const friendShortName = friend.name.trim().split(/\s+/)[0] || 'Friend';
   const decided = summary ? summary.wins + summary.losses : 0;
@@ -83,27 +89,28 @@ function VictimRow({
   return (
     <article className="rounded-xl bg-slate-950/70 border border-slate-800 overflow-hidden">
       <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+        <Link
+          to={`/riders/${friend.id}`}
+          aria-label={`View ${friend.name}'s profile`}
+          className="flex items-center gap-3 min-w-0 flex-1 group"
+        >
           {friend.imageSrc ? (
             <img
               src={friend.imageSrc}
               alt={friend.name}
-              className="w-10 h-10 rounded-full object-cover border border-slate-700 shrink-0"
+              className="w-10 h-10 rounded-full object-cover border border-slate-700 group-hover:border-[#fc6719] transition-colors shrink-0"
             />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-sm font-bold text-slate-200 shrink-0">
+            <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 group-hover:border-[#fc6719] transition-colors flex items-center justify-center text-sm font-bold text-slate-200 shrink-0">
               {(friend.name[0] ?? 'Z').toUpperCase()}
             </div>
           )}
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 min-w-0">
-              <Link
-                to={`/riders/${friend.id}`}
-                className="font-bold text-sm sm:text-base text-slate-100 hover:text-[#fc6719] transition-colors truncate"
-              >
+              <span className="font-bold text-sm sm:text-base text-slate-100 group-hover:text-[#fc6719] transition-colors truncate">
                 {friend.name}
-              </Link>
+              </span>
               {friend.category && (
                 <span className="rounded-full bg-slate-800 border border-slate-700 px-2 py-0.5 text-[11px] font-semibold text-slate-300 shrink-0">
                   Cat {friend.category}
@@ -120,7 +127,7 @@ function VictimRow({
               )}
             </p>
           </div>
-        </div>
+        </Link>
 
         <div className="flex items-center gap-2 shrink-0">
           {isLoading && (
@@ -187,7 +194,8 @@ function VictimRow({
             <p className="text-xs text-slate-400">Loading head-to-head race results…</p>
           ) : summary.races.length === 0 ? (
             <p className="text-xs text-slate-400">
-              No shared races found between you and {friend.name}.
+              No matching same-category races found between you and {friend.name}
+              {!includeTeamEvents ? ' (team events excluded)' : ''}.
             </p>
           ) : (
             <>
@@ -273,34 +281,116 @@ export default function ZwiftVictimsSection({
   profileZpState: AsyncState<ZwiftPowerRaceEntry[]>;
   profileZrState: AsyncState<ZwiftRacingRiderResponse>;
 }) {
+  const { getAccessToken } = useAuth();
+  const { upsertFavorite } = useFavorites();
+  const [includeTeamEvents, setIncludeTeamEvents] = useState(false);
+  const [addId, setAddId] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
   const otherFavorites = useMemo(
     () => favorites.filter((f) => f.id !== profileId),
     [favorites, profileId],
   );
 
+  async function handleAddSubmit(e: FormEvent) {
+    e.preventDefault();
+    const cleaned = addId.trim();
+    if (!/^\d+$/.test(cleaned)) return;
+    const parsedId = Number(cleaned);
+    if (parsedId === profileId) {
+      setAddError('You cannot add your own Zwift ID.');
+      return;
+    }
+
+    setAdding(true);
+    setAddError(null);
+    try {
+      const token = await getAccessToken();
+      const loaded = await fetchProfileById(token, parsedId);
+      const name = [loaded.firstName, loaded.lastName].filter(Boolean).join(' ') || 'Zwift rider';
+      const category =
+        loaded.competitionMetrics?.category ?? loaded.competitionMetrics?.categoryWomen;
+      upsertFavorite({
+        id: loaded.id,
+        name,
+        imageSrc: loaded.imageSrc,
+        category,
+      });
+      setAddId('');
+    } catch (err: unknown) {
+      setAddError(err instanceof Error ? err.message : `Unable to load rider ${parsedId}.`);
+    } finally {
+      setAdding(false);
+    }
+  }
+
   return (
     <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold">Zwift Victims</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-bold">Zwift Victims</h2>
+            {otherFavorites.length > 0 && (
+              <span className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-xs font-semibold text-slate-300">
+                {otherFavorites.length} {otherFavorites.length === 1 ? 'rival' : 'rivals'}
+              </span>
+            )}
+          </div>
           <p className="text-xs text-slate-400">
-            Head-to-head win/loss records against your favorited riders.
+            Same-category head-to-head win/loss records against your favorited riders.
           </p>
         </div>
-        {otherFavorites.length > 0 && (
-          <span className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-xs font-semibold text-slate-300">
-            {otherFavorites.length} {otherFavorites.length === 1 ? 'rival' : 'rivals'}
-          </span>
-        )}
+
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="inline-flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={includeTeamEvents}
+              onChange={(e) => setIncludeTeamEvents(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-700 bg-slate-950 accent-[#fc6719]"
+            />
+            <span>Include team events</span>
+          </label>
+
+          <form onSubmit={handleAddSubmit} className="flex items-center gap-1.5">
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder="Add rival ID…"
+              aria-label="Add rival by Zwift ID"
+              value={addId}
+              onChange={(e) => {
+                setAddId(e.target.value);
+                if (addError) setAddError(null);
+              }}
+              disabled={adding}
+              className="w-32 rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-1.5 text-xs sm:text-sm focus:outline-none focus:border-[#fc6719] disabled:opacity-50"
+            />
+            <button
+              type="submit"
+              disabled={adding || !/^\d+$/.test(addId.trim())}
+              className="rounded-lg bg-[#fc6719] px-3 py-1.5 text-xs sm:text-sm font-bold text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
+            >
+              {adding ? 'Adding…' : 'Add'}
+            </button>
+          </form>
+        </div>
       </div>
+
+      {addError && (
+        <p role="alert" className="text-xs text-red-400">
+          {addError}
+        </p>
+      )}
 
       {otherFavorites.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/40 p-5 text-center space-y-1.5">
           <p className="text-sm font-medium text-slate-300">No favorited riders yet</p>
           <p className="text-xs text-slate-400">
-            Search for a friend by Zwift ID at the top of the page and click{' '}
-            <span className="text-amber-300 font-semibold">☆ Favorite</span> on their profile to
-            track your head-to-head win/loss record here.
+            Add a friend by Zwift ID above or search for them at the top of the page and click{' '}
+            <span className="text-amber-300 font-semibold">☆ Favorite</span> on their profile.
           </p>
         </div>
       ) : (
@@ -309,6 +399,7 @@ export default function ZwiftVictimsSection({
             <VictimRow
               key={friend.id}
               friend={friend}
+              includeTeamEvents={includeTeamEvents}
               profileRaces={profileRaces}
               profileZpState={profileZpState}
               profileZrState={profileZrState}
