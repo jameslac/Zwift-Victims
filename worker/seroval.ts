@@ -128,7 +128,7 @@ export interface ZwiftRacingExtracted {
 }
 
 export function extractZwiftRacingData(html: string): ZwiftRacingExtracted {
-  const match = html.match(/\$_TSR\.router=\(\$R=>([\s\S]*?)\)\(\$R\["tsr"\]\)/);
+  const match = html.match(/\$_TSR\.router\s*=\s*\(\$R\s*=>\s*([\s\S]*?)\)\(\$R\[["']tsr["']\]\)/);
   if (!match?.[1]) return { rider: null, overview: null };
 
   const root = parseSeroval(match[1]);
