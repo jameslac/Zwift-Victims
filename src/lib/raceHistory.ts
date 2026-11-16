@@ -29,6 +29,33 @@ export interface MergedRace {
 const MATCH_WINDOW_MS = 3 * 60 * 60 * 1000;
 const CLOCK_TOLERANCE_MS = 5 * 60 * 1000;
 
+export function buildZwiftActivityUrl(activityId: string): string {
+  return `https://www.zwift.com/activity/${encodeURIComponent(activityId)}`;
+}
+
+export function buildZwiftPowerEventUrl(zid: string): string {
+  return `https://zwiftpower.com/events.php?zid=${encodeURIComponent(zid)}`;
+}
+
+export function buildZwiftRacingEventUrl(eventId: string, subgroupId: string): string {
+  return `https://zwiftracing.app/events/${encodeURIComponent(eventId)}/${encodeURIComponent(subgroupId)}`;
+}
+
+export function slugifyRouteName(routeName: string): string {
+  return routeName
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/['’.]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+export function buildZwifterBikesRouteUrl(routeName: string): string | undefined {
+  const slug = slugifyRouteName(routeName);
+  return slug ? `https://zwifterbikes.web.app/route/${encodeURIComponent(slug)}` : undefined;
+}
+
 export function buildZwiftToolsBikeComparisonUrl(activityId: string): string {
   return `https://zwifttools.azurewebsites.net/bike-comparison?activity=${encodeURIComponent(activityId)}`;
 }

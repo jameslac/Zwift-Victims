@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useUnits } from '../lib/UnitsContext';
@@ -20,8 +20,12 @@ import { fetchZwiftRacingRider } from '../api/zwiftRacing';
 import type { ZwiftRacingRiderResponse } from '../api/zwiftRacing';
 
 import {
+  buildZwiftActivityUrl,
+  buildZwiftPowerEventUrl,
+  buildZwiftRacingEventUrl,
   buildZwiftToolsBikeComparisonUrl,
   buildZwiftToolsRaceReplayUrl,
+  buildZwifterBikesRouteUrl,
   isPodium,
   mergeRaces,
   summarize,
@@ -179,6 +183,77 @@ function PlacingBadge({
   return null;
 }
 
+function ZwiftIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M6 6h12L6 18h12" />
+    </svg>
+  );
+}
+
+function ZwiftPowerIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5Z" />
+    </svg>
+  );
+}
+
+function ZwiftRacingIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+      <line x1="4" y1="22" x2="4" y2="15" />
+    </svg>
+  );
+}
+
+function RouteIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="6" cy="19" r="3" />
+      <path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15" />
+      <circle cx="18" cy="5" r="3" />
+    </svg>
+  );
+}
+
 function BikeIcon({ className = 'w-4 h-4' }: { className?: string }) {
   return (
     <svg
@@ -222,31 +297,93 @@ function ReplayIcon({ className = 'w-4 h-4' }: { className?: string }) {
 const TOOL_ICON_LINK_CLASS =
   'inline-flex items-center justify-center rounded-lg border border-slate-700/80 bg-slate-900/80 p-1.5 text-slate-300 hover:border-[#fc6719]/60 hover:text-[#fc6719] hover:bg-slate-800 transition-colors';
 
-function ZwiftToolsLinks({ activityId }: { activityId?: string }) {
-  if (!activityId) return null;
+function RaceExternalLinks({ race }: { race: MergedRace }) {
+  const links: Array<{
+    key: string;
+    href: string;
+    title: string;
+    label: string;
+    icon: ReactNode;
+  }> = [];
+
+  const zpZid = race.zp?.zid != null ? String(race.zp.zid).trim() : '';
+  if (zpZid) {
+    links.push({
+      key: 'zwiftpower',
+      href: buildZwiftPowerEventUrl(zpZid),
+      title: 'ZwiftPower Event',
+      label: 'Open Event on ZwiftPower',
+      icon: <ZwiftPowerIcon />,
+    });
+  }
+
+  const zrEventId = race.zr?.event?.eventId != null ? String(race.zr.event.eventId).trim() : '';
+  const zrSubgroup = (race.zr?.event?.subgroupId ?? race.zp?.category)?.trim().replace(/\+$/, '');
+  if (race.zr && zrEventId && zrSubgroup) {
+    links.push({
+      key: 'zwiftracing',
+      href: buildZwiftRacingEventUrl(zrEventId, zrSubgroup),
+      title: 'ZwiftRacing.app Event',
+      label: 'Open Event on ZwiftRacing.app',
+      icon: <ZwiftRacingIcon />,
+    });
+  }
+
+  const routeName = race.zr?.event?.routeName?.trim();
+  const routeUrl = routeName ? buildZwifterBikesRouteUrl(routeName) : undefined;
+  if (routeName && routeUrl) {
+    links.push({
+      key: 'zwifterbikes',
+      href: routeUrl,
+      title: `ZwifterBikes Route (${routeName})`,
+      label: 'Open Route on ZwifterBikes',
+      icon: <RouteIcon />,
+    });
+  }
+
+  if (race.activityId) {
+    links.push(
+      {
+        key: 'zwift',
+        href: buildZwiftActivityUrl(race.activityId),
+        title: 'Zwift Activity',
+        label: 'Open Activity on Zwift',
+        icon: <ZwiftIcon />,
+      },
+      {
+        key: 'zwifttools-bike',
+        href: buildZwiftToolsBikeComparisonUrl(race.activityId),
+        title: 'ZwiftTools Bike Comparison',
+        label: 'Open Bike Comparison on ZwiftTools',
+        icon: <BikeIcon />,
+      },
+      {
+        key: 'zwifttools-replay',
+        href: buildZwiftToolsRaceReplayUrl(race.activityId),
+        title: 'ZwiftTools Race Replay',
+        label: 'Open Race Replay on ZwiftTools',
+        icon: <ReplayIcon />,
+      },
+    );
+  }
+
+  if (links.length === 0) return null;
 
   return (
     <footer className="border-t border-slate-800/80 pt-3 flex flex-wrap items-center justify-end gap-2">
-      <a
-        href={buildZwiftToolsBikeComparisonUrl(activityId)}
-        target="_blank"
-        rel="noopener noreferrer"
-        title="ZwiftTools Bike Comparison"
-        aria-label="Open Bike Comparison on ZwiftTools"
-        className={TOOL_ICON_LINK_CLASS}
-      >
-        <BikeIcon />
-      </a>
-      <a
-        href={buildZwiftToolsRaceReplayUrl(activityId)}
-        target="_blank"
-        rel="noopener noreferrer"
-        title="ZwiftTools Race Replay"
-        aria-label="Open Race Replay on ZwiftTools"
-        className={TOOL_ICON_LINK_CLASS}
-      >
-        <ReplayIcon />
-      </a>
+      {links.map((link) => (
+        <a
+          key={link.key}
+          href={link.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={link.title}
+          aria-label={link.label}
+          className={TOOL_ICON_LINK_CLASS}
+        >
+          {link.icon}
+        </a>
+      ))}
     </footer>
   );
 }
@@ -402,7 +539,7 @@ function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }
         ]}
       />
 
-      <ZwiftToolsLinks activityId={race.activityId} />
+      <RaceExternalLinks race={race} />
     </article>
   );
 }
