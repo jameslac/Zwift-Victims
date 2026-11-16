@@ -75,20 +75,35 @@ export function getXpProgress(profile: ZwiftProfile): XpProgress | null {
   let levelFloorXp: number | null = null;
   let nextLevelXp: number | null = null;
 
-  if (rawTarget !== null && rawTarget > 0 && (totalXp === null || rawTarget >= totalXp)) {
+  if (level !== null && level >= 1 && level < ZWIFT_LEVEL_XP.length) {
+    const floor = ZWIFT_LEVEL_XP[level - 1];
+    const next = ZWIFT_LEVEL_XP[level];
+    if (totalXp === null || (totalXp >= floor && totalXp < next)) {
+      levelFloorXp = floor;
+      nextLevelXp = next;
+    }
+  } else if (level !== null && level >= 100 && level < 200) {
+    const floor = 807000 + (level - 100) * 20000;
+    const next = floor + 20000;
+    if (totalXp !== null && totalXp >= floor && totalXp < next) {
+      levelFloorXp = floor;
+      nextLevelXp = next;
+    }
+  }
+
+  // Zwift's /profiles/me often sets targetExperiencePoints to 0 or equal to totalExperiencePoints.
+  if (
+    nextLevelXp === null &&
+    rawTarget !== null &&
+    rawTarget > 0 &&
+    (totalXp === null || rawTarget > totalXp)
+  ) {
     nextLevelXp = rawTarget;
     if (level !== null && level >= 1 && level <= ZWIFT_LEVEL_XP.length) {
       const floor = ZWIFT_LEVEL_XP[level - 1];
       if (floor < nextLevelXp && (totalXp === null || floor <= totalXp)) {
         levelFloorXp = floor;
       }
-    }
-  } else if (level !== null && level >= 1 && level < ZWIFT_LEVEL_XP.length) {
-    const floor = ZWIFT_LEVEL_XP[level - 1];
-    const next = ZWIFT_LEVEL_XP[level];
-    if (totalXp === null || (totalXp >= floor && totalXp <= next)) {
-      levelFloorXp = floor;
-      nextLevelXp = next;
     }
   }
 
@@ -108,7 +123,7 @@ export function getXpProgress(profile: ZwiftProfile): XpProgress | null {
 
   const clampedPct = Math.max(0, Math.min(100, progressPct));
   const xpRemaining =
-    nextLevelXp !== null && totalXp !== null && nextLevelXp >= totalXp
+    nextLevelXp !== null && totalXp !== null && nextLevelXp > totalXp
       ? nextLevelXp - totalXp
       : null;
 

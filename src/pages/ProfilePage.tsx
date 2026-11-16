@@ -48,6 +48,19 @@ function Stat({ label, value }: { label: string; value: string | number | undefi
   );
 }
 
+function formatRiderCategory(profile: ZwiftProfile): string | undefined {
+  const metrics = profile.competitionMetrics;
+  const openCat = metrics?.category?.trim() || undefined;
+  const womenCat = metrics?.categoryWomen?.trim() || undefined;
+  if (profile.male === false) {
+    if (womenCat && openCat) return `${womenCat} (Women) / ${openCat} (Open)`;
+    if (womenCat) return `${womenCat} (Women)`;
+    if (openCat) return `${openCat} (Open)`;
+    return undefined;
+  }
+  return openCat ?? womenCat;
+}
+
 function XpProgressBar({ profile }: { profile: ZwiftProfile }) {
   const xp = getXpProgress(profile);
   if (!xp) return null;
@@ -735,10 +748,7 @@ export default function ProfilePage({
     metrics?.racingScore != null && Number.isFinite(metrics.racingScore)
       ? Math.round(metrics.racingScore)
       : undefined;
-  const riderCategory =
-    (profile.male === false
-      ? (metrics?.categoryWomen ?? metrics?.category)
-      : (metrics?.category ?? metrics?.categoryWomen)) ?? undefined;
+  const riderCategory = formatRiderCategory(profile);
 
   function handleLookupSubmit(e: FormEvent) {
     e.preventDefault();
