@@ -34,6 +34,15 @@ npm run build
 npm run deploy
 ```
 
+### PR Preview Cleanup (GitHub Actions)
+Every PR/branch builds an isolated Cloudflare Worker Preview via `wrangler preview` (`wrangler.jsonc` `"previews"`). [`.github/workflows/cleanup-preview.yml`](./.github/workflows/cleanup-preview.yml) automatically deletes the branch's Worker Preview via `npx wrangler preview delete --name "<branch>" --skip-confirmation` when a PR is closed/merged or its branch is deleted.
+
+To enable automatic cleanup, add these **Repository secrets** in GitHub (**Settings → Secrets and variables → Actions**):
+- `CLOUDFLARE_API_TOKEN` — Cloudflare API token with **Account → Workers Scripts → Edit** permission (for example, the **Edit Cloudflare Workers** template).
+- `CLOUDFLARE_ACCOUNT_ID` — Your 32-character Cloudflare Account ID (visible on the Workers & Pages overview dashboard).
+
+If either secret is missing, the cleanup workflow emits a warning and skips deletion without failing PR close checks.
+
 ## Initial Roadmap
 1. **Milestone 1: Foundation & Authentication**
    - [x] Scaffold Vite + React + TypeScript + Tailwind + PWA + Unified Cloudflare Worker (`wrangler.jsonc`).
