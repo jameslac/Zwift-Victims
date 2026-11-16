@@ -12,7 +12,8 @@ export interface HeadToHeadRace {
   friendStatus: string;
   outcome: HeadToHeadOutcome;
   category?: string;
-  usedTruePlace: boolean;
+  profileUsedTruePlace: boolean;
+  friendUsedTruePlace: boolean;
 }
 
 export interface HeadToHeadSummary {
@@ -110,10 +111,19 @@ const TEAM_TITLE_RE =
 const TEAM_TYPE_RE = /\b(ttt|team\s*time\s*trial|team)\b/i;
 const EXPLICIT_ITT_RE = /\b(itt|individual\s+time\s+trial)\b/i;
 
-export function isTeamEvent(race: MergedRace): boolean {
-  const titles = [race.title, race.zp?.event_title, race.zr?.event?.title].filter(
+function getRaceTitles(race: MergedRace): string[] {
+  return [race.title, race.zp?.event_title, race.zr?.event?.title].filter(
     (t): t is string => typeof t === 'string' && t.trim() !== '',
   );
+}
+
+function isExplicitIndividualTimeTrial(race: MergedRace): boolean {
+  const subType = race.zr?.event?.subType ?? '';
+  return EXPLICIT_ITT_RE.test(subType) || getRaceTitles(race).some((t) => EXPLICIT_ITT_RE.test(t));
+}
+
+export function isTeamEvent(race: MergedRace): boolean {
+  const titles = getRaceTitles(race);
   const subType = race.zr?.event?.subType ?? '';
   const eventType = race.zr?.event?.type ?? '';
   const zpTags = race.zp?.f_t ?? '';
@@ -122,9 +132,33 @@ export function isTeamEvent(race: MergedRace): boolean {
   if (TEAM_TYPE_RE.test(subType) || TEAM_TYPE_RE.test(eventType)) return true;
   if (/\b(TYPE_TTT|TYPE_TEAM)\b/i.test(zpTags)) return true;
 
-  const isExplicitItt =
-    EXPLICIT_ITT_RE.test(subType) || titles.some((t) => EXPLICIT_ITT_RE.test(t));
-  if (/\bTYPE_TT\b/i.test(zpTags) && !isExplicitItt) return true;
+  return false;
+}
+
+function normalizeTeamValue(value: string | undefined): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+export function isSharedTeamTimeTrial(profileRace: MergedRace, friendRace: MergedRace): boolean {
+  const hasTypeTt =
+    /\bTYPE_TT\b/i.test(profileRace.zp?.f_t ?? '') ||
+    /\bTYPE_TT\b/i.test(friendRace.zp?.f_t ?? '');
+  if (!hasTypeTt) return false;
+  if (isExplicitIndividualTimeTrial(profileRace) || isExplicitIndividualTimeTrial(friendRace)) {
+    return false;
+  }
+
+  const profileTid = normalizeTeamValue(profileRace.zp?.tid);
+  const friendTid = normalizeTeamValue(friendRace.zp?.tid);
+  if (profileTid && friendTid) {
+    return profileTid === friendTid;
+  }
+
+  const profileTname = normalizeTeamValue(profileRace.zp?.tname);
+  const friendTname = normalizeTeamValue(friendRace.zp?.tname);
+  if (profileTname && friendTname) {
+    return profileTname === friendTname;
+  }
 
   return false;
 }
@@ -184,7 +218,14 @@ export function computeHeadToHead(
     if (!friendRace) continue;
     seenEventIds.add(eventId);
 
-    if (!includeTeamEvents && (isTeamEvent(profileRace) || isTeamEvent(friendRace))) continue;
+    if (
+      !includeTeamEvents &&
+      (isTeamEvent(profileRace) ||
+        isTeamEvent(friendRace) ||
+        isSharedTeamTimeTrial(profileRace, friendRace))
+    ) {
+      continue;
+    }
     if (!isSameCategory(profileRace, friendRace)) continue;
     if (isDqOrDnf(profileRace) || isDqOrDnf(friendRace)) continue;
 
@@ -213,7 +254,8 @@ export function computeHeadToHead(
       friendStatus: friendPlacement.status,
       outcome,
       category: profileRace.zp?.category ?? profileRace.zr?.event?.subgroupId,
-      usedTruePlace: profilePlacement.usedTruePlace && friendPlacement.usedTruePlace,
+      profileUsedTruePlace: profilePlacement.usedTruePlace,
+      friendUsedTruePlace: friendPlacement.usedTruePlace,
     });
   }
 

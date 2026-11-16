@@ -78,7 +78,9 @@ function VictimRow({
   const winPct = summary && decided > 0 ? Math.round((summary.wins / decided) * 100) : null;
   const hasFallbackPlace = Boolean(
     summary?.races.some(
-      (r) => !r.usedTruePlace && (r.profilePlace != null || r.friendPlace != null),
+      (r) =>
+        (!r.profileUsedTruePlace && r.profilePlace != null) ||
+        (!r.friendUsedTruePlace && r.friendPlace != null),
     ),
   );
 
@@ -233,13 +235,13 @@ function VictimRow({
                           className={`py-2 px-2 text-right whitespace-nowrap align-middle ${placeTone(race.outcome, 'profile')}`}
                         >
                           {race.profileStatus}
-                          {!race.usedTruePlace && race.profilePlace != null ? '*' : ''}
+                          {!race.profileUsedTruePlace && race.profilePlace != null ? '*' : ''}
                         </td>
                         <td
                           className={`py-2 pl-2 text-right whitespace-nowrap align-middle ${placeTone(race.outcome, 'friend')}`}
                         >
                           {race.friendStatus}
-                          {!race.usedTruePlace && race.friendPlace != null ? '*' : ''}
+                          {!race.friendUsedTruePlace && race.friendPlace != null ? '*' : ''}
                         </td>
                       </tr>
                     ))}
