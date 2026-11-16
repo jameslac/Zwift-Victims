@@ -111,11 +111,27 @@ export interface HeadToHeadOptions {
   includeTeamEvents?: boolean;
 }
 
+const TEAM_TITLE_RE =
+  /\b(TTT|WTRL|ZRL|Zwift\s+Racing\s+League|Team\s+Time\s+Trial|Club\s+Ladder|Team\s+Race|Team\s+Series)\b/i;
+const TEAM_TYPE_RE = /\b(ttt|team\s*time\s*trial|team)\b/i;
+const EXPLICIT_ITT_RE = /\b(itt|individual\s+time\s+trial)\b/i;
+
 export function isTeamEvent(race: MergedRace): boolean {
-  if (/\bttt\b/i.test(race.zr?.event?.subType ?? '')) return true;
-  if (/\bttt\b/i.test(race.zr?.event?.type ?? '')) return true;
-  if (/\bTYPE_TTT\b/i.test(race.zp?.f_t ?? '')) return true;
-  if (/\b(TTT|WTRL|ZRL|Team\s+Time\s+Trial)\b/i.test(race.title)) return true;
+  const titles = [race.title, race.zp?.event_title, race.zr?.event?.title].filter(
+    (t): t is string => typeof t === 'string' && t.trim() !== '',
+  );
+  const subType = race.zr?.event?.subType ?? '';
+  const eventType = race.zr?.event?.type ?? '';
+  const zpTags = race.zp?.f_t ?? '';
+
+  if (titles.some((t) => TEAM_TITLE_RE.test(t))) return true;
+  if (TEAM_TYPE_RE.test(subType) || TEAM_TYPE_RE.test(eventType)) return true;
+  if (/\b(TYPE_TTT|TYPE_TEAM)\b/i.test(zpTags)) return true;
+
+  const isExplicitItt =
+    EXPLICIT_ITT_RE.test(subType) || titles.some((t) => EXPLICIT_ITT_RE.test(t));
+  if (/\bTYPE_TT\b/i.test(zpTags) && !isExplicitItt) return true;
+
   return false;
 }
 
