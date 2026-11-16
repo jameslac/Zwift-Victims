@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useUnits } from '../lib/UnitsContext';
 import {
@@ -17,162 +16,28 @@ import { fetchZwiftPowerRaces } from '../api/zwiftPower';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
 import { fetchZwiftRacingRider } from '../api/zwiftRacing';
 import type { ZwiftRacingRiderResponse } from '../api/zwiftRacing';
+import { AppHeader, AttributeList, MetricGrid, PlacingBadge, Stat } from '../components/RaceUi';
+import {
+  flatten,
+  formatGapSeconds,
+  formatUnixSeconds,
+  isPodium,
+  mergeRaces,
+  ordinal,
+  summarize,
+  zpVal,
+} from '../lib/raceHistory';
+import type { AsyncState, MergedRace } from '../lib/raceHistory';
 
-import { isPodium, mergeRaces, summarize } from '../lib/raceHistory';
-import type { MergedRace } from '../lib/raceHistory';
-
-type AsyncState<T> =
-  | { status: 'loading' }
-  | { status: 'error'; message: string }
-  | { status: 'loaded'; data: T };
-
-function Stat({ label, value }: { label: string; value: string | number | undefined }) {
-  return (
-    <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-4">
-      <dt className="text-xs uppercase tracking-wide text-slate-400">{label}</dt>
-      <dd className="mt-1 text-xl font-bold">{value ?? '—'}</dd>
-    </div>
-  );
-}
-
-/** Flatten nested JSON into dotted-key/value string pairs for display. */
-function flatten(obj: unknown, prefix = ''): [string, string][] {
-  if (obj === null || typeof obj !== 'object') return [[prefix, String(obj)]];
-  const entries = Object.entries(obj as Record<string, unknown>);
-  if (entries.length === 0) return [[prefix, Array.isArray(obj) ? '[]' : '{}']];
-  return entries.flatMap(([k, v]) => {
-    const key = prefix ? (Array.isArray(obj) ? `${prefix}[${k}]` : `${prefix}.${k}`) : k;
-    return v !== null && typeof v === 'object' ? flatten(v, key) : [[key, String(v)] as [string, string]];
-  });
-}
-
-function AttributeList({ rows }: { rows: [string, string][] }) {
-  return (
-    <dl className="divide-y divide-slate-800 text-sm mt-2">
-      {rows.map(([key, value]) => (
-        <div key={key} className="flex flex-col sm:flex-row sm:justify-between gap-1 py-2">
-          <dt className="font-mono text-slate-400 break-all">{key}</dt>
-          <dd className="font-mono sm:text-right break-all">{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function MetricGrid({
-  items,
+function MergedRaceCard({
+  race,
+  profileId,
+  units,
 }: {
-  items: Array<{ label: string; value: string | number | undefined }>;
+  race: MergedRace;
+  profileId: number;
+  units: UnitSystem;
 }) {
-  return (
-    <dl className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
-      {items.map((item) => (
-        <div key={item.label} className="rounded-lg bg-slate-900/70 border border-slate-800/80 p-2">
-          <dt className="text-slate-400">{item.label}</dt>
-          <dd className="mt-0.5 font-semibold">{item.value ?? '—'}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function zpVal(v: unknown): string | number | undefined {
-  const raw = Array.isArray(v) ? v[0] : v;
-  if (raw === undefined || raw === null || raw === '') return undefined;
-  if (typeof raw === 'string' || typeof raw === 'number') return raw;
-  return String(raw);
-}
-
-function formatUnixSeconds(sec: number | undefined): string {
-  if (sec === undefined || sec === null || !Number.isFinite(sec)) return 'Unknown date';
-  return new Date(sec * 1000).toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
-}
-
-function formatGapSeconds(gap: number | undefined): string {
-  if (gap === undefined || gap === null || !Number.isFinite(gap)) return '—';
-  if (gap === 0) return '0.0s';
-  if (gap < 60) return `+${gap.toFixed(1)}s`;
-  return `+${formatDurationMs(gap * 1000)}`;
-}
-
-function ordinal(n: number): string {
-  const s = ['th', 'st', 'nd', 'rd'];
-  const v = n % 100;
-  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
-}
-
-function PlacingBadge({
-  truePlace,
-  fieldSize,
-  zpPlace,
-  didNotFinish,
-  disqualified,
-  penalty,
-}: {
-  truePlace?: number;
-  fieldSize?: number;
-  zpPlace?: number;
-  didNotFinish?: boolean;
-  disqualified?: boolean;
-  penalty?: string;
-}) {
-  if (didNotFinish) {
-    return (
-      <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2.5 py-0.5 text-xs font-semibold text-red-300">
-        DNF
-      </span>
-    );
-  }
-  if (disqualified) {
-    return (
-      <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2.5 py-0.5 text-xs font-semibold text-red-300">
-        DQ
-      </span>
-    );
-  }
-  if (truePlace != null) {
-    const label = fieldSize ? `${ordinal(truePlace)} / ${fieldSize}` : ordinal(truePlace);
-    let tone = 'bg-slate-800/80 border-slate-600 text-slate-100';
-    if (truePlace === 1) {
-      tone = 'bg-amber-400/20 border-amber-400/50 text-amber-300';
-    } else if (truePlace === 2) {
-      tone = 'bg-slate-300/20 border-slate-300/50 text-slate-200';
-    } else if (truePlace === 3) {
-      tone = 'bg-orange-500/20 border-orange-500/50 text-orange-300';
-    }
-    return (
-      <span
-        className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${tone}`}
-        title="True category placing from ZwiftRacing (includes private riders)"
-      >
-        {label}
-      </span>
-    );
-  }
-  if (penalty) {
-    return (
-      <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2.5 py-0.5 text-xs font-semibold text-red-300">
-        {penalty}
-      </span>
-    );
-  }
-  if (zpPlace != null) {
-    return (
-      <span
-        className="rounded-full bg-slate-700/40 border border-slate-600 px-2.5 py-0.5 text-xs font-semibold text-slate-300"
-        title="ZwiftPower category placing (private/hidden riders excluded)"
-      >
-        {ordinal(zpPlace)} (ZP*)
-      </span>
-    );
-  }
-  return null;
-}
-
-function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }) {
   const { zp, zr } = race;
   const timeSec = zpVal(zp?.time) ?? zr?.race?.time;
   const avgPower = zpVal(zp?.avg_power);
@@ -200,11 +65,17 @@ function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }
   const eloAfter = zr?.velo?.elo?.after;
   const sof = zr?.velo?.elo?.eventRating;
 
-  return (
-    <article className="rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-3">
+  const cardContent = (
+    <article
+      className={`rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-3 ${
+        race.eventId ? 'group-hover:border-[#fc6719]/70 transition-colors' : ''
+      }`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="font-bold text-base">{race.title}</h3>
+          <h3 className="font-bold text-base group-hover:text-[#fc6719] transition-colors">
+            {race.title}
+          </h3>
           <p className="text-xs text-slate-400">
             {formatUnixSeconds(race.date)}
             {category ? ` · Cat ${category}` : ''}
@@ -322,17 +193,39 @@ function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }
           { label: 'SOF', value: sof != null ? sof.toFixed(0) : undefined },
         ]}
       />
+
+      {race.eventId && (
+        <div className="flex justify-end">
+          <span className="text-xs font-semibold text-[#fc6719] group-hover:underline">
+            View race details →
+          </span>
+        </div>
+      )}
     </article>
+  );
+
+  if (!race.eventId) return cardContent;
+
+  return (
+    <Link
+      to={`/riders/${profileId}/races/${encodeURIComponent(race.eventId)}`}
+      state={{ race }}
+      className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#fc6719] rounded-xl"
+    >
+      {cardContent}
+    </Link>
   );
 }
 
 function MergedTab({
   zpState,
   zrState,
+  profileId,
   units,
 }: {
   zpState: AsyncState<ZwiftPowerRaceEntry[]>;
   zrState: AsyncState<ZwiftRacingRiderResponse>;
+  profileId: number;
   units: UnitSystem;
 }) {
   const merged = useMemo(() => {
@@ -377,7 +270,9 @@ function MergedTab({
       {merged.length === 0 ? (
         <p className="text-sm text-slate-400">No races found.</p>
       ) : (
-        merged.map((race) => <MergedRaceCard key={race.key} race={race} units={units} />)
+        merged.map((race) => (
+          <MergedRaceCard key={race.key} race={race} profileId={profileId} units={units} />
+        ))
       )}
     </div>
   );
@@ -434,11 +329,12 @@ function RaceHistorySection({
       <div>
         <h2 className="text-lg font-bold">Race History</h2>
         <p className="text-xs text-slate-400">
-          ZwiftPower race history enriched with ZwiftRacing.app true standings, course data, and vELO ratings.
+          ZwiftPower race history enriched with ZwiftRacing.app true standings, course data, and
+          vELO ratings. Click any race to inspect full standings and multi-API details.
         </p>
       </div>
 
-      <MergedTab zpState={zpState} zrState={zrState} units={units} />
+      <MergedTab zpState={zpState} zrState={zrState} profileId={profileId} units={units} />
     </section>
   );
 }
@@ -451,8 +347,6 @@ export default function ProfilePage({
   isOwnProfile?: boolean;
 }) {
   const { logout } = useAuth();
-  const navigate = useNavigate();
-  const [lookupId, setLookupId] = useState('');
   // Default to the rider's Zwift preference until they pick a unit system here.
   const { units, setUnits } = useUnits(profile.useMetric === false ? 'imperial' : 'metric');
   const name = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Zwift rider';
@@ -461,67 +355,14 @@ export default function ProfilePage({
   const publicRows = rows.filter(([key]) => !key.startsWith('privateAttributes'));
   const privateRows = rows.filter(([key]) => key.startsWith('privateAttributes'));
 
-  function handleLookupSubmit(e: FormEvent) {
-    e.preventDefault();
-    const cleaned = lookupId.trim();
-    if (!/^\d+$/.test(cleaned)) return;
-    setLookupId('');
-    navigate(`/riders/${cleaned}`);
-  }
-
   return (
     <main className="min-h-dvh max-w-3xl mx-auto p-4 sm:p-8 space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Link to="/" className="font-extrabold text-lg">
-            Zwift Victims
-          </Link>
-          {!isOwnProfile && (
-            <Link
-              to="/"
-              className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
-            >
-              My profile
-            </Link>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <form onSubmit={handleLookupSubmit} className="flex items-center gap-1">
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              placeholder="View rider ID…"
-              aria-label="View rider by Zwift ID"
-              value={lookupId}
-              onChange={(e) => setLookupId(e.target.value)}
-              className="w-32 rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm focus:outline-none focus:border-[#fc6719]"
-            />
-            <button
-              type="submit"
-              disabled={!/^\d+$/.test(lookupId.trim())}
-              className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-sm hover:bg-slate-800 disabled:opacity-40"
-            >
-              Go
-            </button>
-          </form>
-          <select
-            aria-label="Units"
-            value={units}
-            onChange={(e) => setUnits(e.target.value as UnitSystem)}
-            className="rounded-lg bg-slate-900 border border-slate-700 px-2 py-1.5 text-sm"
-          >
-            <option value="metric">Metric (kg, cm)</option>
-            <option value="imperial">Imperial (lb, ft)</option>
-          </select>
-          <button
-            onClick={logout}
-            className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm hover:bg-slate-800"
-          >
-            Log out
-          </button>
-        </div>
-      </header>
+      <AppHeader
+        isOwnProfile={isOwnProfile}
+        units={units}
+        onUnitsChange={setUnits}
+        onLogout={logout}
+      />
 
       <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-6">
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left">

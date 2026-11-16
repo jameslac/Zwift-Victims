@@ -157,6 +157,42 @@ export interface ZwiftActivityDetail {
   [key: string]: unknown;
 }
 
+export interface ZwiftEventSubgroup {
+  id: number;
+  name?: string;
+  description?: string;
+  subgroupLabel?: string;
+  label?: number;
+  routeId?: number;
+  laps?: number;
+  distanceInMeters?: number;
+  durationInSeconds?: number;
+  totalEntrantCount?: number;
+  totalSignedUpCount?: number;
+  eventSubgroupStart?: string;
+  rulesId?: number;
+  [key: string]: unknown;
+}
+
+export interface ZwiftPublicEvent {
+  id: number;
+  name?: string;
+  description?: string;
+  eventStart?: string;
+  eventType?: string;
+  sport?: string;
+  routeId?: number;
+  worldId?: number;
+  laps?: number;
+  distanceInMeters?: number;
+  durationInSeconds?: number;
+  imageUrl?: string;
+  rulesId?: number;
+  cullingType?: string;
+  eventSubgroups?: ZwiftEventSubgroup[];
+  [key: string]: unknown;
+}
+
 export class AuthError extends Error {}
 
 async function tokenRequest(params: Record<string, string>): Promise<TokenSet> {
@@ -227,6 +263,16 @@ export async function fetchRiderActivities(
   if (Array.isArray(data)) return data;
   return Array.isArray(data?.activities) ? data.activities : [];
 }
+
+export const fetchPublicEvent = (
+  accessToken: string,
+  eventId: string | number,
+): Promise<ZwiftPublicEvent> =>
+  fetchAuthorizedJson<ZwiftPublicEvent>(
+    accessToken,
+    `/api/zwift/api/public/events/${encodeURIComponent(String(eventId))}`,
+    'event details',
+  );
 
 export async function fetchRaceResults(
   accessToken: string,

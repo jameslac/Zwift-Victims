@@ -29,6 +29,13 @@ export function formatElevation(meters: number | undefined, units: UnitSystem): 
   return units === 'metric' ? `${Math.round(meters)} m` : `${Math.round(meters * 3.28084)} ft`;
 }
 
+export function formatSpeed(mps: number | undefined, units: UnitSystem): string {
+  if (mps === undefined || mps === null || !Number.isFinite(mps)) return '—';
+  return units === 'metric'
+    ? `${(mps * 3.6).toFixed(1)} km/h`
+    : `${(mps * 2.23694).toFixed(1)} mph`;
+}
+
 export function formatDurationMs(ms: number | undefined): string {
   if (ms === undefined || ms === null || !Number.isFinite(ms) || ms < 0) return '—';
   const totalSeconds = Math.round(ms / 1000);

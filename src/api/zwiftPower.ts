@@ -99,3 +99,27 @@ export async function fetchZwiftPowerRaces(riderId: number): Promise<ZwiftPowerR
   const races = Array.isArray(payload?.data) ? payload.data : [];
   return [...races].sort((a, b) => Number(b.event_date ?? 0) - Number(a.event_date ?? 0));
 }
+
+function sortRank(entry: ZwiftPowerRaceEntry): number {
+  const raw = entry.pos ?? entry.position_in_cat;
+  const num = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isFinite(num) && num > 0 ? num : Number.MAX_SAFE_INTEGER;
+}
+
+export async function fetchZwiftPowerEventResults(
+  eventId: string | number,
+  variant: 'view' | 'zwift' = 'view',
+): Promise<ZwiftPowerRaceEntry[]> {
+  const res = await fetch(
+    `/api/zwiftpower/cache3/results/${encodeURIComponent(String(eventId))}_${variant}.json`,
+  );
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`Failed to load ZwiftPower event results (${res.status}).`);
+  const payload = (await res.json()) as ZwiftPowerRaceEntry[] | { data?: ZwiftPowerRaceEntry[] };
+  const entries = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.data)
+      ? payload.data
+      : [];
+  return [...entries].sort((a, b) => sortRank(a) - sortRank(b));
+}
