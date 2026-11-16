@@ -12,26 +12,14 @@ import {
   formatWkg,
 } from '../lib/units';
 import type { UnitSystem } from '../lib/units';
-import {
-  fetchActivityDetail,
-  fetchRaceResults,
-  fetchRiderActivities,
-} from '../api/zwiftCore';
-import type {
-  ZwiftActivity,
-  ZwiftActivityDetail,
-  ZwiftProfile,
-  ZwiftRaceResultEntry,
-} from '../api/zwiftCore';
+import type { ZwiftProfile } from '../api/zwiftCore';
 import { fetchZwiftPowerRaces } from '../api/zwiftPower';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
 import { fetchZwiftRacingRider } from '../api/zwiftRacing';
-import type { ZwiftRacingRaceEntry, ZwiftRacingRiderResponse } from '../api/zwiftRacing';
+import type { ZwiftRacingRiderResponse } from '../api/zwiftRacing';
 
 import { isPodium, mergeRaces, summarize } from '../lib/raceHistory';
 import type { MergedRace } from '../lib/raceHistory';
-
-type ProviderTab = 'merged' | 'zwiftpower' | 'zwiftracing' | 'core';
 
 type AsyncState<T> =
   | { status: 'loading' }
@@ -58,20 +46,6 @@ function flatten(obj: unknown, prefix = ''): [string, string][] {
   });
 }
 
-function collectKeys(items: unknown[], excludePrefix?: string): string[] {
-  return Array.from(
-    new Set(
-      items.flatMap((item) =>
-        flatten(item)
-          .map(([key]) => key)
-          .filter((key) =>
-            excludePrefix ? !key.startsWith(`${excludePrefix}.`) && key !== excludePrefix : true,
-          ),
-      ),
-    ),
-  ).sort();
-}
-
 function AttributeList({ rows }: { rows: [string, string][] }) {
   return (
     <dl className="divide-y divide-slate-800 text-sm mt-2">
@@ -82,24 +56,6 @@ function AttributeList({ rows }: { rows: [string, string][] }) {
         </div>
       ))}
     </dl>
-  );
-}
-
-function AttributeKeysSummary({ label, keys }: { label: string; keys: string[] }) {
-  if (keys.length === 0) return null;
-  return (
-    <details className="rounded-xl bg-slate-950/70 border border-slate-800 p-4">
-      <summary className="cursor-pointer text-sm font-medium text-slate-300">
-        {label} ({keys.length} keys)
-      </summary>
-      <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs font-mono text-slate-400">
-        {keys.map((key) => (
-          <li key={key} className="break-all">
-            {key}
-          </li>
-        ))}
-      </ul>
-    </details>
   );
 }
 
@@ -127,13 +83,6 @@ function zpVal(v: unknown): string | number | undefined {
   return String(raw);
 }
 
-function formatDateTime(iso: string | undefined): string {
-  if (!iso) return 'Unknown date';
-  const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return iso;
-  return parsed.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}
-
 function formatUnixSeconds(sec: number | undefined): string {
   if (sec === undefined || sec === null || !Number.isFinite(sec)) return 'Unknown date';
   return new Date(sec * 1000).toLocaleString(undefined, {
@@ -147,687 +96,6 @@ function formatGapSeconds(gap: number | undefined): string {
   if (gap === 0) return '0.0s';
   if (gap < 60) return `+${gap.toFixed(1)}s`;
   return `+${formatDurationMs(gap * 1000)}`;
-}
-
-function isRaceOrEventActivity(activity: ZwiftActivity): boolean {
-  return (
-    Boolean(activity.eventSubgroupId) ||
-    /\b(race|zrl|wtrl|ttt|crit|fondo|stage|tour|chase)\b/i.test(activity.name ?? '')
-  );
-}
-
-function formatActivityDuration(activity: ZwiftActivity): string {
-  if (typeof activity.movingTimeInMs === 'number') {
-    return formatDurationMs(activity.movingTimeInMs);
-  }
-  return activity.duration || '—';
-}
-
-function RaceResultPanel({
-  subgroupId,
-  profileId,
-  state,
-  onLoad,
-}: {
-  subgroupId: number;
-  profileId: number;
-  state: AsyncState<ZwiftRaceResultEntry[]> | undefined;
-  onLoad: (subgroupId: number) => void;
-}) {
-  const myEntry =
-    state?.status === 'loaded'
-      ? state.data.find((entry) => Number(entry.profileId) === profileId)
-      : undefined;
-  const myEntryRows = myEntry ? flatten(myEntry) : [];
-
-  return (
-    <div className="rounded-lg bg-slate-900/70 border border-slate-800 p-3 space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs text-slate-400 font-mono">eventSubgroupId: {subgroupId}</span>
-        <button
-          type="button"
-          disabled={state?.status === 'loading'}
-          onClick={() => onLoad(subgroupId)}
-          className="rounded-md border border-slate-700 px-2.5 py-1 text-xs font-medium hover:bg-slate-800 disabled:opacity-50"
-        >
-          {state?.status === 'loading'
-            ? 'Loading race result…'
-            : state?.status === 'loaded'
-              ? 'Refresh race result'
-              : 'Load race result'}
-        </button>
-      </div>
-
-      {state?.status === 'error' && <p className="text-xs text-red-400">{state.message}</p>}
-
-      {state?.status === 'loaded' && (
-        <div className="space-y-2">
-          <p className="text-xs text-slate-300">
-            Returned {state.data.length} subgroup finisher
-            {state.data.length === 1 ? '' : 's'}.
-            {myEntry
-              ? ` Your rank: ${myEntry.rank ?? '—'} · Elapsed: ${formatDurationMs(
-                  myEntry.activityData?.durationInMilliseconds,
-                )} · Avg Power: ${
-                  myEntry.sensorData?.avgWatts != null
-                    ? `${Math.round(myEntry.sensorData.avgWatts)} W`
-                    : '—'
-                }`
-              : ' Rider ID was not found in the returned subgroup entries.'}
-          </p>
-          {myEntry && (
-            <details open>
-              <summary className="cursor-pointer text-xs text-slate-400">
-                All race result attributes ({myEntryRows.length} fields)
-              </summary>
-              <AttributeList rows={myEntryRows} />
-            </details>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ZwiftPowerTab({
-  profileId,
-  units,
-  state,
-}: {
-  profileId: number;
-  units: UnitSystem;
-  state: AsyncState<ZwiftPowerRaceEntry[]>;
-}) {
-  const races = useMemo(() => (state.status === 'loaded' ? state.data : []), [state]);
-  const allKeys = useMemo(() => collectKeys(races), [races]);
-
-  if (state.status === 'loading') {
-    return <p className="text-sm text-slate-400">Loading ZwiftPower race history…</p>;
-  }
-  if (state.status === 'error') {
-    return (
-      <p role="alert" className="text-sm text-red-400">
-        {state.message}
-      </p>
-    );
-  }
-  if (races.length === 0) {
-    return (
-      <p className="text-sm text-slate-400">
-        No ZwiftPower race history found for rider {profileId}.
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <p className="text-xs text-slate-400">
-        Returned {races.length} races from <code>/cache3/profile/{profileId}_all.json</code> (sorted
-        newest first).
-      </p>
-
-      <AttributeKeysSummary
-        label="All ZwiftPower attribute keys returned across races"
-        keys={allKeys}
-      />
-
-      {races.map((race, index) => {
-        const rows = flatten(race);
-        const timeSec = zpVal(race.time);
-        const avgPower = zpVal(race.avg_power);
-        const np = zpVal(race.np);
-        const avgWkg = zpVal(race.avg_wkg);
-        const avgHr = zpVal(race.avg_hr);
-        const maxHr = zpVal(race.max_hr);
-        const w5 = zpVal(race.w5);
-        const w15 = zpVal(race.w15);
-        const w60 = zpVal(race.w60);
-        const w300 = zpVal(race.w300);
-        const w1200 = zpVal(race.w1200);
-        const wkg1200 = zpVal(race.wkg1200);
-
-        return (
-          <article
-            key={String(race.res_id ?? race.uid ?? `${race.zid}-${index}`)}
-            className="rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-3"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <h3 className="font-bold text-base">{race.event_title || 'Untitled race'}</h3>
-                <p className="text-xs text-slate-400">
-                  {formatUnixSeconds(race.event_date)}
-                  {race.category ? ` · Cat ${race.category}` : ''}
-                  {race.zid ? ` · zid: ${race.zid}` : ''}
-                  {race.tname ? ` · Team ${race.tname}` : ''}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <PlacingBadge
-                  zpPlace={typeof race.position_in_cat === 'number' ? race.position_in_cat : undefined}
-                  penalty={race.penalty}
-                />
-                {race.upg === 1 && (
-                  <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-xs font-semibold text-amber-300">
-                    UPG
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <MetricGrid
-              items={[
-                { label: 'Cat Pos', value: race.position_in_cat },
-                { label: 'Overall Pos', value: race.pos },
-                {
-                  label: 'Time',
-                  value:
-                    typeof timeSec === 'number' ? formatDurationMs(timeSec * 1000) : undefined,
-                },
-                { label: 'Gap', value: formatGapSeconds(race.gap) },
-                {
-                  label: 'Distance',
-                  value:
-                    typeof race.distance === 'number'
-                      ? formatDistance(race.distance * 1000, units)
-                      : undefined,
-                },
-                {
-                  label: 'Avg Power',
-                  value: avgPower !== undefined ? `${avgPower} W` : undefined,
-                },
-                { label: 'NP', value: np !== undefined ? `${np} W` : undefined },
-                { label: 'Avg W/kg', value: avgWkg !== undefined ? `${avgWkg} W/kg` : undefined },
-                {
-                  label: 'Avg / Max HR',
-                  value:
-                    avgHr !== undefined || maxHr !== undefined
-                      ? `${avgHr ?? '—'} / ${maxHr ?? '—'} bpm`
-                      : undefined,
-                },
-                {
-                  label: '5s / 15s',
-                  value:
-                    w5 !== undefined || w15 !== undefined
-                      ? `${w5 ?? '—'} / ${w15 ?? '—'} W`
-                      : undefined,
-                },
-                {
-                  label: '1m / 5m',
-                  value:
-                    w60 !== undefined || w300 !== undefined
-                      ? `${w60 ?? '—'} / ${w300 ?? '—'} W`
-                      : undefined,
-                },
-                {
-                  label: '20m',
-                  value:
-                    w1200 !== undefined
-                      ? `${w1200} W${wkg1200 !== undefined ? ` (${wkg1200})` : ''}`
-                      : undefined,
-                },
-              ]}
-            />
-
-            <details open={index === 0}>
-              <summary className="cursor-pointer text-xs text-slate-300 font-medium">
-                All ZwiftPower attributes ({rows.length} fields)
-              </summary>
-              <AttributeList rows={rows} />
-            </details>
-          </article>
-        );
-      })}
-    </div>
-  );
-}
-
-function ZwiftRacingTab({
-  profileId,
-  units,
-  state,
-}: {
-  profileId: number;
-  units: UnitSystem;
-  state: AsyncState<ZwiftRacingRiderResponse>;
-}) {
-  const history: ZwiftRacingRaceEntry[] = useMemo(
-    () => (state.status === 'loaded' ? (state.data.overview?.history ?? []) : []),
-    [state],
-  );
-  const allKeys = useMemo(() => collectKeys(history), [history]);
-
-  if (state.status === 'loading') {
-    return <p className="text-sm text-slate-400">Loading ZwiftRacing.app data…</p>;
-  }
-  if (state.status === 'error') {
-    return (
-      <p role="alert" className="text-sm text-red-400">
-        {state.message}
-      </p>
-    );
-  }
-
-  if (!state.data.rider && !state.data.overview) {
-    return (
-      <p className="text-sm text-slate-400">
-        No ZwiftRacing.app profile found for rider {profileId}.
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <p className="text-xs text-slate-400">
-        {history.length} races from <code>zwiftracing.app/riders/{profileId}</code>.
-      </p>
-
-      <AttributeKeysSummary
-        label="All ZwiftRacing race attribute keys returned across history"
-        keys={allKeys}
-      />
-
-      {history.length === 0 ? (
-        <p className="text-sm text-slate-400">No race history entries returned by ZwiftRacing.app.</p>
-      ) : (
-        history.map((entry, index) => {
-          const rows = flatten(entry);
-          const distKm = entry.race?.distance ?? entry.event?.distance;
-          const eloBefore = entry.velo?.elo?.before;
-          const eloAfter = entry.velo?.elo?.after;
-
-          return (
-            <article
-              key={`${entry.event?.eventId ?? 'zr'}-${entry.event?.time ?? index}`}
-              className="rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-3"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <h3 className="font-bold text-base">{entry.event?.title || 'Untitled race'}</h3>
-                  <p className="text-xs text-slate-400">
-                    {formatUnixSeconds(entry.event?.time)}
-                    {entry.event?.subgroupId ? ` · Cat ${entry.event.subgroupId}` : ''}
-                    {entry.event?.subType ? ` · ${entry.event.subType}` : ''}
-                    {entry.event?.routeName ? ` · ${entry.event.routeName}` : ''}
-                    {entry.event?.eventId ? ` · eventId: ${entry.event.eventId}` : ''}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <PlacingBadge
-                    truePlace={entry.place?.positionInCategory}
-                    fieldSize={entry.place?.penTotal}
-                    didNotFinish={entry.place?.didNotFinish}
-                    disqualified={entry.place?.disqualified}
-                  />
-                </div>
-              </div>
-
-              <MetricGrid
-                items={[
-                  {
-                    label: 'Place',
-                    value:
-                      entry.place?.positionInCategory != null
-                        ? `${entry.place.positionInCategory}${
-                            entry.place.penTotal ? ` / ${entry.place.penTotal}` : ''
-                          }`
-                        : undefined,
-                  },
-                  {
-                    label: 'Time',
-                    value:
-                      entry.race?.time != null ? formatDurationMs(entry.race.time * 1000) : undefined,
-                  },
-                  { label: 'Gap', value: formatGapSeconds(entry.race?.gap) },
-                  {
-                    label: 'Distance',
-                    value: distKm != null ? formatDistance(distKm * 1000, units) : undefined,
-                  },
-                  { label: 'Elevation', value: formatElevation(entry.event?.elevation, units) },
-                  {
-                    label: 'Avg W/kg',
-                    value:
-                      entry.race?.wkgAvg != null
-                        ? `${entry.race.wkgAvg.toFixed(2)} W/kg`
-                        : undefined,
-                  },
-                  {
-                    label: 'vELO Before → After',
-                    value:
-                      eloBefore != null && eloAfter != null
-                        ? `${eloBefore.toFixed(1)} → ${eloAfter.toFixed(1)}`
-                        : undefined,
-                  },
-                  {
-                    label: 'Expected Pos',
-                    value:
-                      entry.velo?.elo?.expectedPosition != null
-                        ? entry.velo.elo.expectedPosition.toFixed(1)
-                        : undefined,
-                  },
-                  {
-                    label: 'zPoints',
-                    value:
-                      entry.velo?.points?.value != null
-                        ? entry.velo.points.value.toFixed(1)
-                        : undefined,
-                  },
-                  {
-                    label: '5s / 15s W/kg',
-                    value:
-                      entry.race?.wkg5 != null || entry.race?.wkg15 != null
-                        ? `${entry.race.wkg5?.toFixed(1) ?? '—'} / ${entry.race.wkg15?.toFixed(1) ?? '—'}`
-                        : undefined,
-                  },
-                  {
-                    label: '1m / 5m W/kg',
-                    value:
-                      entry.race?.wkg60 != null || entry.race?.wkg300 != null
-                        ? `${entry.race.wkg60?.toFixed(1) ?? '—'} / ${entry.race.wkg300?.toFixed(1) ?? '—'}`
-                        : undefined,
-                  },
-                  {
-                    label: '20m W/kg',
-                    value:
-                      entry.race?.wkg1200 != null ? `${entry.race.wkg1200.toFixed(2)} W/kg` : undefined,
-                  },
-                ]}
-              />
-
-              <details open={index === 0}>
-                <summary className="cursor-pointer text-xs text-slate-300 font-medium">
-                  All ZwiftRacing attributes ({rows.length} fields)
-                </summary>
-                <AttributeList rows={rows} />
-              </details>
-            </article>
-          );
-        })
-      )}
-    </div>
-  );
-}
-
-function ZwiftCoreTab({
-  profileId,
-  units,
-  getAccessToken,
-  state,
-}: {
-  profileId: number;
-  units: UnitSystem;
-  getAccessToken: () => Promise<string>;
-  state: AsyncState<ZwiftActivity[]>;
-}) {
-  const [filter, setFilter] = useState<'all' | 'races'>('all');
-  const [detailByActivityId, setDetailByActivityId] = useState<
-    Record<string, AsyncState<ZwiftActivityDetail>>
-  >({});
-  const [raceResultsBySubgroup, setRaceResultsBySubgroup] = useState<
-    Record<number, AsyncState<ZwiftRaceResultEntry[]>>
-  >({});
-
-  const activities = useMemo(() => (state.status === 'loaded' ? state.data : []), [state]);
-  const raceActivities = useMemo(() => activities.filter(isRaceOrEventActivity), [activities]);
-  const displayedActivities = filter === 'races' ? raceActivities : activities;
-  const allActivityKeys = useMemo(() => collectKeys(activities, 'profile'), [activities]);
-
-  async function handleLoadActivityDetail(activityKey: string) {
-    setDetailByActivityId((prev) => ({ ...prev, [activityKey]: { status: 'loading' } }));
-    try {
-      const token = await getAccessToken();
-      const detail = await fetchActivityDetail(token, activityKey);
-      setDetailByActivityId((prev) => ({ ...prev, [activityKey]: { status: 'loaded', data: detail } }));
-    } catch (err: unknown) {
-      setDetailByActivityId((prev) => ({
-        ...prev,
-        [activityKey]: {
-          status: 'error',
-          message: err instanceof Error ? err.message : 'Failed to load activity detail.',
-        },
-      }));
-    }
-  }
-
-  async function handleLoadRaceResult(subgroupId: number) {
-    setRaceResultsBySubgroup((prev) => ({ ...prev, [subgroupId]: { status: 'loading' } }));
-    try {
-      const token = await getAccessToken();
-      const entries = await fetchRaceResults(token, subgroupId);
-      setRaceResultsBySubgroup((prev) => ({
-        ...prev,
-        [subgroupId]: { status: 'loaded', data: entries },
-      }));
-    } catch (err: unknown) {
-      setRaceResultsBySubgroup((prev) => ({
-        ...prev,
-        [subgroupId]: {
-          status: 'error',
-          message: err instanceof Error ? err.message : 'Failed to load race results.',
-        },
-      }));
-    }
-  }
-
-  if (state.status === 'loading') {
-    return <p className="text-sm text-slate-400">Loading Zwift Core activities…</p>;
-  }
-  if (state.status === 'error') {
-    return (
-      <p role="alert" className="text-sm text-red-400">
-        {state.message}
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <p className="text-xs text-slate-400">
-          Raw feed from Zwift Core <code>/api/profiles/{profileId}/activities</code> (latest 20;{' '}
-          <code>profile.*</code> collapsed).
-        </p>
-
-        <div className="inline-flex rounded-lg border border-slate-700 p-0.5 bg-slate-950 self-start">
-          <button
-            type="button"
-            onClick={() => setFilter('all')}
-            className={`rounded-md px-3 py-1 text-xs font-medium transition ${
-              filter === 'all' ? 'bg-[#fc6719] text-white' : 'text-slate-300 hover:text-white'
-            }`}
-          >
-            All activities ({activities.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter('races')}
-            className={`rounded-md px-3 py-1 text-xs font-medium transition ${
-              filter === 'races' ? 'bg-[#fc6719] text-white' : 'text-slate-300 hover:text-white'
-            }`}
-          >
-            Races &amp; Events ({raceActivities.length})
-          </button>
-        </div>
-      </div>
-
-      <AttributeKeysSummary
-        label="All Zwift Core activity attribute keys (excluding profile.*)"
-        keys={allActivityKeys}
-      />
-
-      {displayedActivities.length === 0 ? (
-        <p className="text-sm text-slate-400">
-          {filter === 'races'
-            ? 'No race or event activities detected in the latest 20 activities.'
-            : 'No activities returned by Zwift.'}
-        </p>
-      ) : (
-        displayedActivities.map((activity, index) => {
-          const allRows = flatten(activity);
-          const activityOnlyRows = allRows.filter(
-            ([key]) => !key.startsWith('profile.') && key !== 'profile',
-          );
-          const profileRows = allRows.filter(
-            ([key]) => key.startsWith('profile.') || key === 'profile',
-          );
-          const raceOrEvent = isRaceOrEventActivity(activity);
-          const activityIdStr = activity.id_str ?? String(activity.id);
-          const detailState = detailByActivityId[activityIdStr];
-          const detailSubgroupId =
-            detailState?.status === 'loaded' ? detailState.data.eventInfo?.eventSubGroupId : undefined;
-          const subgroupId =
-            typeof activity.eventSubgroupId === 'number' && activity.eventSubgroupId > 0
-              ? activity.eventSubgroupId
-              : typeof detailSubgroupId === 'number' && detailSubgroupId > 0
-                ? detailSubgroupId
-                : null;
-
-          return (
-            <article
-              key={`${activityIdStr}-${index}`}
-              className="rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-3"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <h3 className="font-bold text-base">{activity.name || 'Untitled activity'}</h3>
-                  <p className="text-xs text-slate-400">
-                    {formatDateTime(activity.startDate)}
-                    {activity.sport ? ` · ${activity.sport}` : ''}
-                  </p>
-                </div>
-                {raceOrEvent && (
-                  <span className="rounded-full bg-[#fc6719]/20 border border-[#fc6719]/40 px-2.5 py-0.5 text-xs font-semibold text-[#fc6719]">
-                    Race / Event
-                  </span>
-                )}
-              </div>
-
-              <MetricGrid
-                items={[
-                  { label: 'Distance', value: formatDistance(activity.distanceInMeters, units) },
-                  { label: 'Elevation', value: formatElevation(activity.totalElevation, units) },
-                  { label: 'Moving Time', value: formatActivityDuration(activity) },
-                  {
-                    label: 'Avg Power',
-                    value: activity.avgWatts != null ? `${Math.round(activity.avgWatts)} W` : undefined,
-                  },
-                  {
-                    label: 'Avg HR',
-                    value:
-                      activity.avgHeartRate != null
-                        ? `${Math.round(activity.avgHeartRate)} bpm`
-                        : undefined,
-                  },
-                  {
-                    label: 'Calories',
-                    value:
-                      activity.calories != null ? `${Math.round(activity.calories)} kcal` : undefined,
-                  },
-                ]}
-              />
-
-              <div className="rounded-lg bg-slate-900/70 border border-slate-800 p-3 space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs text-slate-400 font-mono">
-                    id_str: {activityIdStr}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={detailState?.status === 'loading'}
-                    onClick={() => handleLoadActivityDetail(activityIdStr)}
-                    className="rounded-md border border-slate-700 px-2.5 py-1 text-xs font-medium hover:bg-slate-800 disabled:opacity-50"
-                  >
-                    {detailState?.status === 'loading'
-                      ? 'Loading activity detail…'
-                      : detailState?.status === 'loaded'
-                        ? 'Refresh activity detail'
-                        : 'Load detailed activity'}
-                  </button>
-                </div>
-
-                {detailState?.status === 'error' && (
-                  <p className="text-xs text-red-400">{detailState.message}</p>
-                )}
-
-                {detailState?.status === 'loaded' && (
-                  <div className="space-y-2">
-                    <MetricGrid
-                      items={[
-                        {
-                          label: 'Max Power',
-                          value:
-                            detailState.data.maxWatts != null
-                              ? `${Math.round(detailState.data.maxWatts)} W`
-                              : undefined,
-                        },
-                        {
-                          label: 'Avg / Max HR',
-                          value:
-                            detailState.data.avgHeartRate != null ||
-                            detailState.data.maxHeartRate != null
-                              ? `${detailState.data.avgHeartRate ?? '—'} / ${detailState.data.maxHeartRate ?? '—'} bpm`
-                              : undefined,
-                        },
-                        {
-                          label: 'Avg Cadence',
-                          value:
-                            detailState.data.avgCadenceInRotationsPerMinute != null
-                              ? `${Math.round(detailState.data.avgCadenceInRotationsPerMinute)} rpm`
-                              : undefined,
-                        },
-                        {
-                          label: 'Event ID',
-                          value: detailState.data.eventInfo?.id,
-                        },
-                        {
-                          label: 'Subgroup ID',
-                          value: detailState.data.eventInfo?.eventSubGroupId,
-                        },
-                        {
-                          label: 'Subgroup Entrants',
-                          value: detailState.data.eventInfo?.subgroupTotalEntrantCount,
-                        },
-                      ]}
-                    />
-                    <details open>
-                      <summary className="cursor-pointer text-xs text-slate-400">
-                        All detailed activity attributes ({flatten(detailState.data).length} fields)
-                      </summary>
-                      <AttributeList rows={flatten(detailState.data)} />
-                    </details>
-                  </div>
-                )}
-              </div>
-
-              {subgroupId !== null && (
-                <RaceResultPanel
-                  subgroupId={subgroupId}
-                  profileId={profileId}
-                  state={raceResultsBySubgroup[subgroupId]}
-                  onLoad={handleLoadRaceResult}
-                />
-              )}
-
-              <details open={index === 0}>
-                <summary className="cursor-pointer text-xs text-slate-300 font-medium">
-                  All activity attributes ({activityOnlyRows.length} fields)
-                </summary>
-                <AttributeList rows={activityOnlyRows} />
-              </details>
-
-              {profileRows.length > 0 && (
-                <details>
-                  <summary className="cursor-pointer text-xs text-slate-400">
-                    profile.* ({profileRows.length} repeated rider profile values)
-                  </summary>
-                  <AttributeList rows={profileRows} />
-                </details>
-              )}
-            </article>
-          );
-        })
-      )}
-    </div>
-  );
 }
 
 function ordinal(n: number): string {
@@ -931,7 +199,6 @@ function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }
   const eloBefore = zr?.velo?.elo?.before;
   const eloAfter = zr?.velo?.elo?.after;
   const sof = zr?.velo?.elo?.eventRating;
-  const rows = flatten({ zwiftPower: zp ?? null, zwiftRacing: zr ?? null });
 
   return (
     <article className="rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-3">
@@ -1055,13 +322,6 @@ function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }
           { label: 'SOF', value: sof != null ? sof.toFixed(0) : undefined },
         ]}
       />
-
-      <details>
-        <summary className="cursor-pointer text-xs text-slate-300 font-medium">
-          All merged attributes ({rows.length} fields)
-        </summary>
-        <AttributeList rows={rows} />
-      </details>
     </article>
   );
 }
@@ -1083,7 +343,7 @@ function MergedTab({
   const summary = useMemo(() => summarize(merged), [merged]);
 
   if (zpState.status === 'loading' || zrState.status === 'loading') {
-    return <p className="text-sm text-slate-400">Loading ZwiftPower + ZwiftRacing.app…</p>;
+    return <p className="text-sm text-slate-400">Loading race history…</p>;
   }
   if (zpState.status === 'error') {
     return (
@@ -1095,11 +355,6 @@ function MergedTab({
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-slate-400">
-        ZwiftPower is the primary race list; each race is enriched from ZwiftRacing.app by event ID.
-        Placings come from ZwiftRacing.app when available because ZwiftPower drops private riders from
-        the standings.
-      </p>
       {zrState.status === 'error' && (
         <p role="alert" className="text-xs text-amber-400">
           ZwiftRacing.app unavailable ({zrState.message}); showing ZwiftPower only.
@@ -1131,18 +386,14 @@ function MergedTab({
 function RaceHistorySection({
   profileId,
   units,
-  getAccessToken,
 }: {
   profileId: number;
   units: UnitSystem;
-  getAccessToken: () => Promise<string>;
 }) {
-  const [activeTab, setActiveTab] = useState<ProviderTab>('merged');
   const [zpState, setZpState] = useState<AsyncState<ZwiftPowerRaceEntry[]>>({ status: 'loading' });
   const [zrState, setZrState] = useState<AsyncState<ZwiftRacingRiderResponse>>({
     status: 'loading',
   });
-  const [coreState, setCoreState] = useState<AsyncState<ZwiftActivity[]>>({ status: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
@@ -1173,89 +424,21 @@ function RaceHistorySection({
         }
       });
 
-    getAccessToken()
-      .then((token) => fetchRiderActivities(token, profileId, { start: 0, limit: 20 }))
-      .then((data) => {
-        if (!cancelled) setCoreState({ status: 'loaded', data });
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setCoreState({
-            status: 'error',
-            message: err instanceof Error ? err.message : 'Failed to load Zwift Core activities.',
-          });
-        }
-      });
-
     return () => {
       cancelled = true;
     };
-  }, [getAccessToken, profileId]);
-
-  const zpCount = zpState.status === 'loaded' ? ` (${zpState.data.length})` : '';
-  const zrCount =
-    zrState.status === 'loaded'
-      ? ` (${zrState.data.overview?.history?.length ?? 0})`
-      : '';
-  const coreCount = coreState.status === 'loaded' ? ` (${coreState.data.length})` : '';
-
-  const tabs: Array<{ id: ProviderTab; label: string }> = [
-    { id: 'merged', label: 'Race History' },
-    { id: 'zwiftpower', label: `ZwiftPower${zpCount}` },
-    { id: 'zwiftracing', label: `ZwiftRacing.app${zrCount}` },
-    { id: 'core', label: `Zwift Core${coreCount}` },
-  ];
+  }, [profileId]);
 
   return (
     <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold">Race &amp; Activity History</h2>
-          <p className="text-xs text-slate-400">
-            Compare every attribute returned across ZwiftPower, ZwiftRacing.app, and Zwift Core for
-            Zwift ID {profileId}.
-          </p>
-        </div>
-
-        <div
-          role="tablist"
-          aria-label="Race data source"
-          className="inline-flex flex-wrap rounded-lg border border-slate-700 p-0.5 bg-slate-950 self-start"
-        >
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`rounded-md px-3 py-1 text-xs font-medium transition ${
-                activeTab === tab.id
-                  ? 'bg-[#fc6719] text-white'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+      <div>
+        <h2 className="text-lg font-bold">Race History</h2>
+        <p className="text-xs text-slate-400">
+          ZwiftPower race history enriched with ZwiftRacing.app true standings, course data, and vELO ratings.
+        </p>
       </div>
 
-      {activeTab === 'merged' && <MergedTab zpState={zpState} zrState={zrState} units={units} />}
-      {activeTab === 'zwiftpower' && (
-        <ZwiftPowerTab profileId={profileId} units={units} state={zpState} />
-      )}
-      {activeTab === 'zwiftracing' && (
-        <ZwiftRacingTab profileId={profileId} units={units} state={zrState} />
-      )}
-      {activeTab === 'core' && (
-        <ZwiftCoreTab
-          profileId={profileId}
-          units={units}
-          getAccessToken={getAccessToken}
-          state={coreState}
-        />
-      )}
+      <MergedTab zpState={zpState} zrState={zrState} units={units} />
     </section>
   );
 }
@@ -1267,7 +450,7 @@ export default function ProfilePage({
   profile: ZwiftProfile;
   isOwnProfile?: boolean;
 }) {
-  const { logout, getAccessToken } = useAuth();
+  const { logout } = useAuth();
   const navigate = useNavigate();
   const [lookupId, setLookupId] = useState('');
   // Default to the rider's Zwift preference until they pick a unit system here.
@@ -1376,7 +559,7 @@ export default function ProfilePage({
         </dl>
       </section>
 
-      <RaceHistorySection profileId={profile.id} units={units} getAccessToken={getAccessToken} />
+      <RaceHistorySection profileId={profile.id} units={units} />
 
       <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8">
         <h2 className="text-lg font-bold mb-3">All profile data</h2>

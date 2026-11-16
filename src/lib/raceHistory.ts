@@ -23,6 +23,16 @@ export interface MergedRace {
   placeInflation?: number;
 }
 
+export function isRaceEntry(zp?: ZwiftPowerRaceEntry, zr?: ZwiftRacingRaceEntry): boolean {
+  if (typeof zr?.event?.type === 'string' && zr.event.type.trim() !== '') {
+    return /\b(race|tt|time\s*trial)\b/i.test(zr.event.type);
+  }
+  if (typeof zp?.f_t === 'string' && zp.f_t.trim() !== '') {
+    return /\b(TYPE_RACE|TYPE_TT)\b/i.test(zp.f_t);
+  }
+  return true;
+}
+
 export function mergeRaces(
   zpRaces: ZwiftPowerRaceEntry[],
   zrRaces: ZwiftRacingRaceEntry[],
@@ -39,12 +49,15 @@ export function mergeRaces(
     const eventId = String(zp.zid ?? '');
     const zr = eventId ? zrById.get(eventId) : undefined;
     if (zr) used.add(eventId);
+    if (!isRaceEntry(zp, zr)) continue;
     merged.push(build(eventId, zp, zr, `zp-${zp.res_id ?? zp.uid ?? eventId}-${merged.length}`));
   }
 
   // Races ZwiftRacing knows about that ZwiftPower doesn't list.
   for (const [eventId, zr] of zrById) {
-    if (!used.has(eventId)) merged.push(build(eventId, undefined, zr, `zr-${eventId}`));
+    if (!used.has(eventId) && isRaceEntry(undefined, zr)) {
+      merged.push(build(eventId, undefined, zr, `zr-${eventId}`));
+    }
   }
 
   return merged.sort((a, b) => (b.date ?? 0) - (a.date ?? 0));
