@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import ZwiftVictimsSection from '../components/ZwiftVictimsSection';
+import { useFavorites } from '../lib/FavoritesContext';
+import { ordinal } from '../lib/headToHead';
 import { useUnits } from '../lib/UnitsContext';
 import {
   formatDistance,
@@ -14,11 +17,8 @@ import {
 } from '../lib/units';
 import type { UnitSystem } from '../lib/units';
 import { getXpProgress } from '../lib/profileXp';
-import { fetchRiderActivities } from '../api/zwiftCore';
-import type { ZwiftActivity, ZwiftProfile } from '../api/zwiftCore';
-import { fetchZwiftPowerRaces } from '../api/zwiftPower';
+import type { ZwiftProfile } from '../api/zwiftCore';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
-import { fetchZwiftRacingRider } from '../api/zwiftRacing';
 import type { ZwiftRacingRiderResponse } from '../api/zwiftRacing';
 
 import {
@@ -29,15 +29,11 @@ import {
   buildZwiftToolsRaceReplayUrl,
   buildZwifterBikesRouteUrl,
   isPodium,
-  mergeRaces,
   summarize,
 } from '../lib/raceHistory';
 import type { MergedRace } from '../lib/raceHistory';
-
-type AsyncState<T> =
-  | { status: 'loading' }
-  | { status: 'error'; message: string }
-  | { status: 'loaded'; data: T };
+import { useRiderRaceHistory } from '../lib/useRiderRaceHistory';
+import type { AsyncState } from '../lib/useRiderRaceHistory';
 
 function Stat({ label, value }: { label: string; value: string | number | undefined }) {
   return (
@@ -147,12 +143,6 @@ function formatGapSeconds(gap: number | undefined): string {
   if (gap === 0) return '0.0s';
   if (gap < 60) return `+${gap.toFixed(1)}s`;
   return `+${formatDurationMs(gap * 1000)}`;
-}
-
-function ordinal(n: number): string {
-  const s = ['th', 'st', 'nd', 'rd'];
-  const v = n % 100;
-  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
 }
 
 function PlacingBadge({
@@ -587,23 +577,14 @@ function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }
 function MergedTab({
   zpState,
   zrState,
-  activitiesState,
+  merged,
   units,
 }: {
   zpState: AsyncState<ZwiftPowerRaceEntry[]>;
   zrState: AsyncState<ZwiftRacingRiderResponse>;
-  activitiesState: AsyncState<ZwiftActivity[]>;
+  merged: MergedRace[];
   units: UnitSystem;
 }) {
-  const activities = useMemo(
-    () => (activitiesState.status === 'loaded' ? activitiesState.data : []),
-    [activitiesState],
-  );
-  const merged = useMemo(() => {
-    if (zpState.status !== 'loaded') return [];
-    const zr = zrState.status === 'loaded' ? (zrState.data.overview?.history ?? []) : [];
-    return mergeRaces(zpState.data, zr, activities);
-  }, [zpState, zrState, activities]);
   const summary = useMemo(() => summarize(merged), [merged]);
 
   if (zpState.status === 'loading' || zrState.status === 'loading') {
@@ -648,69 +629,16 @@ function MergedTab({
 }
 
 function RaceHistorySection({
-  profileId,
+  zpState,
+  zrState,
+  merged,
   units,
 }: {
-  profileId: number;
+  zpState: AsyncState<ZwiftPowerRaceEntry[]>;
+  zrState: AsyncState<ZwiftRacingRiderResponse>;
+  merged: MergedRace[];
   units: UnitSystem;
 }) {
-  const { getAccessToken } = useAuth();
-  const [zpState, setZpState] = useState<AsyncState<ZwiftPowerRaceEntry[]>>({ status: 'loading' });
-  const [zrState, setZrState] = useState<AsyncState<ZwiftRacingRiderResponse>>({
-    status: 'loading',
-  });
-  const [activitiesState, setActivitiesState] = useState<AsyncState<ZwiftActivity[]>>({
-    status: 'loading',
-  });
-
-  useEffect(() => {
-    let cancelled = false;
-
-    fetchZwiftPowerRaces(profileId)
-      .then((data) => {
-        if (!cancelled) setZpState({ status: 'loaded', data });
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setZpState({
-            status: 'error',
-            message: err instanceof Error ? err.message : 'Failed to load ZwiftPower races.',
-          });
-        }
-      });
-
-    fetchZwiftRacingRider(profileId)
-      .then((data) => {
-        if (!cancelled) setZrState({ status: 'loaded', data });
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setZrState({
-            status: 'error',
-            message: err instanceof Error ? err.message : 'Failed to load ZwiftRacing.app data.',
-          });
-        }
-      });
-
-    getAccessToken()
-      .then((token) => fetchRiderActivities(token, profileId, { start: 0, limit: 50 }))
-      .then((data) => {
-        if (!cancelled) setActivitiesState({ status: 'loaded', data });
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setActivitiesState({
-            status: 'error',
-            message: err instanceof Error ? err.message : 'Failed to load Zwift activities.',
-          });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [profileId, getAccessToken]);
-
   return (
     <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-4">
       <div>
@@ -720,12 +648,7 @@ function RaceHistorySection({
         </p>
       </div>
 
-      <MergedTab
-        zpState={zpState}
-        zrState={zrState}
-        activitiesState={activitiesState}
-        units={units}
-      />
+      <MergedTab zpState={zpState} zrState={zrState} merged={merged} units={units} />
     </section>
   );
 }
@@ -742,6 +665,10 @@ export default function ProfilePage({
   const [lookupId, setLookupId] = useState('');
   // Default to the rider's Zwift preference until they pick a unit system here.
   const { units, setUnits } = useUnits(profile.useMetric === false ? 'imperial' : 'metric');
+  const { favorites, isFavorite, toggleFavorite, upsertFavorite, removeFavorite } = useFavorites();
+  const { zpState, zrState, mergedRaces } = useRiderRaceHistory(profile.id, {
+    includeActivities: true,
+  });
   const name = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Zwift rider';
   const metrics = profile.competitionMetrics;
   const racingScore =
@@ -749,6 +676,37 @@ export default function ProfilePage({
       ? Math.round(metrics.racingScore)
       : undefined;
   const riderCategory = formatRiderCategory(profile);
+  const favoriteCategory =
+    (profile.male === false
+      ? (metrics?.categoryWomen ?? metrics?.category)
+      : (metrics?.category ?? metrics?.categoryWomen)) ?? undefined;
+  const favorited = isFavorite(profile.id);
+  const existingFavorite = favorites.find((f) => f.id === profile.id);
+
+  useEffect(() => {
+    if (
+      !isOwnProfile &&
+      existingFavorite &&
+      (existingFavorite.name !== name ||
+        existingFavorite.imageSrc !== profile.imageSrc ||
+        existingFavorite.category !== favoriteCategory)
+    ) {
+      upsertFavorite({
+        id: profile.id,
+        name,
+        imageSrc: profile.imageSrc,
+        category: favoriteCategory,
+      });
+    }
+  }, [
+    isOwnProfile,
+    existingFavorite,
+    name,
+    profile.id,
+    profile.imageSrc,
+    favoriteCategory,
+    upsertFavorite,
+  ]);
 
   function handleLookupSubmit(e: FormEvent) {
     e.preventDefault();
@@ -813,29 +771,54 @@ export default function ProfilePage({
       </header>
 
       <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-6">
-        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left">
-          {profile.imageSrc ? (
-            <img
-              src={profile.imageSrc}
-              alt={name}
-              className="w-24 h-24 rounded-full object-cover border-2 border-[#fc6719]"
-            />
-          ) : (
-            <div className="w-24 h-24 rounded-full bg-slate-800 flex items-center justify-center text-3xl font-bold">
-              {name[0]}
+        <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-4 text-center sm:text-left">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
+            {profile.imageSrc ? (
+              <img
+                src={profile.imageSrc}
+                alt={name}
+                className="w-24 h-24 rounded-full object-cover border-2 border-[#fc6719]"
+              />
+            ) : (
+              <div className="w-24 h-24 rounded-full bg-slate-800 flex items-center justify-center text-3xl font-bold">
+                {name[0]}
+              </div>
+            )}
+            <div>
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                <h1 className="text-2xl sm:text-3xl font-extrabold">{name}</h1>
+                {!isOwnProfile && (
+                  <span className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-xs text-slate-300">
+                    Rider profile
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-slate-400">Zwift ID {profile.id}</p>
             </div>
-          )}
-          <div>
-            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-              <h1 className="text-2xl sm:text-3xl font-extrabold">{name}</h1>
-              {!isOwnProfile && (
-                <span className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-xs text-slate-300">
-                  Rider profile
-                </span>
-              )}
-            </div>
-            <p className="text-sm text-slate-400">Zwift ID {profile.id}</p>
           </div>
+
+          {!isOwnProfile && (
+            <button
+              type="button"
+              onClick={() =>
+                toggleFavorite({
+                  id: profile.id,
+                  name,
+                  imageSrc: profile.imageSrc,
+                  category: favoriteCategory,
+                })
+              }
+              aria-pressed={favorited}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-sm font-semibold transition-colors shrink-0 ${
+                favorited
+                  ? 'bg-amber-500/15 border-amber-400/50 text-amber-300 hover:bg-amber-500/25'
+                  : 'bg-slate-950/70 border-slate-700 text-slate-200 hover:border-amber-400/50 hover:text-amber-300'
+              }`}
+            >
+              <span aria-hidden="true">{favorited ? '★' : '☆'}</span>
+              <span>{favorited ? 'Favorited' : 'Favorite'}</span>
+            </button>
+          )}
         </div>
 
         <XpProgressBar profile={profile} />
@@ -853,7 +836,23 @@ export default function ProfilePage({
         </dl>
       </section>
 
-      <RaceHistorySection profileId={profile.id} units={units} />
+      {isOwnProfile && (
+        <ZwiftVictimsSection
+          profileId={profile.id}
+          favorites={favorites}
+          onRemoveFavorite={removeFavorite}
+          profileRaces={mergedRaces}
+          profileZpState={zpState}
+          profileZrState={zrState}
+        />
+      )}
+
+      <RaceHistorySection
+        zpState={zpState}
+        zrState={zrState}
+        merged={mergedRaces}
+        units={units}
+      />
     </main>
   );
 }
