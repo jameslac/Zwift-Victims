@@ -157,6 +157,42 @@ export interface ZwiftActivityDetail {
   [key: string]: unknown;
 }
 
+export interface ZwiftEventSubgroup {
+  id: number;
+  name?: string;
+  description?: string;
+  subgroupLabel?: string;
+  label?: number;
+  routeId?: number;
+  laps?: number;
+  distanceInMeters?: number;
+  durationInSeconds?: number;
+  totalEntrantCount?: number;
+  totalSignedUpCount?: number;
+  eventSubgroupStart?: string;
+  rulesId?: number;
+  [key: string]: unknown;
+}
+
+export interface ZwiftPublicEvent {
+  id: number;
+  name?: string;
+  description?: string;
+  eventStart?: string;
+  eventType?: string;
+  sport?: string;
+  routeId?: number;
+  worldId?: number;
+  laps?: number;
+  distanceInMeters?: number;
+  durationInSeconds?: number;
+  imageUrl?: string;
+  rulesId?: number;
+  cullingType?: string;
+  eventSubgroups?: ZwiftEventSubgroup[];
+  [key: string]: unknown;
+}
+
 export class AuthError extends Error {}
 
 async function tokenRequest(params: Record<string, string>): Promise<TokenSet> {
@@ -191,7 +227,9 @@ async function fetchAuthorizedJson<T>(accessToken: string, url: string, label: s
   });
   if (res.status === 401) throw new AuthError('Session expired.');
   if (!res.ok) throw new Error(`Failed to load ${label} (${res.status}).`);
-  return res.json() as Promise<T>;
+  // Preserve 64-bit integer activityId fields that exceed JS Number.MAX_SAFE_INTEGER.
+  const text = (await res.text()).replace(/"activityId"\s*:\s*(\d{16,})/g, '"activityId":"$1"');
+  return JSON.parse(text) as T;
 }
 
 export const fetchMyProfile = (accessToken: string): Promise<ZwiftProfile> =>
@@ -227,6 +265,16 @@ export async function fetchRiderActivities(
   if (Array.isArray(data)) return data;
   return Array.isArray(data?.activities) ? data.activities : [];
 }
+
+export const fetchPublicEvent = (
+  accessToken: string,
+  eventId: string | number,
+): Promise<ZwiftPublicEvent> =>
+  fetchAuthorizedJson<ZwiftPublicEvent>(
+    accessToken,
+    `/api/zwift/api/public/events/${encodeURIComponent(String(eventId))}`,
+    'event details',
+  );
 
 export async function fetchRaceResults(
   accessToken: string,

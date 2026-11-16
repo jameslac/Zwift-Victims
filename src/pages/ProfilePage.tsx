@@ -12,13 +12,21 @@ import {
   formatWkg,
 } from '../lib/units';
 import type { UnitSystem } from '../lib/units';
-import type { ZwiftProfile } from '../api/zwiftCore';
+import { fetchRiderActivities } from '../api/zwiftCore';
+import type { ZwiftActivity, ZwiftProfile } from '../api/zwiftCore';
 import { fetchZwiftPowerRaces } from '../api/zwiftPower';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
 import { fetchZwiftRacingRider } from '../api/zwiftRacing';
 import type { ZwiftRacingRiderResponse } from '../api/zwiftRacing';
 
-import { isPodium, mergeRaces, summarize } from '../lib/raceHistory';
+import {
+  buildZwiftToolsBikeComparisonUrl,
+  buildZwiftToolsRaceReplayUrl,
+  isPodium,
+  mergeRaces,
+  resolveRaceActivityId,
+  summarize,
+} from '../lib/raceHistory';
 import type { MergedRace } from '../lib/raceHistory';
 
 type AsyncState<T> =
@@ -172,8 +180,182 @@ function PlacingBadge({
   return null;
 }
 
-function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }) {
+function BikeIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="5.5" cy="16.5" r="3.5" />
+      <circle cx="18.5" cy="16.5" r="3.5" />
+      <path d="M5.5 16.5h6l4-6.5h-6l-4 6.5Z" />
+      <path d="M11.5 16.5 8.8 8H7" />
+      <path d="M18.5 16.5 14.5 7.8H17" />
+    </svg>
+  );
+}
+
+function ReplayIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M10.5 8.5v7l5.5-3.5-5.5-3.5Z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+const TOOL_ICON_BTN_CLASS =
+  'inline-flex items-center justify-center rounded-lg border border-slate-700/80 bg-slate-900/80 p-1.5 text-slate-300 hover:border-[#fc6719]/60 hover:text-[#fc6719] hover:bg-slate-800 transition-colors disabled:opacity-50';
+
+function ZwiftToolsLinks({
+  race,
+  profileId,
+  activities,
+  getAccessToken,
+  onStatusChange,
+}: {
+  race: MergedRace;
+  profileId: number;
+  activities: ZwiftActivity[];
+  getAccessToken: () => Promise<string>;
+  onStatusChange: (msg: string | null) => void;
+}) {
+  const [resolvedActivityId, setResolvedActivityId] = useState<string | null>(null);
+  const [resolvingTool, setResolvingTool] = useState<'bike' | 'replay' | null>(null);
+
+  const activityId = race.activityId ?? resolvedActivityId ?? undefined;
+
+  async function handleOpenZwiftTool(tool: 'bike' | 'replay') {
+    onStatusChange(null);
+    setResolvingTool(tool);
+
+    // Open synchronously inside the click handler so popup blockers allow the new window.
+    const popup = window.open('about:blank', '_blank');
+    if (popup) {
+      popup.opener = null;
+      try {
+        popup.document.title = 'Loading ZwiftTools…';
+      } catch {
+        // Ignore restricted window errors.
+      }
+    }
+
+    try {
+      const token = await getAccessToken();
+      const foundId = await resolveRaceActivityId(token, profileId, race, activities);
+      if (!foundId) {
+        if (popup && !popup.closed) popup.close();
+        onStatusChange('Zwift activity ID unavailable for this race.');
+        return;
+      }
+
+      setResolvedActivityId(foundId);
+      const targetUrl =
+        tool === 'bike'
+          ? buildZwiftToolsBikeComparisonUrl(foundId)
+          : buildZwiftToolsRaceReplayUrl(foundId);
+
+      if (popup && !popup.closed) {
+        popup.location.replace(targetUrl);
+      } else if (!popup) {
+        onStatusChange('Activity ID found — click the icon again to open ZwiftTools.');
+      }
+    } catch (err: unknown) {
+      if (popup && !popup.closed) popup.close();
+      onStatusChange(
+        err instanceof Error ? err.message : 'Failed to look up Zwift activity ID.',
+      );
+    } finally {
+      setResolvingTool(null);
+    }
+  }
+
+  if (activityId) {
+    return (
+      <>
+        <a
+          href={buildZwiftToolsBikeComparisonUrl(activityId)}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="ZwiftTools Bike Comparison"
+          aria-label="Open Bike Comparison on ZwiftTools"
+          className={TOOL_ICON_BTN_CLASS}
+        >
+          <BikeIcon />
+        </a>
+        <a
+          href={buildZwiftToolsRaceReplayUrl(activityId)}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="ZwiftTools Race Replay"
+          aria-label="Open Race Replay on ZwiftTools"
+          className={TOOL_ICON_BTN_CLASS}
+        >
+          <ReplayIcon />
+        </a>
+      </>
+    );
+  }
+
+  if (!race.eventId) return null;
+
+  return (
+    <>
+      <button
+        type="button"
+        disabled={resolvingTool !== null}
+        onClick={() => handleOpenZwiftTool('bike')}
+        title="ZwiftTools Bike Comparison"
+        aria-label="Open Bike Comparison on ZwiftTools"
+        className={`${TOOL_ICON_BTN_CLASS} ${resolvingTool === 'bike' ? 'animate-pulse' : ''}`}
+      >
+        <BikeIcon />
+      </button>
+      <button
+        type="button"
+        disabled={resolvingTool !== null}
+        onClick={() => handleOpenZwiftTool('replay')}
+        title="ZwiftTools Race Replay"
+        aria-label="Open Race Replay on ZwiftTools"
+        className={`${TOOL_ICON_BTN_CLASS} ${resolvingTool === 'replay' ? 'animate-pulse' : ''}`}
+      >
+        <ReplayIcon />
+      </button>
+    </>
+  );
+}
+
+function MergedRaceCard({
+  race,
+  profileId,
+  units,
+  activities,
+  getAccessToken,
+}: {
+  race: MergedRace;
+  profileId: number;
+  units: UnitSystem;
+  activities: ZwiftActivity[];
+  getAccessToken: () => Promise<string>;
+}) {
   const { zp, zr } = race;
+  const [toolStatus, setToolStatus] = useState<string | null>(null);
   const timeSec = zpVal(zp?.time) ?? zr?.race?.time;
   const avgPower = zpVal(zp?.avg_power);
   const np = zpVal(zp?.np);
@@ -246,8 +428,21 @@ function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }
               No ZwiftRacing data
             </span>
           )}
+          <ZwiftToolsLinks
+            race={race}
+            profileId={profileId}
+            activities={activities}
+            getAccessToken={getAccessToken}
+            onStatusChange={setToolStatus}
+          />
         </div>
       </div>
+
+      {toolStatus && (
+        <p role="status" className="text-xs text-amber-400">
+          {toolStatus}
+        </p>
+      )}
 
       {race.truePlace != null ? (
         <div
@@ -329,17 +524,27 @@ function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }
 function MergedTab({
   zpState,
   zrState,
+  activitiesState,
+  profileId,
   units,
+  getAccessToken,
 }: {
   zpState: AsyncState<ZwiftPowerRaceEntry[]>;
   zrState: AsyncState<ZwiftRacingRiderResponse>;
+  activitiesState: AsyncState<ZwiftActivity[]>;
+  profileId: number;
   units: UnitSystem;
+  getAccessToken: () => Promise<string>;
 }) {
+  const activities = useMemo(
+    () => (activitiesState.status === 'loaded' ? activitiesState.data : []),
+    [activitiesState],
+  );
   const merged = useMemo(() => {
     if (zpState.status !== 'loaded') return [];
     const zr = zrState.status === 'loaded' ? (zrState.data.overview?.history ?? []) : [];
-    return mergeRaces(zpState.data, zr);
-  }, [zpState, zrState]);
+    return mergeRaces(zpState.data, zr, activities);
+  }, [zpState, zrState, activities]);
   const summary = useMemo(() => summarize(merged), [merged]);
 
   if (zpState.status === 'loading' || zrState.status === 'loading') {
@@ -377,7 +582,16 @@ function MergedTab({
       {merged.length === 0 ? (
         <p className="text-sm text-slate-400">No races found.</p>
       ) : (
-        merged.map((race) => <MergedRaceCard key={race.key} race={race} units={units} />)
+        merged.map((race) => (
+          <MergedRaceCard
+            key={race.key}
+            race={race}
+            profileId={profileId}
+            units={units}
+            activities={activities}
+            getAccessToken={getAccessToken}
+          />
+        ))
       )}
     </div>
   );
@@ -390,8 +604,12 @@ function RaceHistorySection({
   profileId: number;
   units: UnitSystem;
 }) {
+  const { getAccessToken } = useAuth();
   const [zpState, setZpState] = useState<AsyncState<ZwiftPowerRaceEntry[]>>({ status: 'loading' });
   const [zrState, setZrState] = useState<AsyncState<ZwiftRacingRiderResponse>>({
+    status: 'loading',
+  });
+  const [activitiesState, setActivitiesState] = useState<AsyncState<ZwiftActivity[]>>({
     status: 'loading',
   });
 
@@ -424,10 +642,24 @@ function RaceHistorySection({
         }
       });
 
+    getAccessToken()
+      .then((token) => fetchRiderActivities(token, profileId, { start: 0, limit: 50 }))
+      .then((data) => {
+        if (!cancelled) setActivitiesState({ status: 'loaded', data });
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setActivitiesState({
+            status: 'error',
+            message: err instanceof Error ? err.message : 'Failed to load Zwift activities.',
+          });
+        }
+      });
+
     return () => {
       cancelled = true;
     };
-  }, [profileId]);
+  }, [profileId, getAccessToken]);
 
   return (
     <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-4">
@@ -438,7 +670,14 @@ function RaceHistorySection({
         </p>
       </div>
 
-      <MergedTab zpState={zpState} zrState={zrState} units={units} />
+      <MergedTab
+        zpState={zpState}
+        zrState={zrState}
+        activitiesState={activitiesState}
+        profileId={profileId}
+        units={units}
+        getAccessToken={getAccessToken}
+      />
     </section>
   );
 }
