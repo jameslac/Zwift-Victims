@@ -20,7 +20,7 @@ When a web browser attempts to call `secure.zwift.com`, `us-or-rly101.zwift.com`
 
 By hosting both our React PWA and our stateless API Worker on **Cloudflare** under the **same domain**:
 1. **Zero Cross-Origin / CORS Hassle:** The frontend calls `/api/...` on its own origin (`same-origin`).
-2. **Automatic GitHub CI/CD + Preview URLs:** Pushing to `main` deploys production automatically, and every Pull Request gets its own isolated preview URL.
+2. **Automatic GitHub CI/CD + Preview URLs:** Pushing to `main` deploys production automatically, and every Pull Request gets its own isolated preview URL. When a PR is closed/merged or its branch is deleted, [`.github/workflows/cleanup-preview.yml`](../.github/workflows/cleanup-preview.yml) automatically removes the branch's Worker Preview via `wrangler preview delete` (requiring `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` GitHub Actions secrets).
 3. **Stateless Cookie & Token Relay:** `worker/index.ts` intercepts `/api/*` requests, forwards them server-to-server to Zwift/ZwiftPower/ZwiftRacing, translates cookies/headers as needed, and serves static React assets (`env.ASSETS`) for all other routes.
 
 ```mermaid
@@ -117,6 +117,7 @@ ZwiftPower's native head-to-head and win-loss statistics often fail to count rac
      - *Placing & Integrity:* Top-right Placing Badge (`truePlace / fieldSize` from ZwiftRacing when available; muted `zpPlace (ZP*)` fallback when unscored or >90 days old; `DNF`/`DQ`/penalty states), hidden-rider inflation callout (`ZP shows X — N better than reality`), and >90-day disclaimer.
      - *Identity & Subtitle:* `event_title` / `event.title`, date (`event_date` / `event.time`), `Cat {category}` (`subgroupId`), `subType`, `routeName`, `tname` (`Team`), `eventId`, `UPG`.
      - *Core Metrics Grid (12 cards):* `Time`, `Gap`, `Distance`, `Elevation`, `Avg Power`, `NP`, `Avg W/kg`, `Avg / Max HR`, `5s Sprint` (`w5` / `wkg5`), `vELO` (`before → after`), `Expected Pos`, `SOF` (`eventRating`).
+     - *External Footer Links:* Footer icon links opening in a new window/tab when their required identifiers exist on the race — ZwiftPower event (`zid`), ZwiftRacing.app event (`eventId` + `subgroup`), ZwifterBikes route (`routeName` slug), Zwift activity (`id_str`), ZwiftTools Bike Comparison (`?activity=<id_str>`), and ZwiftTools Race Replay (`?activity_id=<id_str>`).
    - **Tier 2 — Click-In Race Detail Page (Future Ticket):**
      - *Full Standings:* Complete subgroup/overall leaderboard via Zwift Core `/api/race-results/entries` + ZwiftRacing + ZwiftPower (resolving true placings for >90-day races and highlighting tracked friends / hidden riders).
      - *Full Power & Physiology Profile:* Power curve (`15s`, `30s`, `1m`, `2m`, `5m`, `20m` watts and W/kg), `wftp`/`wkg_ftp`, `hreff`/`hrr`, `power_type`/`src`, `is_guess`.
