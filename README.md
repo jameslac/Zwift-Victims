@@ -17,7 +17,6 @@ Zwift has no official public API docs; these community references cover `/api/pr
 - [`rally25rs/zwift-api-wrapper`](https://github.com/rally25rs/zwift-api-wrapper) – TypeScript wrapper & payload types
 - [`andipaetzold/zwift-data`](https://github.com/andipaetzold/zwift-data) – static routes/bikes/wheels data
 - [`puckdoug/zpdatafetch`](https://github.com/puckdoug/zpdatafetch) – ZwiftPower JSON structures
-- Tip: the profile page's "All profile data" section shows the live `/api/profiles/me` payload.
 
 ## Local Development & Deployment
 ```bash
