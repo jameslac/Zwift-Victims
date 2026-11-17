@@ -1,8 +1,3 @@
-export type AsyncState<T> =
-  | { status: 'loading' }
-  | { status: 'error'; message: string }
-  | { status: 'loaded'; data: T };
-
 /** Flatten nested JSON into dotted-key/value string pairs for display. */
 export function flatten(obj: unknown, prefix = ''): [string, string][] {
   if (obj === null || typeof obj !== 'object') return [[prefix, String(obj)]];

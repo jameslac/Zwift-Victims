@@ -5,7 +5,7 @@ import type { ZwiftRacingRiderResponse } from '../api/zwiftRacing';
 import { buildPowerBests } from '../lib/powerBests';
 import type { PowerEffort } from '../lib/powerBests';
 import { flatten } from '../lib/profileUtils';
-import type { AsyncState } from '../lib/profileUtils';
+import type { AsyncState } from '../lib/useRiderRaceHistory';
 import { AttributeList, MetricGrid } from './ProfileShared';
 
 function pickNumber(obj: Record<string, unknown> | undefined, keys: string[]): number | undefined {

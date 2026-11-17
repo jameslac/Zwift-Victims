@@ -30,8 +30,8 @@ All browser calls hit same-origin `/api/*` endpoints exposed by [worker/index.ts
 | :--- | :--- | :--- | :--- | :--- |
 | `GET /api/health` | — | Local Worker | — | Health check JSON (`{ status, service, timestamp }`). |
 | `POST /api/zwift/auth/token` | — | `secure.zwift.com/.../token` | `login`, `refresh` (`zwiftCore.ts`) | Relays `password` and `refresh_token` grants using `client_id: Zwift_Mobile_Link`. |
-| `GET /api/zwift/api/profiles/me` | — | `us-or-rly101.zwift.com` | `fetchMyProfile` (`zwiftCore.ts`) | Requires `Authorization: Bearer <token>`. |
-| `GET /api/zwift/api/profiles/{riderId}` | — | `us-or-rly101.zwift.com` | `fetchProfileById` (`zwiftCore.ts`) | Public profile lookup for any rider ID. |
+| `GET /api/zwift/api/profiles/me` | — | `us-or-rly101.zwift.com` | `fetchMyProfile` (`zwiftCore.ts`) | Requires `Authorization: Bearer <token>`. Falls back to `/api/profiles/{id}` and merges when `competitionMetrics` is null/missing. |
+| `GET /api/zwift/api/profiles/{riderId}` | — | `us-or-rly101.zwift.com` | `fetchProfileById` (`zwiftCore.ts`) | Public profile lookup for any rider ID (populates `competitionMetrics`). |
 | `GET /api/zwift/api/power-curve/power-profile` | — | `us-or-rly101.zwift.com` | `fetchPowerProfile` (`zwiftCore.ts`) | Authenticated user's Zwift Feed power curve (`cpBestEfforts`, `relevantCpEfforts`, `zftp`, `zmap`, `vo2max`). Also allowlists `/api/power-curve/(best-all-time\|all-time\|best)`. |
 | `GET /api/zwift/api/competition-metrics/{riderId}` | — | `us-or-rly101.zwift.com` | *Allowlisted in Worker (no UI helper yet)* | Rider competition / category enforcement metrics lookup. |
 | `GET /api/zwift/api/profiles/{riderId}/followees` | — | `us-or-rly101.zwift.com` | *Allowlisted in Worker (no UI helper yet)* | Riders followed by `{riderId}`. |
@@ -72,8 +72,8 @@ The official backend used by the **Zwift Game Client** and **Zwift Companion App
 ### Key Endpoints (`https://us-or-rly101.zwift.com`) & Attribute Notes
 | Endpoint | Method | Key Attributes Returned & Caveats |
 | :--- | :--- | :--- |
-| `/api/profiles/me` | `GET` | `id`, `publicId`, `firstName`, `lastName`, `male`, `imageSrc`, `imageSrcLarge`, `countryAlpha3`, `countryCode`, `useMetric`, `weight` (grams), `height` (mm), `ftp`, `competitionMetrics` (`racingScore`, `category`, `categoryWomen`), `socialFacts`, `privacy`, `privateAttributes`. |
-| `/api/profiles/{riderId}` | `GET` | Public profile for any rider ID (same public fields as `/me`, excluding `privateAttributes`). |
+| `/api/profiles/me` | `GET` | `id`, `publicId`, `firstName`, `lastName`, `male`, `imageSrc`, `imageSrcLarge`, `countryAlpha3`, `countryCode`, `useMetric`, `weight` (grams), `height` (mm), `ftp`, `achievementLevel` (`level * 100 + progressPct`), `totalExperiencePoints`, `targetExperiencePoints` (often `0` or equal to `totalExperiencePoints`; resolved via Zwift's cycling level XP curve when `<= totalExperiencePoints`), `totalGold` (Drops), `totalDistance` (meters), `totalDistanceClimbed` (meters), `socialFacts`, `privacy`, `privateAttributes`. **Caveat:** `competitionMetrics` (`racingScore`, `category`, `categoryWomen`) is returned as `null` here; `fetchMyProfile` fetches `/api/profiles/{me.id}` and merges `competitionMetrics` when missing. |
+| `/api/profiles/{riderId}` | `GET` | Public profile for any rider ID (same public fields as `/me`, excluding `privateAttributes` and account-private stats, while populating `competitionMetrics`: `racingScore`, `category`, `categoryWomen`). |
 | `/api/power-curve/power-profile` | `GET` | Authenticated user's personal power duration curve used by `zwift.com/feed` (`zftp`, `zmap`, `vo2max`, `validPowerProfile`, `cpBestEfforts`, `relevantCpEfforts` with watts, W/kg, and ISO 8601 UTC dates across 5s–40m). |
 | `/api/competition-metrics/{riderId}` | `GET` | Competition & category enforcement metrics for `{riderId}` (`zftp`, `zmap`, racing score/category). |
 | `/api/profiles/{riderId}/followees` | `GET` | List of riders that `{riderId}` follows (useful for auto-populating friends lists). |
@@ -167,3 +167,18 @@ When the Zwift Core API returns an activity or race result, it identifies routes
    - Game asset dictionaries extracted from `ZwiftApp` log/asset files that map `frameId` and `wheelId` integers to frame/wheel names, star ratings, and community-tested CdA (aero) and weight parameters (similar to ZwiftER / ZwiftInsider speed test data).
 3. **`.fit` File Parsing (Client-Side in Browser):**
    - Using `@garmin/fitsdk` (official Garmin FIT TypeScript SDK) in the browser to parse `.fit` files downloaded from Zwift's S3 bucket (`fitFileBucket` / `fitFileKey` from `/api/profiles/{riderId}/activities`) for second-by-second power, draft savings, heart rate, cadence, and gradient analysis.
+
+---
+
+## 5. External Tool & Community Integrations
+
+Community external deep-dive views linked directly from Race History card footers (`RaceExternalLinks` in [src/pages/ProfilePage.tsx](../src/pages/ProfilePage.tsx), URL builders in [src/lib/raceHistory.ts](../src/lib/raceHistory.ts)) whenever the required fields are available:
+
+| Site / Tool | URL Format | Required Identifier(s) |
+| :--- | :--- | :--- |
+| **ZwiftPower Event** | `https://zwiftpower.com/events.php?zid={zid}` | ZwiftPower `zid` (`race.zp.zid`) |
+| **ZwiftRacing.app Event** | `https://zwiftracing.app/events/{eventId}/{subgroup}` | ZwiftRacing `event.eventId` + category subgroup (`zr.event.subgroupId` / `zp.category`) |
+| **ZwifterBikes Route** | `https://zwifterbikes.web.app/route/{routeSlug}` | Slugified ZwiftRacing `event.routeName` (`slugifyRouteName`) |
+| **Zwift Activity** | `https://www.zwift.com/activity/{activityIdStr}` | 64-bit Zwift activity ID (`id_str` from `/api/profiles/{riderId}/activities`) |
+| **ZwiftTools Bike Comparison** | `https://zwifttools.azurewebsites.net/bike-comparison?activity={activityIdStr}` | 64-bit Zwift activity ID (`id_str` from `/api/profiles/{riderId}/activities`) |
+| **ZwiftTools Race Replay** | `https://zwifttools.azurewebsites.net/race-replay?activity_id={activityIdStr}` | 64-bit Zwift activity ID (`id_str` from `/api/profiles/{riderId}/activities`) |

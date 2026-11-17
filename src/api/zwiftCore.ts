@@ -5,22 +5,39 @@ export interface TokenSet {
   expiresAt: number;
 }
 
+export interface ZwiftCompetitionMetrics {
+  racingScore?: number | null;
+  category?: string | null;
+  categoryWomen?: string | null;
+  [key: string]: unknown;
+}
+
 export interface ZwiftProfile {
   id: number;
   firstName?: string;
   lastName?: string;
+  male?: boolean;
   imageSrc?: string;
   countryCode?: number | string;
+  useMetric?: boolean;
   /** grams */
   weight?: number;
   /** millimetres */
   height?: number;
   ftp?: number;
-  competitionMetrics?: {
-    racingScore?: number;
-    category?: string;
-    categoryWomen?: string;
-  };
+  /** Cumulative distance in meters */
+  totalDistance?: number;
+  /** Cumulative elevation climbed in meters */
+  totalDistanceClimbed?: number;
+  /** Cumulative Drops (in-game currency) */
+  totalGold?: number;
+  /** Cumulative XP earned */
+  totalExperiencePoints?: number;
+  /** Cumulative XP target for next level (may be 0) */
+  targetExperiencePoints?: number;
+  /** Encoded as level * 100 + progressPct (e.g. 3542 = Level 35, 42%) */
+  achievementLevel?: number;
+  competitionMetrics?: ZwiftCompetitionMetrics | null;
   /** /api/profiles/me returns many more fields; keep them all accessible. */
   [key: string]: unknown;
 }
@@ -228,8 +245,52 @@ async function fetchAuthorizedJson<T>(accessToken: string, url: string, label: s
   return res.json() as Promise<T>;
 }
 
-export const fetchMyProfile = (accessToken: string): Promise<ZwiftProfile> =>
-  fetchAuthorizedJson<ZwiftProfile>(accessToken, '/api/zwift/api/profiles/me', 'profile');
+function mergeProfiles(primary: ZwiftProfile, secondary: ZwiftProfile): ZwiftProfile {
+  const merged: ZwiftProfile = { ...secondary };
+  for (const [key, value] of Object.entries(primary)) {
+    if (value !== null && value !== undefined) {
+      merged[key] = value;
+    }
+  }
+
+  if (primary.competitionMetrics || secondary.competitionMetrics) {
+    const mergedMetrics: ZwiftCompetitionMetrics = { ...secondary.competitionMetrics };
+    if (primary.competitionMetrics) {
+      for (const [key, value] of Object.entries(primary.competitionMetrics)) {
+        if (value !== null && value !== undefined) {
+          mergedMetrics[key] = value;
+        }
+      }
+    }
+    merged.competitionMetrics = mergedMetrics;
+  }
+
+  return merged;
+}
+
+export async function fetchMyProfile(accessToken: string): Promise<ZwiftProfile> {
+  const me = await fetchAuthorizedJson<ZwiftProfile>(
+    accessToken,
+    '/api/zwift/api/profiles/me',
+    'profile',
+  );
+  const metrics = me.competitionMetrics;
+  const missingZrs = metrics?.racingScore == null;
+  const missingCategory = metrics?.category == null && metrics?.categoryWomen == null;
+
+  // Zwift's /profiles/me omits/nulls competitionMetrics, whereas /profiles/{id} populates them.
+  if (typeof me.id === 'number' && (missingZrs || missingCategory)) {
+    try {
+      const publicProfile = await fetchProfileById(accessToken, me.id);
+      return mergeProfiles(me, publicProfile);
+    } catch (err) {
+      if (err instanceof AuthError) throw err;
+      return me;
+    }
+  }
+
+  return me;
+}
 
 export const fetchProfileById = (accessToken: string, riderId: number): Promise<ZwiftProfile> =>
   fetchAuthorizedJson<ZwiftProfile>(accessToken, `/api/zwift/api/profiles/${riderId}`, 'profile');

@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { CSSProperties } from 'react';
 import type { ZwiftRacingRiderResponse } from '../api/zwiftRacing';
 import { flatten } from '../lib/profileUtils';
-import type { AsyncState } from '../lib/profileUtils';
+import type { AsyncState } from '../lib/useRiderRaceHistory';
 import { AttributeList, MetricGrid } from './ProfileShared';
 
 function fmtNum(v: unknown, decimals = 1, suffix = ''): string | undefined {
