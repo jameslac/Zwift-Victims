@@ -1,11 +1,10 @@
 import type { ZwiftPowerProfile } from '../api/zwiftCore';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
-import type { ZwiftRacingRider } from '../api/zwiftRacing';
 import { isRaceEntry } from './raceHistory';
 
 /**
  * Standard power-curve durations from 5 seconds up to 1 hour (3600 seconds),
- * covering Zwift Feed's 5s–40m intervals plus 2m (ZP/ZR) and 60m (1 hr).
+ * covering Zwift Feed's 5s–40m intervals plus 2m (ZwiftPower) and 60m (1 hr).
  */
 export const STANDARD_POWER_DURATIONS = [
   5, 15, 30, 60, 120, 180, 300, 600, 720, 900, 1200, 1800, 2400, 3600,
@@ -25,13 +24,16 @@ export interface PowerEffort {
 export interface PowerBestRow {
   seconds: number;
   label: string;
+  shortLabel: string;
   zwiftAllTime?: PowerEffort;
-  zwiftRecent?: PowerEffort;
+  zwift90Day?: PowerEffort;
   zpRaceBest?: PowerEffort;
-  zr90d?: PowerEffort;
-  zrCpModel?: PowerEffort;
-  /** Best observed watts across real efforts (or CP model fallback) for bar visualization. */
-  peakWatts?: number;
+}
+
+export interface PowerProfileMetrics {
+  zftp?: number;
+  zmap?: number;
+  vo2max?: number;
 }
 
 export function formatDurationSecondsLabel(seconds: number): string {
@@ -43,11 +45,39 @@ export function formatDurationSecondsLabel(seconds: number): string {
   return `${mins}m ${rem}s`;
 }
 
+export function formatDurationShortLabel(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds % 60 === 0) return `${seconds / 60}m`;
+  const mins = Math.floor(seconds / 60);
+  const rem = seconds % 60;
+  return `${mins}m${rem}s`;
+}
+
 function parsePositiveNumber(v: unknown): number | undefined {
   const raw = Array.isArray(v) ? v[0] : v;
   if (raw === undefined || raw === null || raw === '') return undefined;
   const num = typeof raw === 'number' ? raw : Number(raw);
   return Number.isFinite(num) && num > 0 ? num : undefined;
+}
+
+function pickNumber(obj: Record<string, unknown> | undefined | null, keys: string[]): number | undefined {
+  if (!obj) return undefined;
+  for (const key of keys) {
+    const candidate = parsePositiveNumber(obj[key]);
+    if (candidate !== undefined) return candidate;
+  }
+  return undefined;
+}
+
+export function extractPowerProfileMetrics(
+  powerProfile?: ZwiftPowerProfile | null,
+): PowerProfileMetrics {
+  if (!powerProfile) return {};
+  return {
+    zftp: pickNumber(powerProfile, ['zftp', 'zFtp', 'zFTP']),
+    zmap: pickNumber(powerProfile, ['zmap', 'zMap', 'zMAP']),
+    vo2max: pickNumber(powerProfile, ['vo2max', 'vo2Max', 'zvo2', 'VO2max']),
+  };
 }
 
 function parseDurationKey(rawKey: string): number | null {
@@ -174,7 +204,11 @@ function extractZwiftEffortMap(container: unknown, weightKg?: number): Map<numbe
   return map;
 }
 
-function getZpRaceBest(races: ZwiftPowerRaceEntry[], sec: number): PowerEffort | undefined {
+function getZpRaceBest(
+  races: ZwiftPowerRaceEntry[],
+  sec: number,
+  weightKg?: number,
+): PowerEffort | undefined {
   let best: PowerEffort | undefined;
   let bestScore = -1;
 
@@ -189,7 +223,9 @@ function getZpRaceBest(races: ZwiftPowerRaceEntry[], sec: number): PowerEffort |
   for (const zp of races) {
     if (ZP_SPLIT_DURATIONS.has(sec)) {
       const watts = parsePositiveNumber(zp[`w${sec}`]);
-      const wkg = parsePositiveNumber(zp[`wkg${sec}`]);
+      const wkg =
+        parsePositiveNumber(zp[`wkg${sec}`]) ??
+        (watts !== undefined && weightKg ? watts / weightKg : undefined);
       if (watts !== undefined || wkg !== undefined) {
         consider({
           watts,
@@ -205,7 +241,9 @@ function getZpRaceBest(races: ZwiftPowerRaceEntry[], sec: number): PowerEffort |
       const raceTimeSec = parsePositiveNumber(zp.time);
       if (raceTimeSec !== undefined && raceTimeSec >= sec) {
         const avgWatts = parsePositiveNumber(zp.avg_power);
-        const avgWkg = parsePositiveNumber(zp.avg_wkg);
+        const avgWkg =
+          parsePositiveNumber(zp.avg_wkg) ??
+          (avgWatts !== undefined && weightKg ? avgWatts / weightKg : undefined);
         if (avgWatts !== undefined || avgWkg !== undefined) {
           consider({
             watts: avgWatts,
@@ -225,12 +263,10 @@ function getZpRaceBest(races: ZwiftPowerRaceEntry[], sec: number): PowerEffort |
 export function buildPowerBests({
   powerProfile,
   zpRaces,
-  zrRider,
   weightGrams,
 }: {
   powerProfile?: ZwiftPowerProfile | null;
   zpRaces: ZwiftPowerRaceEntry[];
-  zrRider?: ZwiftRacingRider | null;
   weightGrams?: number;
 }): PowerBestRow[] {
   const coreWeightKg =
@@ -238,76 +274,25 @@ export function buildPowerBests({
       ? weightGrams / 1000
       : undefined;
 
-  const zrWeightKg =
-    typeof zrRider?.weight === 'number' && Number.isFinite(zrRider.weight) && zrRider.weight > 0
-      ? zrRider.weight > 300
-        ? zrRider.weight / 1000
-        : zrRider.weight
-      : coreWeightKg;
-
   const zwiftAllTimeContainer =
     powerProfile?.cpBestEfforts ??
     (powerProfile?.pointsWatts || powerProfile?.pointsWkg ? powerProfile : undefined);
   const zwiftAllTimeMap = extractZwiftEffortMap(zwiftAllTimeContainer, coreWeightKg);
-  const zwiftRecentMap = extractZwiftEffortMap(powerProfile?.relevantCpEfforts, coreWeightKg);
+  const zwift90DayMap = extractZwiftEffortMap(powerProfile?.relevantCpEfforts, coreWeightKg);
 
   const raceEntries = zpRaces.filter((zp) => isRaceEntry(zp));
 
   const durations = new Set<number>(STANDARD_POWER_DURATIONS);
   for (const sec of zwiftAllTimeMap.keys()) durations.add(sec);
-  for (const sec of zwiftRecentMap.keys()) durations.add(sec);
+  for (const sec of zwift90DayMap.keys()) durations.add(sec);
   const sortedDurations = [...durations].sort((a, b) => a - b);
 
-  const cp = parsePositiveNumber(zrRider?.power?.CP);
-  const awcRaw =
-    typeof zrRider?.power?.AWC === 'number' &&
-    Number.isFinite(zrRider.power.AWC) &&
-    zrRider.power.AWC >= 0
-      ? zrRider.power.AWC
-      : undefined;
-  const awcJoules = awcRaw !== undefined ? (awcRaw < 200 ? awcRaw * 1000 : awcRaw) : undefined;
-
-  return sortedDurations.map((seconds) => {
-    const zwiftAllTime = zwiftAllTimeMap.get(seconds);
-    const zwiftRecent = zwiftRecentMap.get(seconds);
-    const zpRaceBest = getZpRaceBest(raceEntries, seconds);
-
-    let zr90d: PowerEffort | undefined;
-    if (ZP_SPLIT_DURATIONS.has(seconds) && zrRider?.power) {
-      const watts = parsePositiveNumber(zrRider.power[`w${seconds}`]);
-      const wkgDirect = parsePositiveNumber(zrRider.power[`wkg${seconds}`]);
-      const wkg = wkgDirect ?? (watts !== undefined && zrWeightKg ? watts / zrWeightKg : undefined);
-      if (watts !== undefined || wkg !== undefined) {
-        zr90d = { watts, wkg };
-      }
-    }
-
-    let zrCpModel: PowerEffort | undefined;
-    if (seconds >= 180 && !zr90d && cp !== undefined && awcJoules !== undefined) {
-      const watts = Math.round(cp + awcJoules / seconds);
-      zrCpModel = {
-        watts,
-        wkg: zrWeightKg ? watts / zrWeightKg : undefined,
-      };
-    }
-
-    const peakWatts = Math.max(
-      zwiftAllTime?.watts ?? 0,
-      zwiftRecent?.watts ?? 0,
-      zpRaceBest?.watts ?? 0,
-      zr90d?.watts ?? 0,
-      zrCpModel?.watts ?? 0,
-    );
-
-    return {
-      seconds,
-      label: formatDurationSecondsLabel(seconds),
-      zwiftAllTime,
-      zwiftRecent,
-      zpRaceBest,
-      zr90d,
-      zrCpModel,
-      peakWatts: peakWatts > 0 ? peakWatts : undefined,
-    };
-  });
+  return sortedDurations.map((seconds) => ({
+    seconds,
+    label: formatDurationSecondsLabel(seconds),
+    shortLabel: formatDurationShortLabel(seconds),
+    zwiftAllTime: zwiftAllTimeMap.get(seconds),
+    zwift90Day: zwift90DayMap.get(seconds),
+    zpRaceBest: getZpRaceBest(raceEntries, seconds, coreWeightKg),
+  }));
 }

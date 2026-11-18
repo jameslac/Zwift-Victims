@@ -1,16 +1,3 @@
-export function AttributeList({ rows }: { rows: [string, string][] }) {
-  return (
-    <dl className="divide-y divide-slate-800 text-sm mt-2">
-      {rows.map(([key, value]) => (
-        <div key={key} className="flex flex-col sm:flex-row sm:justify-between gap-1 py-2">
-          <dt className="font-mono text-slate-400 break-all">{key}</dt>
-          <dd className="font-mono sm:text-right break-all">{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
 export function MetricGrid({
   items,
   columnsClass = 'grid-cols-2 sm:grid-cols-3 md:grid-cols-6',

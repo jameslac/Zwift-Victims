@@ -12,7 +12,7 @@ This document serves as our **central reference guide** so that whenever we pick
 | :--- | :--- | :--- | :--- |
 | **User Login & Token Refresh** | **1. Zwift Core OAuth** | — | Returns standard OIDC JWT (`access_token` + `refresh_token`) used across Zwift services. |
 | **User Profile, Avatar, Weight, Height, FTP, Following/Friends List** | **1. Zwift Core API** | **3. ZwiftRacing.app** | Real-time official profile and social graph (`followers` / `followees`); ZwiftRacing adds vELO, CP/AWC, Compound Score, and phenotype. |
-| **Power Curve & Personal Bests (5s – 60m), zFTP, zMAP, VO2max** | **1. Zwift Core API** | **2. ZwiftPower API** & **3. ZwiftRacing.app** | Zwift Core `/api/power-curve/power-profile` supplies personal 5s–40m bests (`zftp`, `zmap`, `vo2max`); ZwiftPower supplies all-time 5s–20m race splits + sustained full-race averages up to 60m; ZwiftRacing adds 90d peaks & CP/AWC curve. |
+| **Power Curve & Personal Bests (5s – 60m), zFTP, zMAP, VO2max** | **1. Zwift Core API** | **2. ZwiftPower API** | Zwift Core `/api/power-curve/power-profile` supplies personal all-time (`cpBestEfforts`) & rolling 90-day (`relevantCpEfforts`) bests across all rides plus `zftp`, `zmap`, and `vo2max`; ZwiftPower supplies all-time race-only splits (`5s`–`20m`) + sustained full-race averages up to `60m`. |
 | **Consolidated Race History List (At-a-Glance)** | **2. ZwiftPower API** | **3. ZwiftRacing.app** | ZwiftPower provides full multi-year race history and power/HR metrics; ZwiftRacing enriches recent races (~90 days) with true placings (including private riders), course data, and vELO. |
 | **Official Unfiltered Event Results & >90-Day Fallback** | **1. Zwift Core API** | **2. ZwiftPower** | Zwift Core `/api/race-results/entries` has EVERY finisher regardless of event age or ZwiftPower opt-in + equipped bike/wheel IDs. |
 | **Filtered Race Results, DQs, ZP Categories, 15s/1m/5m/20m W/kg Splits** | **2. ZwiftPower API** | **1. Zwift Core API** | ZwiftPower applies category enforcement/DQ tags (`UPG`, `WKG`, `HR`) and pre-calculates critical power intervals per race. |
@@ -32,7 +32,7 @@ All browser calls hit same-origin `/api/*` endpoints exposed by [worker/index.ts
 | `POST /api/zwift/auth/token` | — | `secure.zwift.com/.../token` | `login`, `refresh` (`zwiftCore.ts`) | Relays `password` and `refresh_token` grants using `client_id: Zwift_Mobile_Link`. |
 | `GET /api/zwift/api/profiles/me` | — | `us-or-rly101.zwift.com` | `fetchMyProfile` (`zwiftCore.ts`) | Requires `Authorization: Bearer <token>`. Falls back to `/api/profiles/{id}` and merges when `competitionMetrics` is null/missing. |
 | `GET /api/zwift/api/profiles/{riderId}` | — | `us-or-rly101.zwift.com` | `fetchProfileById` (`zwiftCore.ts`) | Public profile lookup for any rider ID (populates `competitionMetrics`). |
-| `GET /api/zwift/api/power-curve/power-profile` | — | `us-or-rly101.zwift.com` | `fetchPowerProfile` (`zwiftCore.ts`) | Authenticated user's Zwift Feed power curve (`cpBestEfforts`, `relevantCpEfforts`, `zftp`, `zmap`, `vo2max`). Also allowlists `/api/power-curve/(best-all-time\|all-time\|best)`. |
+| `GET /api/zwift/api/power-curve/power-profile` | — | `us-or-rly101.zwift.com` | `fetchPowerProfile` (`zwiftCore.ts`) | Authenticated user's Zwift Feed power curve (`cpBestEfforts` all-time, `relevantCpEfforts` rolling 90-day across all Zwift activities, `zftp`, `zmap`, `vo2max`). Also allowlists `/api/power-curve/(best-all-time\|all-time\|best)`. |
 | `GET /api/zwift/api/competition-metrics/{riderId}` | — | `us-or-rly101.zwift.com` | *Allowlisted in Worker (no UI helper yet)* | Rider competition / category enforcement metrics lookup. |
 | `GET /api/zwift/api/profiles/{riderId}/followees` | — | `us-or-rly101.zwift.com` | *Allowlisted in Worker (no UI helper yet)* | Riders followed by `{riderId}`. |
 | `GET /api/zwift/api/profiles/{riderId}/followers` | — | `us-or-rly101.zwift.com` | *Allowlisted in Worker (no UI helper yet)* | Riders following `{riderId}`. |
@@ -74,7 +74,7 @@ The official backend used by the **Zwift Game Client** and **Zwift Companion App
 | :--- | :--- | :--- |
 | `/api/profiles/me` | `GET` | `id`, `publicId`, `firstName`, `lastName`, `male`, `imageSrc`, `imageSrcLarge`, `countryAlpha3`, `countryCode`, `useMetric`, `weight` (grams), `height` (mm), `ftp`, `achievementLevel` (`level * 100 + progressPct`), `totalExperiencePoints`, `targetExperiencePoints` (often `0` or equal to `totalExperiencePoints`; resolved via Zwift's cycling level XP curve when `<= totalExperiencePoints`), `totalGold` (Drops), `totalDistance` (meters), `totalDistanceClimbed` (meters), `socialFacts`, `privacy`, `privateAttributes`. **Caveat:** `competitionMetrics` (`racingScore`, `category`, `categoryWomen`) is returned as `null` here; `fetchMyProfile` fetches `/api/profiles/{me.id}` and merges `competitionMetrics` when missing. |
 | `/api/profiles/{riderId}` | `GET` | Public profile for any rider ID (same public fields as `/me`, excluding `privateAttributes` and account-private stats, while populating `competitionMetrics`: `racingScore`, `category`, `categoryWomen`). |
-| `/api/power-curve/power-profile` | `GET` | Authenticated user's personal power duration curve used by `zwift.com/feed` (`zftp`, `zmap`, `vo2max`, `validPowerProfile`, `cpBestEfforts`, `relevantCpEfforts` with watts, W/kg, and ISO 8601 UTC dates across 5s–40m). |
+| `/api/power-curve/power-profile` | `GET` | Authenticated user's personal power duration curve used by `zwift.com/feed` (`zftp`, `zmap`, `vo2max`, `validPowerProfile`, `cpBestEfforts` all-time, `relevantCpEfforts` rolling 90-day across all Zwift activities with watts, W/kg, and ISO 8601 UTC dates across 5s–40m). |
 | `/api/competition-metrics/{riderId}` | `GET` | Competition & category enforcement metrics for `{riderId}` (`zftp`, `zmap`, racing score/category). |
 | `/api/profiles/{riderId}/followees` | `GET` | List of riders that `{riderId}` follows (useful for auto-populating friends lists). |
 | `/api/profiles/{riderId}/followers` | `GET` | List of riders following `{riderId}`. |
@@ -134,7 +134,7 @@ ZwiftRacing.app computes community **vELO ratings** (`v2` and legacy), **Compoun
 - Reference docs for their hosted API: `https://www.zwiftracing.app/reference`.
 
 ### Observed Attribute Schema: `rider` (Rider Profile)
-*(Surfaced in `ZwiftRacingProfileSection` and `PowerBestsSection` on `ProfilePage`.)*
+*(Typed on `ZwiftRacingRider` in `src/api/zwiftRacing.ts`; available for the dedicated ZwiftRacing Profile charts & visualizations ticket.)*
 - **Identity & Status:** `riderId`, `name`, `imageSrc`, `country`, `male`, `age`, `height`, `weight`, `zpCategory`, `zpFTP`, `visibility`, `banned`, `optOut`, `club` (`clubId`, `name`, `backgroundColor`, `textColor`, `borderColor`).
 - **Ratings & Power Model:**
   - `velo`: `race` (current v2 vELO), `timeTrial`, `handicap`, `max30`, `max90`, `factors` (multiplier factors), `skill`

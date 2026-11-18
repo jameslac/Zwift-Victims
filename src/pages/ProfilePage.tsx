@@ -19,10 +19,10 @@ import type { UnitSystem } from '../lib/units';
 import { fetchPowerProfile } from '../api/zwiftCore';
 import type { ZwiftPowerProfile, ZwiftProfile } from '../api/zwiftCore';
 import { getXpProgress } from '../lib/profileXp';
+import { extractPowerProfileMetrics } from '../lib/powerBests';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
 import type { ZwiftRacingRiderResponse } from '../api/zwiftRacing';
 import PowerBestsSection from '../components/PowerBestsSection';
-import ZwiftRacingProfileSection from '../components/ZwiftRacingProfileSection';
 import { MetricGrid } from '../components/ProfileShared';
 import { formatUnixSeconds } from '../lib/profileUtils';
 
@@ -40,11 +40,20 @@ import type { MergedRace } from '../lib/raceHistory';
 import { useRiderRaceHistory } from '../lib/useRiderRaceHistory';
 import type { AsyncState } from '../lib/useRiderRaceHistory';
 
-function Stat({ label, value }: { label: string; value: string | number | undefined }) {
+function Stat({
+  label,
+  value,
+  subValue,
+}: {
+  label: string;
+  value: string | number | undefined;
+  subValue?: string;
+}) {
   return (
     <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-4">
       <dt className="text-xs uppercase tracking-wide text-slate-400">{label}</dt>
       <dd className="mt-1 text-xl font-bold">{value ?? '—'}</dd>
+      {subValue && <dd className="mt-0.5 text-xs text-slate-400">{subValue}</dd>}
     </div>
   );
 }
@@ -676,6 +685,9 @@ export default function ProfilePage({
   }, [profile.id, isOwnProfile, getAccessToken]);
   const name = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Zwift rider';
   const metrics = profile.competitionMetrics;
+  const { zftp, zmap } = extractPowerProfileMetrics(
+    powerProfileState?.status === 'loaded' ? powerProfileState.data : null,
+  );
   const racingScore =
     metrics?.racingScore != null && Number.isFinite(metrics.racingScore)
       ? Math.round(metrics.racingScore)
@@ -831,6 +843,40 @@ export default function ProfilePage({
         <dl className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <Stat label="FTP" value={profile.ftp ? `${profile.ftp} W` : undefined} />
           <Stat label="W/kg" value={formatWkg(profile.ftp, profile.weight)} />
+          {isOwnProfile && (
+            <>
+              <Stat
+                label="zFTP"
+                value={
+                  powerProfileState?.status === 'loading'
+                    ? '…'
+                    : zftp !== undefined
+                      ? `${Math.round(zftp)} W`
+                      : undefined
+                }
+                subValue={
+                  zftp !== undefined && profile.weight
+                    ? formatWkg(zftp, profile.weight)
+                    : undefined
+                }
+              />
+              <Stat
+                label="zMAP"
+                value={
+                  powerProfileState?.status === 'loading'
+                    ? '…'
+                    : zmap !== undefined
+                      ? `${Math.round(zmap)} W`
+                      : undefined
+                }
+                subValue={
+                  zmap !== undefined && profile.weight
+                    ? formatWkg(zmap, profile.weight)
+                    : undefined
+                }
+              />
+            </>
+          )}
           <Stat label="Weight" value={formatWeight(profile.weight, units)} />
           <Stat label="Height" value={formatHeight(profile.height, units)} />
           <Stat label="Racing Score" value={racingScore} />
@@ -857,10 +903,7 @@ export default function ProfilePage({
         weightGrams={profile.weight}
         powerProfileState={powerProfileState}
         zpState={zpState}
-        zrState={zrState}
       />
-
-      <ZwiftRacingProfileSection profileId={profile.id} zrState={zrState} />
 
       <RaceHistorySection
         zpState={zpState}
