@@ -1,572 +1,745 @@
 import { useMemo, useState } from 'react';
-import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type {
+  ZwiftProfile,
   ZwiftPublicEvent,
   ZwiftRaceResultEntry,
 } from '../api/zwiftCore';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
-import {
-  formatGapSeconds,
-  ordinal,
-  subgroupCategoryLabel,
-  zpNum,
-  zpVal,
-} from '../lib/raceHistory';
+import type { ZwiftRacingEventResponse } from '../api/zwiftRacing';
+import { useFavorites } from '../lib/FavoritesContext';
+import { ordinal } from '../lib/raceHistory';
 import type { AsyncState } from '../lib/raceHistory';
+import { buildPenOptions, mergePenStandings } from '../lib/raceStandings';
+import type { PenOption, PenSystem, SplitPair } from '../lib/raceStandings';
 import { formatDurationMs, formatWeight } from '../lib/units';
 import type { UnitSystem } from '../lib/units';
 
-type StandingsSource = 'core' | 'zp_view' | 'zp_zwift';
+type RowFilter = 'all' | 'zp' | 'hidden' | 'tracked';
+type SplitsUnit = 'w' | 'wkg';
 
-function coreEntryWkg(entry: ZwiftRaceResultEntry): string | undefined {
-  const watts = entry.sensorData?.avgWatts;
-  const grams = entry.profileData?.weightInGrams;
-  if (typeof watts !== 'number' || typeof grams !== 'number' || grams <= 0) return undefined;
-  return (watts / (grams / 1000)).toFixed(2);
+const COLUMN_DEFS = [
+  { id: 'zpPlace', label: 'ZP #' },
+  { id: 'riderCategory', label: 'Rider Cat' },
+  { id: 'zrs', label: 'ZRS' },
+  { id: 'velo', label: 'vELO' },
+  { id: 'phenotype', label: 'Phenotype' },
+  { id: 'team', label: 'Team' },
+  { id: 'time', label: 'Time' },
+  { id: 'gap', label: 'Gap' },
+  { id: 'avgW', label: 'Avg W' },
+  { id: 'np', label: 'NP' },
+  { id: 'avgWkg', label: 'Avg W/kg' },
+  { id: 'splits', label: '5s / 1m / 5m / 20m' },
+  { id: 'hr', label: 'HR' },
+  { id: 'weight', label: 'Weight' },
+  { id: 'powerSource', label: 'Power Src' },
+  { id: 'status', label: 'Status' },
+] as const;
+
+type ColumnId = (typeof COLUMN_DEFS)[number]['id'];
+type ColumnVisibility = Record<ColumnId, boolean>;
+
+const COLS_STORAGE_KEY = 'zv.raceDetail.standingsCols';
+const SPLITS_UNIT_STORAGE_KEY = 'zv.raceDetail.splitsUnit';
+
+const DEFAULT_COLUMNS: ColumnVisibility = {
+  zpPlace: true,
+  riderCategory: true,
+  zrs: true,
+  velo: true,
+  phenotype: true,
+  team: true,
+  time: true,
+  gap: true,
+  avgW: true,
+  np: true,
+  avgWkg: true,
+  splits: true,
+  hr: true,
+  weight: true,
+  powerSource: true,
+  status: true,
+};
+
+function loadColumns(): ColumnVisibility {
+  try {
+    const raw = localStorage.getItem(COLS_STORAGE_KEY);
+    if (!raw) return DEFAULT_COLUMNS;
+    const parsed = JSON.parse(raw) as Partial<Record<ColumnId, unknown>>;
+    const next = { ...DEFAULT_COLUMNS };
+    for (const def of COLUMN_DEFS) {
+      if (typeof parsed[def.id] === 'boolean') next[def.id] = parsed[def.id] as boolean;
+    }
+    return next;
+  } catch {
+    return DEFAULT_COLUMNS;
+  }
 }
 
-function CoreStandingsTable({
-  entries,
-  targetRiderId,
-  zpVisibleIds,
-  zpLoaded,
-  units,
-}: {
-  entries: ZwiftRaceResultEntry[];
-  targetRiderId: number;
-  zpVisibleIds: Set<number>;
-  zpLoaded: boolean;
-  units: UnitSystem;
-}) {
-  if (entries.length === 0) {
-    return (
-      <p className="text-sm text-slate-400">
-        No unfiltered subgroup finishers returned by Zwift Core for this subgroup.
-      </p>
-    );
+function loadSplitsUnit(): SplitsUnit {
+  try {
+    return localStorage.getItem(SPLITS_UNIT_STORAGE_KEY) === 'wkg' ? 'wkg' : 'w';
+  } catch {
+    return 'w';
   }
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-xs border-collapse">
-        <thead>
-          <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wide">
-            <th className="py-2 pr-3">#</th>
-            <th className="py-2 pr-3">Rider</th>
-            <th className="py-2 pr-3">Time</th>
-            <th className="py-2 pr-3">Avg W</th>
-            <th className="py-2 pr-3">W/kg</th>
-            <th className="py-2 pr-3">Weight</th>
-            <th className="py-2 pr-3">Avg / Max HR</th>
-            <th className="py-2 pr-3">15s / 1m / 5m / 20m</th>
-            <th className="py-2 pr-3">Power</th>
-            <th className="py-2">Status</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-800/70">
-          {entries.map((entry, idx) => {
-            const riderId = Number(entry.profileId);
-            const isTarget = riderId === targetRiderId;
-            const fullName =
-              [entry.profileData?.firstName, entry.profileData?.lastName]
-                .filter(Boolean)
-                .join(' ') || `Rider ${entry.profileId ?? '—'}`;
-            const wkg = coreEntryWkg(entry);
-            const avgHr = entry.sensorData?.heartRateData?.avgHeartRate;
-            const maxHr = entry.sensorData?.heartRateData?.maxHeartRate;
-            const cp = entry.criticalP;
-            const hasCp =
-              cp?.criticalP15Seconds != null ||
-              cp?.criticalP1Minute != null ||
-              cp?.criticalP5Minutes != null ||
-              cp?.criticalP20Minutes != null;
-            const cpStr = hasCp
-              ? [
-                  cp?.criticalP15Seconds != null ? Math.round(cp.criticalP15Seconds) : '—',
-                  cp?.criticalP1Minute != null ? Math.round(cp.criticalP1Minute) : '—',
-                  cp?.criticalP5Minutes != null ? Math.round(cp.criticalP5Minutes) : '—',
-                  cp?.criticalP20Minutes != null ? Math.round(cp.criticalP20Minutes) : '—',
-                ].join(' / ')
-              : '—';
-            const hiddenOnZp = zpLoaded && Number.isFinite(riderId) && !zpVisibleIds.has(riderId);
-
-            return (
-              <tr
-                key={`${entry.id ?? entry.profileId ?? idx}`}
-                className={isTarget ? 'bg-[#fc6719]/15' : 'hover:bg-slate-900/50'}
-              >
-                <td className="py-2 pr-3 font-semibold whitespace-nowrap">
-                  {entry.rank ?? idx + 1}
-                </td>
-                <td className="py-2 pr-3 whitespace-nowrap">
-                  <div className="flex items-center gap-1.5">
-                    {Number.isFinite(riderId) && riderId > 0 ? (
-                      <Link
-                        to={`/riders/${riderId}`}
-                        className={`font-medium hover:text-[#fc6719] hover:underline ${
-                          isTarget ? 'text-[#fc6719] font-bold' : ''
-                        }`}
-                      >
-                        {fullName}
-                      </Link>
-                    ) : (
-                      <span>{fullName}</span>
-                    )}
-                    {isTarget && (
-                      <span className="rounded bg-[#fc6719]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[#fc6719]">
-                        Rider
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="py-2 pr-3 font-mono whitespace-nowrap">
-                  {formatDurationMs(entry.activityData?.durationInMilliseconds)}
-                </td>
-                <td className="py-2 pr-3 whitespace-nowrap">
-                  {entry.sensorData?.avgWatts != null
-                    ? `${Math.round(entry.sensorData.avgWatts)} W`
-                    : '—'}
-                </td>
-                <td className="py-2 pr-3 whitespace-nowrap">{wkg ? `${wkg}` : '—'}</td>
-                <td className="py-2 pr-3 whitespace-nowrap">
-                  {formatWeight(entry.profileData?.weightInGrams, units)}
-                </td>
-                <td className="py-2 pr-3 whitespace-nowrap">
-                  {avgHr != null || maxHr != null
-                    ? `${avgHr ?? '—'} / ${maxHr ?? '—'}`
-                    : '—'}
-                </td>
-                <td className="py-2 pr-3 font-mono whitespace-nowrap">{cpStr}</td>
-                <td className="py-2 pr-3 whitespace-nowrap text-slate-400">
-                  {entry.sensorData?.powerType ?? '—'}
-                </td>
-                <td className="py-2 whitespace-nowrap">
-                  <div className="flex items-center gap-1">
-                    {hiddenOnZp && (
-                      <span
-                        className="rounded-full bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] text-amber-300"
-                        title="Not present in ZwiftPower filtered results (_view.json)"
-                      >
-                        Hidden on ZP
-                      </span>
-                    )}
-                    {entry.flaggedCheating && (
-                      <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-[10px] text-red-300">
-                        Flagged
-                      </span>
-                    )}
-                    {entry.flaggedSandbagging && (
-                      <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[10px] text-amber-300">
-                        Sandbag
-                      </span>
-                    )}
-                    {!hiddenOnZp && !entry.flaggedCheating && !entry.flaggedSandbagging && (
-                      <span className="text-slate-500">—</span>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
 }
 
-function ZwiftPowerStandingsTable({
-  entries,
-  targetRiderId,
-  categoryFilter,
-}: {
-  entries: ZwiftPowerRaceEntry[];
-  targetRiderId: number;
-  categoryFilter: string;
-}) {
-  const filtered = useMemo(
-    () =>
-      categoryFilter === 'ALL'
-        ? entries
-        : entries.filter(
-            (e) => (e.category ?? '').trim().toUpperCase() === categoryFilter,
-          ),
-    [entries, categoryFilter],
-  );
+function formatSplit(split: SplitPair, unit: SplitsUnit): string {
+  if (unit === 'w') return split.w != null ? `${Math.round(split.w)}` : '—';
+  return split.wkg != null ? split.wkg.toFixed(1) : '—';
+}
 
-  if (filtered.length === 0) {
-    return (
-      <p className="text-sm text-slate-400">
-        No ZwiftPower riders found{categoryFilter !== 'ALL' ? ` in Cat ${categoryFilter}` : ''}.
-      </p>
-    );
+function formatRowGap(gapSec: number | undefined): string {
+  if (gapSec == null || !Number.isFinite(gapSec)) return '—';
+  if (gapSec <= 0.05) return '0.0s';
+  if (gapSec < 60) return `+${gapSec.toFixed(1)}s`;
+  return `+${formatDurationMs(gapSec * 1000)}`;
+}
+
+function penSystemBadge(system: PenSystem): { label: string; title: string } {
+  switch (system) {
+    case 'zrs':
+      return {
+        label: 'Racing Score (ZRS)',
+        title: 'Pens assigned using Zwift Racing Score thresholds',
+      };
+    case 'category_enforcement':
+      return {
+        label: 'Category Enforcement',
+        title: 'Pens assigned using Zwift Category Enforcement boundaries',
+      };
+    default:
+      return {
+        label: 'Category',
+        title: 'Standard category pens',
+      };
   }
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-xs border-collapse">
-        <thead>
-          <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wide">
-            <th className="py-2 pr-3">Cat #</th>
-            <th className="py-2 pr-3">Pos #</th>
-            <th className="py-2 pr-3">Cat</th>
-            <th className="py-2 pr-3">Rider</th>
-            <th className="py-2 pr-3">Team</th>
-            <th className="py-2 pr-3">Time</th>
-            <th className="py-2 pr-3">Gap</th>
-            <th className="py-2 pr-3">Avg W</th>
-            <th className="py-2 pr-3">NP</th>
-            <th className="py-2 pr-3">W/kg</th>
-            <th className="py-2 pr-3">5s / 1m / 5m / 20m</th>
-            <th className="py-2 pr-3">HR</th>
-            <th className="py-2">Flags</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-800/70">
-          {filtered.map((entry, idx) => {
-            const riderId = Number(entry.zwid);
-            const isTarget = riderId === targetRiderId;
-            const timeSec = zpNum(entry.time);
-            const avgPower = zpVal(entry.avg_power);
-            const np = zpVal(entry.np);
-            const avgWkg = zpVal(entry.avg_wkg);
-            const avgHr = zpVal(entry.avg_hr);
-            const maxHr = zpVal(entry.max_hr);
-            const splits = [
-              zpVal(entry.w5) ?? '—',
-              zpVal(entry.w60) ?? '—',
-              zpVal(entry.w300) ?? '—',
-              zpVal(entry.w1200) ?? '—',
-            ].join(' / ');
-
-            return (
-              <tr
-                key={`${entry.res_id ?? entry.uid ?? entry.zwid ?? idx}`}
-                className={isTarget ? 'bg-[#fc6719]/15' : 'hover:bg-slate-900/50'}
-              >
-                <td className="py-2 pr-3 font-semibold whitespace-nowrap">
-                  {entry.position_in_cat != null ? ordinal(entry.position_in_cat) : '—'}
-                </td>
-                <td className="py-2 pr-3 text-slate-400 whitespace-nowrap">
-                  {entry.pos ?? '—'}
-                </td>
-                <td className="py-2 pr-3 whitespace-nowrap">{entry.category ?? '—'}</td>
-                <td className="py-2 pr-3 whitespace-nowrap">
-                  {Number.isFinite(riderId) && riderId > 0 ? (
-                    <Link
-                      to={`/riders/${riderId}`}
-                      className={`font-medium hover:text-[#fc6719] hover:underline ${
-                        isTarget ? 'text-[#fc6719] font-bold' : ''
-                      }`}
-                    >
-                      {entry.name || `Rider ${riderId}`}
-                    </Link>
-                  ) : (
-                    <span>{entry.name || '—'}</span>
-                  )}
-                </td>
-                <td className="py-2 pr-3 text-slate-400 whitespace-nowrap">
-                  {entry.tname || '—'}
-                </td>
-                <td className="py-2 pr-3 font-mono whitespace-nowrap">
-                  {timeSec != null ? formatDurationMs(timeSec * 1000) : '—'}
-                </td>
-                <td className="py-2 pr-3 font-mono whitespace-nowrap">
-                  {formatGapSeconds(entry.gap)}
-                </td>
-                <td className="py-2 pr-3 whitespace-nowrap">
-                  {avgPower !== undefined ? `${avgPower} W` : '—'}
-                </td>
-                <td className="py-2 pr-3 whitespace-nowrap">
-                  {np !== undefined ? `${np} W` : '—'}
-                </td>
-                <td className="py-2 pr-3 whitespace-nowrap">{avgWkg ?? '—'}</td>
-                <td className="py-2 pr-3 font-mono whitespace-nowrap">{splits}</td>
-                <td className="py-2 pr-3 whitespace-nowrap">
-                  {avgHr !== undefined || maxHr !== undefined
-                    ? `${avgHr ?? '—'} / ${maxHr ?? '—'}`
-                    : '—'}
-                </td>
-                <td className="py-2 whitespace-nowrap">
-                  <div className="flex items-center gap-1">
-                    {entry.penalty && (
-                      <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-[10px] font-semibold text-red-300">
-                        {entry.penalty}
-                      </span>
-                    )}
-                    {entry.upg === 1 && (
-                      <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
-                        UPG
-                      </span>
-                    )}
-                    {!entry.penalty && entry.upg !== 1 && (
-                      <span className="text-slate-500">—</span>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
 }
 
 export default function RaceDetailStandings({
   raceKey,
   targetRiderId,
+  loggedInProfile,
+  targetProfile,
   publicEvent,
+  zrEvent,
   selectedSubgroupId,
-  onSelectSubgroupId,
+  selectedCategory,
+  onSelectPen,
   coreResults,
   zpViewResults,
   zpZwiftResults,
-  defaultCategory,
   units,
 }: {
   raceKey: string;
   targetRiderId: number;
+  loggedInProfile?: ZwiftProfile | null;
+  targetProfile?: ZwiftProfile;
   publicEvent: AsyncState<ZwiftPublicEvent>;
+  zrEvent: AsyncState<ZwiftRacingEventResponse | null>;
   selectedSubgroupId: number | null;
-  onSelectSubgroupId: (id: number) => void;
+  selectedCategory?: string;
+  onSelectPen: (pen: PenOption) => void;
   coreResults: AsyncState<ZwiftRaceResultEntry[]> | null;
   zpViewResults: AsyncState<ZwiftPowerRaceEntry[]>;
   zpZwiftResults: AsyncState<ZwiftPowerRaceEntry[]>;
-  defaultCategory?: string;
   units: UnitSystem;
 }) {
-  const [source, setSource] = useState<StandingsSource>('core');
-  const [catChoice, setCatChoice] = useState<{ raceKey: string; cat: string } | null>(null);
-  const [manualSubgroup, setManualSubgroup] = useState('');
+  const { isFavorite } = useFavorites();
+  const [rowFilter, setRowFilter] = useState<RowFilter>('all');
+  const [splitsUnit, setSplitsUnit] = useState<SplitsUnit>(loadSplitsUnit);
+  const [columns, setColumns] = useState<ColumnVisibility>(loadColumns);
+  const [showColumnPicker, setShowColumnPicker] = useState(false);
 
-  const subgroups = useMemo(
-    () => (publicEvent.status === 'loaded' ? (publicEvent.data.eventSubgroups ?? []) : []),
-    [publicEvent],
+  const publicEventData = publicEvent.status === 'loaded' ? publicEvent.data : undefined;
+  const zrEventData = zrEvent.status === 'loaded' ? zrEvent.data : undefined;
+  const zpViewList = useMemo(
+    () => (zpViewResults.status === 'loaded' ? zpViewResults.data : []),
+    [zpViewResults],
+  );
+  const zpZwiftList = useMemo(
+    () => (zpZwiftResults.status === 'loaded' ? zpZwiftResults.data : []),
+    [zpZwiftResults],
+  );
+  const coreList = useMemo(
+    () => (coreResults?.status === 'loaded' ? coreResults.data : []),
+    [coreResults],
   );
 
-  const zpVisibleIds = useMemo(() => {
-    const ids = new Set<number>();
-    if (zpViewResults.status === 'loaded') {
-      for (const entry of zpViewResults.data) {
-        const id = Number(entry.zwid);
-        if (Number.isFinite(id) && id > 0) ids.add(id);
+  const { penSystem, pens } = useMemo(
+    () => buildPenOptions(publicEventData, zrEventData, zpViewList, zpZwiftList),
+    [publicEventData, zrEventData, zpViewList, zpZwiftList],
+  );
+
+  const activePen = useMemo(() => {
+    if (pens.length === 0) return null;
+    if (selectedSubgroupId != null) {
+      const bySg = pens.find((p) => p.subgroupId === selectedSubgroupId);
+      if (bySg) return bySg;
+    }
+    if (selectedCategory) {
+      const base = selectedCategory.trim().toUpperCase().replace(/\+$/, '');
+      const byCat = pens.find((p) => p.category?.toUpperCase() === base);
+      if (byCat) return byCat;
+    }
+    return pens[0];
+  }, [pens, selectedSubgroupId, selectedCategory]);
+
+  const combinedRows = useMemo(
+    () =>
+      mergePenStandings({
+        selectedPen: activePen,
+        totalPensCount: pens.length,
+        coreResults: coreList,
+        zrEvent: zrEventData,
+        zpViewResults: zpViewList,
+        zpZwiftResults: zpZwiftList,
+        zpViewLoaded: zpViewResults.status === 'loaded',
+        targetRiderId,
+        targetProfile,
+        loggedInProfile,
+      }),
+    [
+      activePen,
+      pens.length,
+      coreList,
+      zrEventData,
+      zpViewList,
+      zpZwiftList,
+      zpViewResults.status,
+      targetRiderId,
+      targetProfile,
+      loggedInProfile,
+    ],
+  );
+
+  const loggedInId = loggedInProfile?.id;
+  const favoritedInPen = useMemo(
+    () => combinedRows.filter((r) => r.riderId > 0 && isFavorite(r.riderId)),
+    [combinedRows, isFavorite],
+  );
+
+  const zpCount = useMemo(
+    () => combinedRows.filter((r) => r.sources.zpView).length,
+    [combinedRows],
+  );
+  const hiddenCount = useMemo(
+    () => combinedRows.filter((r) => r.hiddenOnZp).length,
+    [combinedRows],
+  );
+  const trackedCount = useMemo(
+    () =>
+      combinedRows.filter(
+        (r) => r.riderId === targetRiderId || r.riderId === loggedInId || isFavorite(r.riderId),
+      ).length,
+    [combinedRows, targetRiderId, loggedInId, isFavorite],
+  );
+
+  const visibleRows = useMemo(() => {
+    switch (rowFilter) {
+      case 'zp':
+        return combinedRows.filter((r) => r.sources.zpView);
+      case 'hidden':
+        return combinedRows.filter((r) => r.hiddenOnZp);
+      case 'tracked':
+        return combinedRows.filter(
+          (r) => r.riderId === targetRiderId || r.riderId === loggedInId || isFavorite(r.riderId),
+        );
+      default:
+        return combinedRows;
+    }
+  }, [combinedRows, rowFilter, targetRiderId, loggedInId, isFavorite]);
+
+  function toggleColumn(id: ColumnId) {
+    setColumns((prev) => {
+      const next = { ...prev, [id]: !prev[id] };
+      try {
+        localStorage.setItem(COLS_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // Ignore storage errors
       }
-    }
-    return ids;
-  }, [zpViewResults]);
-
-  const availableCategories = useMemo(() => {
-    const entries =
-      source === 'zp_view'
-        ? zpViewResults.status === 'loaded'
-          ? zpViewResults.data
-          : []
-        : zpZwiftResults.status === 'loaded'
-          ? zpZwiftResults.data
-          : [];
-    const cats = new Set<string>();
-    for (const entry of entries) {
-      const cat = (entry.category ?? '').trim().toUpperCase();
-      if (cat) cats.add(cat);
-    }
-    return Array.from(cats).sort();
-  }, [source, zpViewResults, zpZwiftResults]);
-
-  const normalizedDefault = defaultCategory?.trim().toUpperCase();
-  const activeCatFilter =
-    catChoice && catChoice.raceKey === raceKey
-      ? catChoice.cat
-      : normalizedDefault && availableCategories.includes(normalizedDefault)
-        ? normalizedDefault
-        : 'ALL';
-
-  function handleManualSubgroupSubmit(e: FormEvent) {
-    e.preventDefault();
-    const cleaned = manualSubgroup.trim();
-    if (!/^\d+$/.test(cleaned)) return;
-    onSelectSubgroupId(Number(cleaned));
-    setManualSubgroup('');
+      return next;
+    });
   }
 
-  const coreCount = coreResults?.status === 'loaded' ? ` (${coreResults.data.length})` : '';
-  const zpViewCount = zpViewResults.status === 'loaded' ? ` (${zpViewResults.data.length})` : '';
-  const zpZwiftCount =
-    zpZwiftResults.status === 'loaded' ? ` (${zpZwiftResults.data.length})` : '';
+  function resetColumns() {
+    setColumns(DEFAULT_COLUMNS);
+    try {
+      localStorage.setItem(COLS_STORAGE_KEY, JSON.stringify(DEFAULT_COLUMNS));
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  function handleSplitsUnit(next: SplitsUnit) {
+    setSplitsUnit(next);
+    try {
+      localStorage.setItem(SPLITS_UNIT_STORAGE_KEY, next);
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  const enabledColCount = COLUMN_DEFS.filter((d) => columns[d.id]).length;
+  const systemBadge = penSystemBadge(penSystem);
+  const anyLoading =
+    coreResults?.status === 'loading' ||
+    zpViewResults.status === 'loading' ||
+    zpZwiftResults.status === 'loading' ||
+    zrEvent.status === 'loading';
 
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <section
+      key={raceKey}
+      className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-4"
+    >
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold">Full Event Standings</h2>
-          <p className="text-xs text-slate-400">
-            Compare official unfiltered Zwift Core subgroup finishers against ZwiftPower filtered
-            (<code>_view.json</code>) and raw (<code>_zwift.json</code>) event standings.
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-bold">Combined Event Standings</h2>
+            <span
+              title={systemBadge.title}
+              className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-[11px] font-medium text-slate-300"
+            >
+              {systemBadge.label}
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mt-1">
+            Unified standings merging Zwift Core unfiltered finishers, ZwiftRacing.app vELO &amp;
+            phenotypes, and ZwiftPower filtered/raw metrics.
           </p>
         </div>
 
-        <div
-          role="tablist"
-          aria-label="Standings data source"
-          className="inline-flex flex-wrap rounded-lg border border-slate-700 p-0.5 bg-slate-950 self-start"
-        >
-          {(
-            [
-              { id: 'core', label: `Zwift Core Unfiltered${coreCount}` },
-              { id: 'zp_view', label: `ZwiftPower Filtered${zpViewCount}` },
-              { id: 'zp_zwift', label: `ZwiftPower Unfiltered${zpZwiftCount}` },
-            ] as const
-          ).map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={source === tab.id}
-              onClick={() => setSource(tab.id)}
-              className={`rounded-md px-3 py-1 text-xs font-medium transition ${
-                source === tab.id ? 'bg-[#fc6719] text-white' : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2 self-start">
+          <div
+            role="group"
+            aria-label="Power splits unit"
+            className="inline-flex rounded-lg border border-slate-700 p-0.5 bg-slate-950"
+          >
+            {(['w', 'wkg'] as const).map((u) => (
+              <button
+                key={u}
+                type="button"
+                onClick={() => handleSplitsUnit(u)}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
+                  splitsUnit === u ? 'bg-[#fc6719] text-white' : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                {u === 'w' ? 'W' : 'W/kg'}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            aria-expanded={showColumnPicker}
+            onClick={() => setShowColumnPicker((v) => !v)}
+            className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
+          >
+            Fields ({enabledColCount}/{COLUMN_DEFS.length})
+          </button>
         </div>
       </div>
 
-      {source === 'core' && (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            {subgroups.length > 0 ? (
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-xs text-slate-400 mr-1">Subgroup pen:</span>
-                {subgroups.map((sg) => {
-                  const label = subgroupCategoryLabel(sg);
-                  const active = sg.id === selectedSubgroupId;
-                  return (
-                    <button
-                      key={sg.id}
-                      type="button"
-                      onClick={() => onSelectSubgroupId(sg.id)}
-                      className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
-                        active
-                          ? 'bg-[#fc6719] border-[#fc6719] text-white'
-                          : 'bg-slate-950 border-slate-700 text-slate-300 hover:bg-slate-800'
-                      }`}
-                    >
-                      {label ? `Cat ${label}` : sg.name || `Pen ${sg.id}`}
-                      {sg.totalEntrantCount != null ? ` (${sg.totalEntrantCount})` : ''}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-xs text-slate-400">
-                {selectedSubgroupId
-                  ? `Showing subgroup ${selectedSubgroupId}`
-                  : 'No subgroup list returned from /api/public/events.'}
-              </p>
-            )}
-
-            <form onSubmit={handleManualSubgroupSubmit} className="flex items-center gap-1.5">
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                placeholder="Subgroup ID…"
-                aria-label="Query Zwift Core subgroup ID"
-                value={manualSubgroup}
-                onChange={(e) => setManualSubgroup(e.target.value)}
-                className="w-32 rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-1 text-xs focus:outline-none focus:border-[#fc6719]"
-              />
-              <button
-                type="submit"
-                disabled={!/^\d+$/.test(manualSubgroup.trim())}
-                className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs hover:bg-slate-800 disabled:opacity-40"
-              >
-                Load pen
-              </button>
-            </form>
+      {showColumnPicker && (
+        <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-slate-300">Visible standings columns</p>
+            <button
+              type="button"
+              onClick={resetColumns}
+              className="text-xs text-[#fc6719] hover:underline"
+            >
+              Reset all on
+            </button>
           </div>
-
-          {coreResults === null && (
-            <p className="text-sm text-slate-400">
-              No subgroup ID available automatically. Enter an <code>event_subgroup_id</code> above
-              to load Zwift Core finishers.
-            </p>
-          )}
-          {coreResults?.status === 'loading' && (
-            <p className="text-sm text-slate-400">Loading Zwift Core subgroup results…</p>
-          )}
-          {coreResults?.status === 'error' && (
-            <p role="alert" className="text-sm text-red-400">
-              {coreResults.message}
-            </p>
-          )}
-          {coreResults?.status === 'loaded' && (
-            <CoreStandingsTable
-              entries={coreResults.data}
-              targetRiderId={targetRiderId}
-              zpVisibleIds={zpVisibleIds}
-              zpLoaded={zpViewResults.status === 'loaded'}
-              units={units}
-            />
-          )}
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 text-xs">
+            {COLUMN_DEFS.map((col) => (
+              <label
+                key={col.id}
+                className="inline-flex items-center gap-1.5 cursor-pointer text-slate-300 select-none"
+              >
+                <input
+                  type="checkbox"
+                  checked={columns[col.id]}
+                  onChange={() => toggleColumn(col.id)}
+                  className="accent-[#fc6719] rounded"
+                />
+                <span>{col.label}</span>
+              </label>
+            ))}
+          </div>
         </div>
       )}
 
-      {source !== 'core' && (
-        <div className="space-y-4">
-          {availableCategories.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs text-slate-400 mr-1">Category:</span>
-              {['ALL', ...availableCategories].map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setCatChoice({ raceKey, cat })}
-                  className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
-                    activeCatFilter === cat
-                      ? 'bg-[#fc6719] border-[#fc6719] text-white'
-                      : 'bg-slate-950 border-slate-700 text-slate-300 hover:bg-slate-800'
-                  }`}
-                >
-                  {cat === 'ALL' ? 'All' : `Cat ${cat}`}
-                </button>
-              ))}
-            </div>
-          )}
+      {pens.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-slate-400 mr-1">
+            {penSystem === 'zrs' ? 'Pen:' : 'Category:'}
+          </span>
+          {pens.map((pen) => {
+            const isActive = activePen?.key === pen.key;
+            return (
+              <button
+                key={pen.key}
+                type="button"
+                onClick={() => onSelectPen(pen)}
+                className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
+                  isActive
+                    ? 'bg-[#fc6719] border-[#fc6719] text-white'
+                    : 'bg-slate-950 border-slate-700 text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                {pen.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
-          {source === 'zp_view' && zpViewResults.status === 'loading' && (
-            <p className="text-sm text-slate-400">Loading ZwiftPower filtered results…</p>
-          )}
-          {source === 'zp_view' && zpViewResults.status === 'error' && (
-            <p role="alert" className="text-sm text-red-400">
-              {zpViewResults.message}
-            </p>
-          )}
-          {source === 'zp_view' && zpViewResults.status === 'loaded' && (
-            <ZwiftPowerStandingsTable
-              entries={zpViewResults.data}
-              targetRiderId={targetRiderId}
-              categoryFilter={activeCatFilter}
-            />
-          )}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {(
+            [
+              { id: 'all', label: `All (${combinedRows.length})`, show: true },
+              { id: 'zp', label: `ZwiftPower (${zpCount})`, show: zpViewResults.status === 'loaded' },
+              { id: 'hidden', label: `Hidden on ZP (${hiddenCount})`, show: hiddenCount > 0 },
+              { id: 'tracked', label: `Rider & Favorites (${trackedCount})`, show: trackedCount > 0 },
+            ] as const
+          )
+            .filter((f) => f.show)
+            .map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setRowFilter(f.id)}
+                className={`rounded-full border px-2.5 py-0.5 text-xs transition ${
+                  rowFilter === f.id
+                    ? 'bg-slate-200 border-slate-200 text-slate-950 font-semibold'
+                    : 'bg-slate-950 border-slate-700 text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+        </div>
 
-          {source === 'zp_zwift' && zpZwiftResults.status === 'loading' && (
-            <p className="text-sm text-slate-400">Loading ZwiftPower unfiltered results…</p>
-          )}
-          {source === 'zp_zwift' && zpZwiftResults.status === 'error' && (
-            <p role="alert" className="text-sm text-red-400">
-              {zpZwiftResults.message}
-            </p>
-          )}
-          {source === 'zp_zwift' && zpZwiftResults.status === 'loaded' && (
-            <ZwiftPowerStandingsTable
-              entries={zpZwiftResults.data}
-              targetRiderId={targetRiderId}
-              categoryFilter={activeCatFilter}
-            />
-          )}
+        {anyLoading && <span className="text-xs text-slate-400">Syncing race sources…</span>}
+      </div>
+
+      {favoritedInPen.length > 0 && (
+        <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 px-3.5 py-2.5 text-xs flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="font-semibold text-amber-300">★ Favorited in this pen:</span>
+          {favoritedInPen.map((fav) => (
+            <Link
+              key={fav.key}
+              to={`/riders/${fav.riderId}`}
+              className="text-amber-200 hover:text-amber-100 hover:underline font-medium"
+            >
+              {fav.name}
+              {fav.rank != null ? ` (${ordinal(fav.rank)})` : ''}
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {visibleRows.length === 0 ? (
+        <p className="text-sm text-slate-400">
+          {anyLoading
+            ? 'Loading combined event standings…'
+            : 'No finishers matched this pen across the available APIs.'}
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wide">
+                <th className="py-2 pr-3 whitespace-nowrap">#</th>
+                {columns.zpPlace && <th className="py-2 pr-3 whitespace-nowrap">ZP #</th>}
+                <th className="py-2 pr-3 whitespace-nowrap">Rider</th>
+                {columns.riderCategory && (
+                  <th
+                    className="py-2 pr-3 whitespace-nowrap"
+                    title="Rider's actual Zwift category (not event pen)"
+                  >
+                    Rider Cat
+                  </th>
+                )}
+                {columns.zrs && (
+                  <th className="py-2 pr-3 whitespace-nowrap" title="Zwift Racing Score">
+                    ZRS
+                  </th>
+                )}
+                {columns.velo && (
+                  <th className="py-2 pr-3 whitespace-nowrap" title="ZwiftRacing.app vELO">
+                    vELO
+                  </th>
+                )}
+                {columns.phenotype && <th className="py-2 pr-3 whitespace-nowrap">Phenotype</th>}
+                {columns.team && <th className="py-2 pr-3 whitespace-nowrap">Team</th>}
+                {columns.time && <th className="py-2 pr-3 whitespace-nowrap">Time</th>}
+                {columns.gap && <th className="py-2 pr-3 whitespace-nowrap">Gap</th>}
+                {columns.avgW && <th className="py-2 pr-3 whitespace-nowrap">Avg W</th>}
+                {columns.np && <th className="py-2 pr-3 whitespace-nowrap">NP</th>}
+                {columns.avgWkg && <th className="py-2 pr-3 whitespace-nowrap">W/kg</th>}
+                {columns.splits && (
+                  <th className="py-2 pr-3 whitespace-nowrap">
+                    5s / 1m / 5m / 20m ({splitsUnit === 'w' ? 'W' : 'W/kg'})
+                  </th>
+                )}
+                {columns.hr && <th className="py-2 pr-3 whitespace-nowrap">HR</th>}
+                {columns.weight && <th className="py-2 pr-3 whitespace-nowrap">Weight</th>}
+                {columns.powerSource && <th className="py-2 pr-3 whitespace-nowrap">Power</th>}
+                {columns.status && <th className="py-2 whitespace-nowrap">Status</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/70">
+              {visibleRows.map((row) => {
+                const isTarget = row.riderId === targetRiderId;
+                const isYou = loggedInId != null && row.riderId === loggedInId;
+                const isFav = row.riderId > 0 && isFavorite(row.riderId);
+
+                const rowBg =
+                  isTarget || isYou
+                    ? 'bg-[#fc6719]/15'
+                    : isFav
+                      ? 'bg-amber-400/15'
+                      : 'hover:bg-slate-900/50';
+                const nameTone =
+                  isTarget || isYou
+                    ? 'text-[#fc6719] font-bold'
+                    : isFav
+                      ? 'text-amber-300 font-bold'
+                      : 'font-medium';
+
+                const rankDisplay = row.didNotFinish
+                  ? 'DNF'
+                  : row.disqualified
+                    ? 'DQ'
+                    : row.rank != null
+                      ? String(row.rank)
+                      : '—';
+
+                const splitsStr = [
+                  formatSplit(row.splits.s5, splitsUnit),
+                  formatSplit(row.splits.m1, splitsUnit),
+                  formatSplit(row.splits.m5, splitsUnit),
+                  formatSplit(row.splits.m20, splitsUnit),
+                ].join(' / ');
+
+                return (
+                  <tr key={row.key} className={rowBg}>
+                    <td className="py-2 pr-3 font-semibold whitespace-nowrap">{rankDisplay}</td>
+
+                    {columns.zpPlace && (
+                      <td className="py-2 pr-3 text-slate-400 whitespace-nowrap">
+                        {row.zpPlace != null ? row.zpPlace : '—'}
+                      </td>
+                    )}
+
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        {row.riderId > 0 ? (
+                          <Link
+                            to={`/riders/${row.riderId}`}
+                            className={`hover:underline ${
+                              isFav && !isTarget && !isYou
+                                ? 'hover:text-amber-200'
+                                : 'hover:text-[#fc6719]'
+                            } ${nameTone}`}
+                          >
+                            {row.name}
+                          </Link>
+                        ) : (
+                          <span className={nameTone}>{row.name}</span>
+                        )}
+                        {isYou && (
+                          <span className="rounded bg-[#fc6719]/25 px-1.5 py-0.5 text-[10px] font-semibold text-[#fc6719]">
+                            You
+                          </span>
+                        )}
+                        {isTarget && !isYou && (
+                          <span className="rounded bg-[#fc6719]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[#fc6719]">
+                            Rider
+                          </span>
+                        )}
+                        {isFav && (
+                          <span className="rounded bg-amber-400/20 border border-amber-400/40 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                            ★ Favorite
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {columns.riderCategory && (
+                      <td className="py-2 pr-3 whitespace-nowrap">
+                        {row.riderCategory ? (
+                          <span className="rounded bg-slate-800 border border-slate-700 px-1.5 py-0.5 text-[11px] font-semibold text-slate-200">
+                            {row.riderCategory}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">—</span>
+                        )}
+                      </td>
+                    )}
+
+                    {columns.zrs && (
+                      <td className="py-2 pr-3 font-mono whitespace-nowrap">
+                        {row.zrsScore != null ? (
+                          <span>
+                            {Math.round(row.zrsScore)}
+                            {row.zrsDelta != null && row.zrsDelta !== 0 && (
+                              <span
+                                className={`ml-1 text-[10px] ${
+                                  row.zrsDelta > 0 ? 'text-emerald-400' : 'text-red-400'
+                                }`}
+                              >
+                                {row.zrsDelta > 0 ? '+' : ''}
+                                {row.zrsDelta.toFixed(0)}
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">—</span>
+                        )}
+                      </td>
+                    )}
+
+                    {columns.velo && (
+                      <td className="py-2 pr-3 font-mono whitespace-nowrap">
+                        {row.velo != null ? (
+                          <span>
+                            {row.velo.toFixed(0)}
+                            {row.veloDelta != null && Math.abs(row.veloDelta) >= 0.05 && (
+                              <span
+                                className={`ml-1 text-[10px] ${
+                                  row.veloDelta >= 0 ? 'text-emerald-400' : 'text-red-400'
+                                }`}
+                              >
+                                {row.veloDelta >= 0 ? '+' : ''}
+                                {row.veloDelta.toFixed(1)}
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">—</span>
+                        )}
+                      </td>
+                    )}
+
+                    {columns.phenotype && (
+                      <td className="py-2 pr-3 text-slate-300 whitespace-nowrap">
+                        {row.phenotype ?? '—'}
+                      </td>
+                    )}
+
+                    {columns.team && (
+                      <td className="py-2 pr-3 text-slate-400 whitespace-nowrap">
+                        {row.team ?? '—'}
+                      </td>
+                    )}
+
+                    {columns.time && (
+                      <td className="py-2 pr-3 font-mono whitespace-nowrap">
+                        {row.timeSec != null ? formatDurationMs(row.timeSec * 1000) : '—'}
+                      </td>
+                    )}
+
+                    {columns.gap && (
+                      <td className="py-2 pr-3 font-mono whitespace-nowrap">
+                        {formatRowGap(row.gapSec)}
+                      </td>
+                    )}
+
+                    {columns.avgW && (
+                      <td className="py-2 pr-3 whitespace-nowrap">
+                        {row.avgWatts != null ? `${Math.round(row.avgWatts)} W` : '—'}
+                      </td>
+                    )}
+
+                    {columns.np && (
+                      <td className="py-2 pr-3 whitespace-nowrap">
+                        {row.np != null ? `${Math.round(row.np)} W` : '—'}
+                      </td>
+                    )}
+
+                    {columns.avgWkg && (
+                      <td className="py-2 pr-3 whitespace-nowrap">
+                        {row.avgWkg != null ? row.avgWkg.toFixed(2) : '—'}
+                      </td>
+                    )}
+
+                    {columns.splits && (
+                      <td className="py-2 pr-3 font-mono whitespace-nowrap">{splitsStr}</td>
+                    )}
+
+                    {columns.hr && (
+                      <td className="py-2 pr-3 whitespace-nowrap">
+                        {row.avgHr != null || row.maxHr != null
+                          ? `${row.avgHr != null ? Math.round(row.avgHr) : '—'} / ${
+                              row.maxHr != null ? Math.round(row.maxHr) : '—'
+                            }`
+                          : '—'}
+                      </td>
+                    )}
+
+                    {columns.weight && (
+                      <td className="py-2 pr-3 whitespace-nowrap">
+                        {formatWeight(row.weightGrams, units)}
+                      </td>
+                    )}
+
+                    {columns.powerSource && (
+                      <td className="py-2 pr-3 text-slate-400 whitespace-nowrap">
+                        {row.powerSource ?? '—'}
+                      </td>
+                    )}
+
+                    {columns.status && (
+                      <td className="py-2 whitespace-nowrap">
+                        <div className="flex items-center gap-1">
+                          {row.hiddenOnZp && (
+                            <span
+                              className="rounded-full bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] text-amber-300"
+                              title="Not present in ZwiftPower filtered results (_view.json)"
+                            >
+                              Hidden on ZP
+                            </span>
+                          )}
+                          {row.penalty && (
+                            <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-[10px] font-semibold text-red-300">
+                              {row.penalty}
+                            </span>
+                          )}
+                          {row.upg && (
+                            <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                              UPG
+                            </span>
+                          )}
+                          {row.flaggedCheating && (
+                            <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-[10px] text-red-300">
+                              Flagged
+                            </span>
+                          )}
+                          {row.flaggedSandbagging && (
+                            <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[10px] text-amber-300">
+                              Sandbag
+                            </span>
+                          )}
+                          {!row.hiddenOnZp &&
+                            !row.penalty &&
+                            !row.upg &&
+                            !row.flaggedCheating &&
+                            !row.flaggedSandbagging && <span className="text-slate-500">—</span>}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </section>

@@ -1,4 +1,9 @@
-import type { ZwiftActivity, ZwiftEventSubgroup } from '../api/zwiftCore';
+import type {
+  ZwiftActivity,
+  ZwiftActivityDetail,
+  ZwiftEventSubgroup,
+  ZwiftRaceResultEntry,
+} from '../api/zwiftCore';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
 import type { ZwiftRacingRaceEntry } from '../api/zwiftRacing';
 import { formatDurationMs } from './units';
@@ -73,6 +78,166 @@ export function ordinal(n: number): string {
   const s = ['th', 'st', 'nd', 'rd'];
   const v = n % 100;
   return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
+}
+
+const NAMED_HTML_ENTITIES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+};
+
+export function decodeHtmlEntities(input: string | undefined): string {
+  if (!input) return '';
+  return input.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (full, entity: string) => {
+    if (entity.startsWith('#x') || entity.startsWith('#X')) {
+      const cp = parseInt(entity.slice(2), 16);
+      return Number.isFinite(cp) && cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : full;
+    }
+    if (entity.startsWith('#')) {
+      const cp = parseInt(entity.slice(1), 10);
+      return Number.isFinite(cp) && cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : full;
+    }
+    return NAMED_HTML_ENTITIES[entity] ?? full;
+  });
+}
+
+const ZP_DIV_TO_CATEGORY: Record<number, string> = {
+  5: 'A+',
+  10: 'A',
+  20: 'B',
+  30: 'C',
+  40: 'D',
+  50: 'E',
+};
+
+export function zwiftPowerDivToCategory(div: unknown): string | undefined {
+  const num = typeof div === 'number' ? div : Number(div);
+  if (!Number.isFinite(num) || num <= 0) return undefined;
+  return ZP_DIV_TO_CATEGORY[num];
+}
+
+export function formatZpRiderCategory(
+  div: unknown,
+  divw: unknown,
+  male?: number,
+): string | undefined {
+  const open = zwiftPowerDivToCategory(div);
+  const women = zwiftPowerDivToCategory(divw);
+  if (male === 0 && women) {
+    return open && open !== women ? `${women} (W) / ${open}` : `${women} (W)`;
+  }
+  return open ?? women;
+}
+
+export function extractCoreZrs(entry: ZwiftRaceResultEntry | undefined): {
+  score?: number;
+  previousScore?: number;
+  delta?: number;
+} {
+  if (!entry) return {};
+  const sh = entry.scoreHistory;
+  const newScore =
+    typeof sh?.newScore === 'number' && Number.isFinite(sh.newScore) ? sh.newScore : undefined;
+  const previousScore =
+    typeof sh?.previousScore === 'number' && Number.isFinite(sh.previousScore)
+      ? sh.previousScore
+      : undefined;
+  const direct = [
+    newScore,
+    entry.racingScore,
+    entry.competitionMetrics?.racingScore,
+    entry.profileData?.competitionMetrics?.racingScore,
+  ].find((v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0);
+  const score = direct ?? previousScore;
+  const delta =
+    newScore != null && previousScore != null ? newScore - previousScore : undefined;
+  return { score, previousScore, delta };
+}
+
+export interface ActivityPhoto {
+  url: string;
+  label: string;
+}
+
+function pickUrlFromSnapshot(item: unknown): { url?: string; label?: string } {
+  if (typeof item === 'string' && /^https?:\/\//i.test(item)) {
+    return { url: item };
+  }
+  if (!item || typeof item !== 'object') return {};
+  const rec = item as Record<string, unknown>;
+  const urlKeys = [
+    'imageUrl',
+    'fullImageUrl',
+    'largeImageUrl',
+    'url',
+    'src',
+    'thumbnailUrl',
+  ];
+  let url: string | undefined;
+  for (const key of urlKeys) {
+    const candidate = rec[key];
+    if (typeof candidate === 'string' && /^https?:\/\//i.test(candidate.trim())) {
+      url = candidate.trim();
+      break;
+    }
+  }
+  const milestone =
+    typeof rec.milestoneType === 'string'
+      ? rec.milestoneType
+      : typeof rec.notableMomentType === 'string'
+        ? rec.notableMomentType
+        : typeof rec.type === 'string'
+          ? rec.type
+          : undefined;
+  return { url, label: milestone };
+}
+
+export function extractActivityPhotos(
+  activity?: ZwiftActivity,
+  detail?: ZwiftActivityDetail,
+): ActivityPhoto[] {
+  const photos: ActivityPhoto[] = [];
+  const seen = new Set<string>();
+
+  function add(url: unknown, label: string) {
+    if (typeof url !== 'string') return;
+    const clean = url.trim();
+    if (!/^https?:\/\//i.test(clean) || seen.has(clean)) return;
+    seen.add(clean);
+    photos.push({ url: clean, label });
+  }
+
+  add(activity?.primaryImageUrl, 'Primary activity snapshot');
+  add(detail?.primaryImageUrl, 'Primary activity snapshot');
+
+  const collections: Array<[unknown, string]> = [
+    [detail?.activitySnapshots, 'Activity snapshot'],
+    [detail?.snapshots, 'Activity snapshot'],
+    [detail?.images, 'Activity photo'],
+    [(detail as Record<string, unknown> | undefined)?.activityImages, 'Activity photo'],
+    [(detail as Record<string, unknown> | undefined)?.photos, 'Activity photo'],
+    [(activity as Record<string, unknown> | undefined)?.activitySnapshots, 'Activity snapshot'],
+    [(activity as Record<string, unknown> | undefined)?.snapshots, 'Activity snapshot'],
+    [(activity as Record<string, unknown> | undefined)?.images, 'Activity photo'],
+  ];
+
+  for (const [list, fallbackLabel] of collections) {
+    if (!Array.isArray(list)) continue;
+    for (const item of list) {
+      const picked = pickUrlFromSnapshot(item);
+      if (picked.url) {
+        const label = picked.label
+          ? `${fallbackLabel} (${picked.label.replace(/_/g, ' ').toLowerCase()})`
+          : fallbackLabel;
+        add(picked.url, label);
+      }
+    }
+  }
+
+  return photos;
 }
 
 const NUMERIC_SUBGROUP_LABELS: Record<number, string> = {
@@ -162,6 +327,8 @@ export function matchActivityForRace(
 export interface MergedRace {
   key: string;
   eventId: string;
+  /** 64-bit safe Zwift activity ID (`id_str`) when matched from the rider's activities. */
+  activityId?: string;
   /** unix seconds */
   date: number | undefined;
   title: string;
@@ -177,6 +344,148 @@ export interface MergedRace {
   placeInflation?: number;
 }
 
+const MATCH_WINDOW_MS = 3 * 60 * 60 * 1000;
+const CLOCK_TOLERANCE_MS = 5 * 60 * 1000;
+
+export function buildZwiftActivityUrl(activityId: string): string {
+  return `https://www.zwift.com/activity/${encodeURIComponent(activityId)}`;
+}
+
+export function buildZwiftPowerEventUrl(zid: string): string {
+  return `https://zwiftpower.com/events.php?zid=${encodeURIComponent(zid)}`;
+}
+
+export function buildZwiftRacingEventUrl(eventId: string, subgroupId: string): string {
+  return `https://zwiftracing.app/events/${encodeURIComponent(eventId)}/${encodeURIComponent(subgroupId)}`;
+}
+
+export function slugifyRouteName(routeName: string): string {
+  return routeName
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/['’.]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+export function buildZwifterBikesRouteUrl(routeName: string): string | undefined {
+  const slug = slugifyRouteName(routeName);
+  return slug ? `https://zwifterbikes.web.app/route/${encodeURIComponent(slug)}` : undefined;
+}
+
+export function buildZwiftToolsBikeComparisonUrl(activityId: string): string {
+  return `https://zwifttools.azurewebsites.net/bike-comparison?activity=${encodeURIComponent(activityId)}`;
+}
+
+export function buildZwiftToolsRaceReplayUrl(activityId: string): string {
+  return `https://zwifttools.azurewebsites.net/race-replay?activity_id=${encodeURIComponent(activityId)}`;
+}
+
+function asNumericIdString(val: unknown): string | undefined {
+  if (typeof val === 'string' && /^\d+$/.test(val.trim())) return val.trim();
+  if (typeof val === 'number' && Number.isFinite(val) && val > 0) return String(val);
+  return undefined;
+}
+
+export function getActivityIdStr(activity: ZwiftActivity | undefined): string | undefined {
+  if (!activity) return undefined;
+  return asNumericIdString(activity.id_str) ?? asNumericIdString(activity.id);
+}
+
+function parseIsoMs(iso: string | undefined): number {
+  if (!iso) return NaN;
+  const normalized = iso.replace(/([+-]\d{2})(\d{2})$/, '$1:$2');
+  return Date.parse(normalized);
+}
+
+function zpNumericVal(v: unknown): number | undefined {
+  const raw = Array.isArray(v) ? v[0] : v;
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  const num = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isFinite(num) ? num : undefined;
+}
+
+function assignActivityIds(races: MergedRace[], activities: ZwiftActivity[]): void {
+  if (races.length === 0 || activities.length === 0) return;
+
+  interface CandidateMatch {
+    raceIndex: number;
+    activityId: string;
+    score: number;
+  }
+
+  const candidates: CandidateMatch[] = [];
+
+  for (let raceIndex = 0; raceIndex < races.length; raceIndex++) {
+    const race = races[raceIndex];
+    if (race.date == null || !Number.isFinite(race.date)) continue;
+
+    const raceStartMs = race.date * 1000;
+    const raceDurSec = zpNumericVal(race.zp?.time) ?? race.zr?.race?.time;
+    const raceEndMs =
+      raceDurSec != null && raceDurSec > 0 ? raceStartMs + raceDurSec * 1000 : undefined;
+    const raceTitleLower = race.title.trim().toLowerCase();
+
+    for (const activity of activities) {
+      const activityId = getActivityIdStr(activity);
+      if (!activityId) continue;
+
+      const startMs = parseIsoMs(activity.startDate);
+      const endMs = parseIsoMs(activity.endDate);
+      if (!Number.isFinite(startMs) && !Number.isFinite(endMs)) continue;
+
+      if (Number.isFinite(endMs) && endMs < raceStartMs - CLOCK_TOLERANCE_MS) continue;
+      if (raceEndMs != null && Number.isFinite(startMs) && startMs > raceEndMs + CLOCK_TOLERANCE_MS) {
+        continue;
+      }
+
+      const hasSubgroup =
+        typeof activity.eventSubgroupId === 'number' && activity.eventSubgroupId > 0;
+      if (!hasSubgroup && Number.isFinite(startMs) && startMs > raceStartMs + 10 * 60_000) {
+        continue;
+      }
+
+      const diffMs = Number.isFinite(startMs)
+        ? Math.abs(startMs - raceStartMs)
+        : Math.abs(endMs - (raceEndMs ?? raceStartMs));
+      if (diffMs > MATCH_WINDOW_MS) continue;
+
+      const spansRaceStart =
+        Number.isFinite(startMs) &&
+        Number.isFinite(endMs) &&
+        startMs <= raceStartMs + 2 * 60_000 &&
+        endMs >= raceStartMs;
+      const actTitleLower = (activity.name ?? '').trim().toLowerCase();
+      const titleMatch =
+        raceTitleLower.length >= 4 &&
+        actTitleLower.length >= 4 &&
+        (actTitleLower.includes(raceTitleLower) || raceTitleLower.includes(actTitleLower));
+
+      const score =
+        (titleMatch ? 0 : 10_000_000_000) +
+        (spansRaceStart ? 0 : 1_000_000_000) +
+        (hasSubgroup ? 0 : 100_000_000) +
+        diffMs;
+
+      candidates.push({ raceIndex, activityId, score });
+    }
+  }
+
+  candidates.sort((a, b) => a.score - b.score);
+
+  const matchedRaces = new Set<number>();
+  const usedActivityIds = new Set<string>();
+  for (const candidate of candidates) {
+    if (matchedRaces.has(candidate.raceIndex) || usedActivityIds.has(candidate.activityId)) {
+      continue;
+    }
+    matchedRaces.add(candidate.raceIndex);
+    usedActivityIds.add(candidate.activityId);
+    races[candidate.raceIndex].activityId = candidate.activityId;
+  }
+}
+
 export function isRaceEntry(zp?: ZwiftPowerRaceEntry, zr?: ZwiftRacingRaceEntry): boolean {
   if (typeof zr?.event?.type === 'string' && zr.event.type.trim() !== '') {
     return /\b(race|tt|time\s*trial)\b/i.test(zr.event.type);
@@ -190,6 +499,7 @@ export function isRaceEntry(zp?: ZwiftPowerRaceEntry, zr?: ZwiftRacingRaceEntry)
 export function mergeRaces(
   zpRaces: ZwiftPowerRaceEntry[],
   zrRaces: ZwiftRacingRaceEntry[],
+  activities: ZwiftActivity[] = [],
 ): MergedRace[] {
   const zrById = new Map<string, ZwiftRacingRaceEntry>();
   for (const zr of zrRaces) {
@@ -214,7 +524,9 @@ export function mergeRaces(
     }
   }
 
-  return merged.sort((a, b) => (b.date ?? 0) - (a.date ?? 0));
+  merged.sort((a, b) => (b.date ?? 0) - (a.date ?? 0));
+  assignActivityIds(merged, activities);
+  return merged;
 }
 
 function build(

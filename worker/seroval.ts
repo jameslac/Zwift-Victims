@@ -122,20 +122,46 @@ function parseSeroval(src: string): unknown {
   return parseValue();
 }
 
+function parseTsrMatches(html: string): unknown[] {
+  const match = html.match(/\$_TSR\.router\s*=\s*\(\$R\s*=>\s*([\s\S]*?)\)\(\$R\[["']tsr["']\]\)/);
+  if (!match?.[1]) return [];
+
+  const root = parseSeroval(match[1]);
+  if (!root || typeof root !== 'object') return [];
+
+  const matches = (root as { matches?: unknown }).matches;
+  return Array.isArray(matches) ? matches : [];
+}
+
+const SKIPPED_MONGOOSE_KEYS = new Set(['$__', '$__parent', '$isNew', '_doc']);
+
+function stripMongooseInternals(value: unknown, ancestors = new WeakSet<object>()): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (ancestors.has(value)) return undefined;
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => stripMongooseInternals(item, ancestors));
+    }
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (SKIPPED_MONGOOSE_KEYS.has(k) || k.startsWith('$__')) continue;
+      const cleaned = stripMongooseInternals(v, ancestors);
+      if (cleaned !== undefined) out[k] = cleaned;
+    }
+    return out;
+  } finally {
+    ancestors.delete(value);
+  }
+}
+
 export interface ZwiftRacingExtracted {
   rider: Record<string, unknown> | null;
   overview: Record<string, unknown> | null;
 }
 
 export function extractZwiftRacingData(html: string): ZwiftRacingExtracted {
-  const match = html.match(/\$_TSR\.router\s*=\s*\(\$R\s*=>\s*([\s\S]*?)\)\(\$R\[["']tsr["']\]\)/);
-  if (!match?.[1]) return { rider: null, overview: null };
-
-  const root = parseSeroval(match[1]);
-  if (!root || typeof root !== 'object') return { rider: null, overview: null };
-
-  const matches = (root as { matches?: unknown }).matches;
-  if (!Array.isArray(matches)) return { rider: null, overview: null };
+  const matches = parseTsrMatches(html);
 
   let rider: Record<string, unknown> | null = null;
   let overview: Record<string, unknown> | null = null;
@@ -150,4 +176,20 @@ export function extractZwiftRacingData(html: string): ZwiftRacingExtracted {
   }
 
   return { rider, overview };
+}
+
+export function extractZwiftRacingEventData(html: string): Record<string, unknown> | null {
+  const matches = parseTsrMatches(html);
+
+  for (const item of matches) {
+    if (!item || typeof item !== 'object') continue;
+    const loaderData = (item as { l?: unknown }).l;
+    if (!loaderData || typeof loaderData !== 'object') continue;
+    const rec = loaderData as Record<string, unknown>;
+    if ('eventId' in rec && 'pens' in rec) {
+      return stripMongooseInternals(rec) as Record<string, unknown>;
+    }
+  }
+
+  return null;
 }

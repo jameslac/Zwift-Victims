@@ -1,4 +1,4 @@
-import { extractZwiftRacingData } from './seroval';
+import { extractZwiftRacingData, extractZwiftRacingEventData } from './seroval';
 
 export interface Env {
   ASSETS: Fetcher;
@@ -157,27 +157,43 @@ async function handleZwiftPower(request: Request, path: string): Promise<Respons
   });
 }
 
-async function handleZwiftRacing(request: Request, path: string): Promise<Response> {
-  if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405);
-  const match = path.match(/^\/riders\/(\d+)$/);
-  if (!match) return json({ error: 'not_allowed' }, 403);
-
-  const riderId = match[1];
-  const upstream = await fetch(`${ZWIFTRACING_BASE}/riders/${riderId}`, {
+async function fetchZwiftRacingHtml(upstreamPath: string): Promise<string | Response> {
+  const upstream = await fetch(`${ZWIFTRACING_BASE}${upstreamPath}`, {
     headers: { Accept: 'text/html' },
   });
   if (!upstream.ok) {
     await upstream.body?.cancel();
     return json({ error: 'zwiftracing_upstream_error', status: upstream.status }, upstream.status);
   }
+  return upstream.text();
+}
 
-  const html = await upstream.text();
-  const data = extractZwiftRacingData(html);
-  if (!data.rider && !data.overview) {
-    return json({ error: 'zwiftracing_rider_not_found' }, 404);
+async function handleZwiftRacing(request: Request, path: string): Promise<Response> {
+  if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405);
+
+  const riderMatch = path.match(/^\/riders\/(\d+)$/);
+  if (riderMatch) {
+    const htmlOrErr = await fetchZwiftRacingHtml(`/riders/${riderMatch[1]}`);
+    if (htmlOrErr instanceof Response) return htmlOrErr;
+    const data = extractZwiftRacingData(htmlOrErr);
+    if (!data.rider && !data.overview) {
+      return json({ error: 'zwiftracing_rider_not_found' }, 404);
+    }
+    return json(data, 200);
   }
 
-  return json(data, 200);
+  const eventMatch = path.match(/^\/events\/(\d+)$/);
+  if (eventMatch) {
+    const htmlOrErr = await fetchZwiftRacingHtml(`/events/${eventMatch[1]}`);
+    if (htmlOrErr instanceof Response) return htmlOrErr;
+    const eventData = extractZwiftRacingEventData(htmlOrErr);
+    if (!eventData) {
+      return json({ error: 'zwiftracing_event_not_found' }, 404);
+    }
+    return json(eventData, 200);
+  }
+
+  return json({ error: 'not_allowed' }, 403);
 }
 
 export default {

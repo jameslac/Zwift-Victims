@@ -29,8 +29,8 @@ All browser calls hit same-origin `/api/*` endpoints exposed by [worker/index.ts
 | :--- | :--- | :--- | :--- | :--- |
 | `GET /api/health` | — | Local Worker | — | Health check JSON (`{ status, service, timestamp }`). |
 | `POST /api/zwift/auth/token` | — | `secure.zwift.com/.../token` | `login`, `refresh` (`zwiftCore.ts`) | Relays `password` and `refresh_token` grants using `client_id: Zwift_Mobile_Link`. |
-| `GET /api/zwift/api/profiles/me` | — | `us-or-rly101.zwift.com` | `fetchMyProfile` (`zwiftCore.ts`) | Requires `Authorization: Bearer <token>`. |
-| `GET /api/zwift/api/profiles/{riderId}` | — | `us-or-rly101.zwift.com` | `fetchProfileById` (`zwiftCore.ts`) | Public profile lookup for any rider ID. |
+| `GET /api/zwift/api/profiles/me` | — | `us-or-rly101.zwift.com` | `fetchMyProfile` (`zwiftCore.ts`) | Requires `Authorization: Bearer <token>`. Falls back to `/api/profiles/{id}` and merges when `competitionMetrics` is null/missing. |
+| `GET /api/zwift/api/profiles/{riderId}` | — | `us-or-rly101.zwift.com` | `fetchProfileById` (`zwiftCore.ts`) | Public profile lookup for any rider ID (populates `competitionMetrics`). |
 | `GET /api/zwift/api/profiles/{riderId}/followees` | — | `us-or-rly101.zwift.com` | *Allowlisted in Worker (no UI helper yet)* | Riders followed by `{riderId}`. |
 | `GET /api/zwift/api/profiles/{riderId}/followers` | — | `us-or-rly101.zwift.com` | *Allowlisted in Worker (no UI helper yet)* | Riders following `{riderId}`. |
 | `GET /api/zwift/api/profiles/{riderId}/activities` | `start`, `limit` | `us-or-rly101.zwift.com` | `fetchRiderActivities` (`zwiftCore.ts`) | Returns activity feed (`ZwiftActivity[]`). |
@@ -41,6 +41,7 @@ All browser calls hit same-origin `/api/*` endpoints exposed by [worker/index.ts
 | `GET /api/zwiftpower/cache3/profile/{riderId}_all.json` | — | `zwiftpower.com` | `fetchZwiftPowerRaces` (`zwiftPower.ts`) | Full rider race history; Worker seeds CloudFront cookies and retries once on `403`. |
 | `GET /api/zwiftpower/cache3/results/{eventId}_(view\|zwift).json` | — | `zwiftpower.com` | `fetchZwiftPowerEventResults` (`zwiftPower.ts`) | Filtered (`_view`) or unfiltered (`_zwift`) event results on ZwiftPower. |
 | `GET /api/zwiftracing/riders/{riderId}` | — | `zwiftracing.app/riders/{riderId}` | `fetchZwiftRacingRider` (`zwiftRacing.ts`) | Scrapes SSR HTML via [seroval.ts](../worker/seroval.ts) (`self.$R`) and returns `{ rider, overview }`. |
+| `GET /api/zwiftracing/events/{eventId}` | — | `zwiftracing.app/events/{eventId}` | `fetchZwiftRacingEvent` (`zwiftRacing.ts`) | Scrapes SSR HTML via [seroval.ts](../worker/seroval.ts) and returns event metadata, ZRS pen ranges, and per-pen `riders[]` (with Mongoose `$__` internals stripped). |
 
 ---
 
@@ -69,14 +70,14 @@ The official backend used by the **Zwift Game Client** and **Zwift Companion App
 ### Key Endpoints (`https://us-or-rly101.zwift.com`) & Attribute Notes
 | Endpoint | Method | Key Attributes Returned & Caveats |
 | :--- | :--- | :--- |
-| `/api/profiles/me` | `GET` | `id`, `publicId`, `firstName`, `lastName`, `male`, `imageSrc`, `imageSrcLarge`, `countryAlpha3`, `countryCode`, `useMetric`, `weight` (grams), `height` (mm), `ftp`, `competitionMetrics` (`racingScore`, `category`, `categoryWomen`), `socialFacts`, `privacy`, `privateAttributes`. |
-| `/api/profiles/{riderId}` | `GET` | Public profile for any rider ID (same public fields as `/me`, excluding `privateAttributes`). |
+| `/api/profiles/me` | `GET` | `id`, `publicId`, `firstName`, `lastName`, `male`, `imageSrc`, `imageSrcLarge`, `countryAlpha3`, `countryCode`, `useMetric`, `weight` (grams), `height` (mm), `ftp`, `achievementLevel` (`level * 100 + progressPct`), `totalExperiencePoints`, `targetExperiencePoints` (often `0` or equal to `totalExperiencePoints`; resolved via Zwift's cycling level XP curve when `<= totalExperiencePoints`), `totalGold` (Drops), `totalDistance` (meters), `totalDistanceClimbed` (meters), `socialFacts`, `privacy`, `privateAttributes`. **Caveat:** `competitionMetrics` (`racingScore`, `category`, `categoryWomen`) is returned as `null` here; `fetchMyProfile` fetches `/api/profiles/{me.id}` and merges `competitionMetrics` when missing. |
+| `/api/profiles/{riderId}` | `GET` | Public profile for any rider ID (same public fields as `/me`, excluding `privateAttributes` and account-private stats, while populating `competitionMetrics`: `racingScore`, `category`, `categoryWomen`). |
 | `/api/profiles/{riderId}/followees` | `GET` | List of riders that `{riderId}` follows (useful for auto-populating friends lists). |
 | `/api/profiles/{riderId}/followers` | `GET` | List of riders following `{riderId}`. |
 | `/api/profiles/{riderId}/activities?start=0&limit=20` | `GET` | `id_str`, `id`, `profileId`, `worldId`, `name`, `description`, `sport`, `startDate`, `endDate`, `duration`, `movingTimeInMs`, `distanceInMeters`, `totalElevation`, `avgWatts`, `calories`, `primaryImageUrl`, `fitFileBucket`, `fitFileKey`, `activityRideOnCount`, `activityCommentCount`, `privacy`, `utcOffsetMinutes`, nested `profile` snapshot. **Caveat:** `avgWatts` covers the entire recorded activity (including warm-up/cooldown) rather than race-only effort, and no race placing or category is returned here. |
 | `/api/activities/{id_str}?fetchSnapshots=true&fetchEvent=true` | `GET` | Detailed single activity: `maxWatts`, `avgHeartRate`, `maxHeartRate`, `avgCadenceInRotationsPerMinute`, `maxCadenceInRotationsPerMinute`, `avgSpeedInMetersPerSecond`, `fitnessData` (`fullDataUrl`, `smallDataUrl`), `eventInfo` (`id`, `eventSubGroupId`, `name`, `laps`, `subgroupTotalEntrantCount`, `eventSubgroups`), `subgroupResults` (`topResults`, `nearPlayerResults`). |
-| `/api/public/events/{eventId}` | `GET` | Event details, route ID, distance/laps, rules, and `eventSubgroups` (each category A/B/C/D/E maps to its own numeric `id` = `event_subgroup_id`). |
-| `/api/race-results/entries?event_subgroup_id={subgroupId}` | `GET` | **Unfiltered subgroup finishers** (crucial fallback for Race Detail & >90-day races outside ZwiftRacing's window): `rank`, `profileId`, `eventSubgroupId`, `profileData` (`firstName`, `lastName`, `gender`, `weightInGrams`, `heightInCentimeters`), `activityData` (`activityId`, `durationInMilliseconds`, `endDate`, `segmentDistanceInCentimeters`, `elevationInCentimeters`, `calories`), `sensorData` (`avgWatts`, `heartRateData`, `powerType`, `pairedSteeringDevice`), `flaggedCheating`, `flaggedSandbagging`, `criticalP` (`criticalP15Seconds`, `1Minute`, `5Minutes`, `20Minutes`), plus equipped `frameId`/`wheelId`. |
+| `/api/public/events/{eventId}` | `GET` | Event details, route ID, distance/laps, rules, `categoryEnforcement`, `accessExpression` (ZRS expressions use `scoring.max30`), `rangeAccessLabel`, and `eventSubgroups` (`id` = `event_subgroup_id`, `subgroupLabel`, `label` 1–5, `rangeAccessLabel`, `fromPaceValue`, `toPaceValue`; note `totalEntrantCount` is often `0` on completed events). |
+| `/api/race-results/entries?event_subgroup_id={subgroupId}` | `GET` | **Unfiltered subgroup finishers** (crucial fallback for Race Detail & >90-day races outside ZwiftRacing's window): `rank`, `profileId`, `eventSubgroupId`, `profileData` (`firstName`, `lastName`, `gender`, `weightInGrams`, `heightInCentimeters`), `activityData` (`activityId`, `durationInMilliseconds`, `endDate`, `segmentDistanceInCentimeters`, `elevationInCentimeters`, `calories`), `sensorData` (`avgWatts`, `heartRateData`, `powerType`, `pairedSteeringDevice`), `flaggedCheating`, `flaggedSandbagging`, `scoreHistory` (`previousScore`/`newScore` when ZRS-ranked), `criticalP` (`criticalP15Seconds`, `1Minute`, `5Minutes`, `20Minutes`), plus equipped `frameId`/`wheelId`. |
 
 ### Community Reference Links for Zwift Core API
 - **TypeScript Wrapper & Types:** [`rally25rs/zwift-api-wrapper`](https://github.com/rally25rs/zwift-api-wrapper) (Inspect `src/zwift-api.ts` and `src/types/` for payload schemas).
@@ -110,8 +111,9 @@ ZwiftPower is a PHP-based platform backed by cached JSON files (`cache3/`) and d
 - **Placing & Status:** `pos` (overall filtered ZP place), `position_in_cat` (category filtered ZP place), `display_pos`, `category` (`A+`, `A`, `B`, `C`, `D`, `E`), `upg` (`1` if upgraded), `penalty` (`"DQ"`, `"WKG"`, `"HR"`, `"UPG"`, or `""`), `zada`, `strike`, `info`, `info_notes`, `note`.
 - **Timing:** `time` (`[raceTimeSec, flag]`), `time_gun`, `gap` (seconds behind category winner), `lag`, `vtta`, `vttat`.
 - **Power, W/kg & Heart Rate Splits:** `avg_power`, `np` (Normalized Power), `avg_wkg`, `ftp`, `wftp`, `wkg_ftp`, `is_guess`, `wkg_guess`, `power_type`, `src`, `avg_hr`, `max_hr`, `hrmax`, `hrm`, `hrr`, `hreff`, and interval pairs `w5`/`wkg5`, `w15`/`wkg15`, `w30`/`wkg30`, `w60`/`wkg60`, `w120`/`wkg120`, `w300`/`wkg300`, `w1200`/`wkg1200`.
-- **Team & ZP Ranking Internals:** `tid`, `tname`, `tc`, `tbc`, `tbd`, `div`, `divw`, `skill`, `skill_b`, `skill_gain`, `pts`, `pts_pos`, `cp`, `zeff`.
-- **Rider Snapshot at Race Time:** `zwid`, `res_id`, `uid`, `name`, `male`, `age`, `flag`, `height`, `weight`, `friend`, `label`, `pt`, `DT_RowId`.
+- **Team & ZP Ranking Internals:** `tid`, `tname`, `tc`, `tbc`, `tbd`, `div` / `divw` (rider's actual ZP category code: `5` = `A+`, `10` = `A`, `20` = `B`, `30` = `C`, `40` = `D`, `50` = `E`), `skill`, `skill_b`, `skill_gain`, `pts`, `pts_pos`, `cp`, `zeff`.
+- **Rider Snapshot at Race Time:** `zwid`, `res_id`, `uid` (prefixed by `event_subgroup_id` in `_view.json`), `name`, `male`, `age`, `flag`, `height`, `weight`, `friend`, `label` (`"1"`–`"5"` pen index), `pt`, `DT_RowId`.
+- **Raw `_zwift.json` Schema Caveat:** Unlike `_view.json`, `/cache3/results/{eventId}_zwift.json` uses `watts`, `wkg`, `bpm`, `race_time`, `time_diff`, `dq_cat`, `label` (`"1"`–`"5"`), `pos`, `zwid`, `name`, `power_type`, `wkg_ftp`, and `wkg1200`.
 
 ### Community Reference Links for ZwiftPower API
 - **TypeScript Implementation:** [`rally25rs/zwift-api-wrapper`](https://github.com/rally25rs/zwift-api-wrapper) (Inspect `src/zwift-power-api.ts` for SSO redirect handling and endpoint patterns).
@@ -123,9 +125,9 @@ ZwiftPower is a PHP-based platform backed by cached JSON files (`cache3/`) and d
 
 ZwiftRacing.app computes community **vELO ratings** (`v2` and legacy), **Compound Score**, **Power Phenotype**, and **true category standings** (retaining private/hidden Zwift riders that ZwiftPower drops).
 
-### How We Fetch It Currently (`/api/zwiftracing/riders/{riderId}`)
-- Instead of requiring a developer API token upfront, `worker/index.ts` fetches the SSR HTML page `https://zwiftracing.app/riders/{riderId}` and [worker/seroval.ts](file:///Users/jamesandrelacour/Documents/GitHub/Zwift-Victims/worker/seroval.ts) parses the embedded `self.$R` seroval hydration stream into `{ rider, overview }`.
-- **Window caveat:** `overview.history` on the public SSR page covers roughly the last **~90 days** of scored races.
+### How We Fetch It Currently (`/api/zwiftracing/riders/{riderId}` & `/api/zwiftracing/events/{eventId}`)
+- Instead of requiring a developer API token upfront, `worker/index.ts` fetches the SSR HTML pages `https://zwiftracing.app/riders/{riderId}` and `https://zwiftracing.app/events/{eventId}` and [worker/seroval.ts](file:///Users/jamesandrelacour/Documents/GitHub/Zwift-Victims/worker/seroval.ts) parses the embedded `self.$R` seroval hydration stream (stripping Mongoose `$__` / `$isNew` / `_doc` metadata on event payloads).
+- **Window caveat:** `overview.history` on `/riders/{riderId}` covers roughly the last **~90 days** of scored races, whereas `/events/{eventId}` returns full event details, `pens[]` (with ZRS `rangeLabel`), `rules`, `route`, `courseProfile`, and per-pen `riders[]` (`position`, `expectedPosition`, `ratingBefore`, `rating`, `ratingDelta`, `eventRating`, `phenotype`, `velo`, `wkg5`–`wkg1200`, `didNotFinish`, `disqualified`).
 - Reference docs for their hosted API: `https://www.zwiftracing.app/reference`.
 
 ### Observed Attribute Schema: `rider` (Rider Profile)
@@ -162,3 +164,18 @@ When the Zwift Core API returns an activity or race result, it identifies routes
    - Game asset dictionaries extracted from `ZwiftApp` log/asset files that map `frameId` and `wheelId` integers to frame/wheel names, star ratings, and community-tested CdA (aero) and weight parameters (similar to ZwiftER / ZwiftInsider speed test data).
 3. **`.fit` File Parsing (Client-Side in Browser):**
    - Using `@garmin/fitsdk` (official Garmin FIT TypeScript SDK) in the browser to parse `.fit` files downloaded from Zwift's S3 bucket (`fitFileBucket` / `fitFileKey` from `/api/profiles/{riderId}/activities`) for second-by-second power, draft savings, heart rate, cadence, and gradient analysis.
+
+---
+
+## 5. External Tool & Community Integrations
+
+Community external deep-dive views linked directly from Race History card footers (`RaceExternalLinks` in [src/pages/ProfilePage.tsx](../src/pages/ProfilePage.tsx), URL builders in [src/lib/raceHistory.ts](../src/lib/raceHistory.ts)) whenever the required fields are available:
+
+| Site / Tool | URL Format | Required Identifier(s) |
+| :--- | :--- | :--- |
+| **ZwiftPower Event** | `https://zwiftpower.com/events.php?zid={zid}` | ZwiftPower `zid` (`race.zp.zid`) |
+| **ZwiftRacing.app Event** | `https://zwiftracing.app/events/{eventId}/{subgroup}` | ZwiftRacing `event.eventId` + category subgroup (`zr.event.subgroupId` / `zp.category`) |
+| **ZwifterBikes Route** | `https://zwifterbikes.web.app/route/{routeSlug}` | Slugified ZwiftRacing `event.routeName` (`slugifyRouteName`) |
+| **Zwift Activity** | `https://www.zwift.com/activity/{activityIdStr}` | 64-bit Zwift activity ID (`id_str` from `/api/profiles/{riderId}/activities`) |
+| **ZwiftTools Bike Comparison** | `https://zwifttools.azurewebsites.net/bike-comparison?activity={activityIdStr}` | 64-bit Zwift activity ID (`id_str` from `/api/profiles/{riderId}/activities`) |
+| **ZwiftTools Race Replay** | `https://zwifttools.azurewebsites.net/race-replay?activity_id={activityIdStr}` | 64-bit Zwift activity ID (`id_str` from `/api/profiles/{riderId}/activities`) |

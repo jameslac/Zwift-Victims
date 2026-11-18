@@ -6,7 +6,11 @@ import type {
   ZwiftRaceResultEntry,
 } from '../api/zwiftCore';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
-import type { ZwiftRacingRaceEntry } from '../api/zwiftRacing';
+import type {
+  ZwiftRacingEventResponse,
+  ZwiftRacingEventRider,
+  ZwiftRacingRaceEntry,
+} from '../api/zwiftRacing';
 import { collectKeys, flatten } from '../lib/raceHistory';
 import type { AsyncState } from '../lib/raceHistory';
 import { AttributeKeysSummary, AttributeList } from './RaceUi';
@@ -72,6 +76,8 @@ export default function RaceApiExplorer({
   zpViewAll,
   zpZwiftAll,
   zrEntry,
+  zrEvent,
+  zrEventRider,
   publicEvent,
   coreSubgroupEntry,
   coreSubgroupAll,
@@ -85,6 +91,8 @@ export default function RaceApiExplorer({
   zpViewAll: AsyncState<ZwiftPowerRaceEntry[]>;
   zpZwiftAll: AsyncState<ZwiftPowerRaceEntry[]>;
   zrEntry?: ZwiftRacingRaceEntry;
+  zrEvent: AsyncState<ZwiftRacingEventResponse | null>;
+  zrEventRider?: ZwiftRacingEventRider;
   publicEvent: AsyncState<ZwiftPublicEvent>;
   coreSubgroupEntry?: ZwiftRaceResultEntry;
   coreSubgroupAll: AsyncState<ZwiftRaceResultEntry[]> | null;
@@ -99,6 +107,23 @@ export default function RaceApiExplorer({
     () => (zpZwiftAll.status === 'loaded' ? collectKeys(zpZwiftAll.data) : []),
     [zpZwiftAll],
   );
+  const zrEventRiderKeys = useMemo(() => {
+    if (zrEvent.status !== 'loaded' || !zrEvent.data) return [];
+    const riders = (zrEvent.data.pens ?? []).flatMap((p) => p.riders ?? []);
+    return collectKeys(riders);
+  }, [zrEvent]);
+  const zrEventMeta = useMemo(() => {
+    if (zrEvent.status !== 'loaded' || !zrEvent.data) return undefined;
+    const { courseProfile: _cp, pens, ...rest } = zrEvent.data;
+    return {
+      ...rest,
+      courseProfilePoints: zrEvent.data.courseProfile?.points?.length ?? 0,
+      pens: pens?.map(({ riders, ...penMeta }) => ({
+        ...penMeta,
+        riderCount: riders?.length ?? 0,
+      })),
+    };
+  }, [zrEvent]);
   const coreSubgroupKeys = useMemo(
     () => (coreSubgroupAll?.status === 'loaded' ? collectKeys(coreSubgroupAll.data) : []),
     [coreSubgroupAll],
@@ -157,7 +182,17 @@ export default function RaceApiExplorer({
           allKeysLabel="All keys in ZwiftPower _zwift.json"
         />
         <PayloadAccordion
-          title="ZwiftRacing.app Rider Race Entry (overview.history)"
+          title="ZwiftRacing.app Event Metadata (/api/zwiftracing/events/{eventId})"
+          data={zrEventMeta}
+        />
+        <PayloadAccordion
+          title="ZwiftRacing.app Event Rider Entry"
+          data={zrEventRider}
+          allKeys={zrEventRiderKeys}
+          allKeysLabel="All keys in ZwiftRacing.app event riders"
+        />
+        <PayloadAccordion
+          title="ZwiftRacing.app Rider History Entry (overview.history)"
           data={zrEntry}
         />
         <PayloadAccordion

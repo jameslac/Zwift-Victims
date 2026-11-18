@@ -21,12 +21,24 @@ export function formatWkg(ftp: number | undefined, grams: number | undefined): s
 export function formatDistance(meters: number | undefined, units: UnitSystem): string {
   if (meters === undefined || meters === null || !Number.isFinite(meters)) return '—';
   const km = meters / 1000;
-  return units === 'metric' ? `${km.toFixed(1)} km` : `${(km * 0.621371).toFixed(1)} mi`;
+  const value = units === 'metric' ? km : km * 0.621371;
+  const unit = units === 'metric' ? 'km' : 'mi';
+  return `${value.toLocaleString(undefined, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })} ${unit}`;
 }
 
 export function formatElevation(meters: number | undefined, units: UnitSystem): string {
   if (meters === undefined || meters === null || !Number.isFinite(meters)) return '—';
-  return units === 'metric' ? `${Math.round(meters)} m` : `${Math.round(meters * 3.28084)} ft`;
+  const value = units === 'metric' ? Math.round(meters) : Math.round(meters * 3.28084);
+  const unit = units === 'metric' ? 'm' : 'ft';
+  return `${value.toLocaleString()} ${unit}`;
+}
+
+export function formatDrops(drops: number | undefined): string {
+  if (drops === undefined || drops === null || !Number.isFinite(drops)) return '—';
+  return Math.round(drops).toLocaleString();
 }
 
 export function formatSpeed(mps: number | undefined, units: UnitSystem): string {

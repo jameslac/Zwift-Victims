@@ -1,0 +1,14 @@
+name: Cleanup Cloudflare Preview
+
+on:
+  pull_request:
+    types: [closed]
+  delete:
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    uses: jameslac/github-workflows/.github/workflows/cloudflare-preview-cleanup.yml@main
+    secrets: inherit
