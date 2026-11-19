@@ -104,23 +104,6 @@ function XpProgressBar({ profile }: { profile: ZwiftProfile }) {
   );
 }
 type ActivityTypeFilter = 'all' | ActivityType;
-type QuickTagFilter = 'podiums' | 'tt' | null;
-
-function isTimeTrialActivity(race: MergedRace): boolean {
-  const label = race.activityTypeLabel ?? '';
-  if (label === 'TTT' || label === 'Time Trial') return true;
-  if (typeof race.zp?.f_t === 'string' && /\bTYPE_TT\b/i.test(race.zp.f_t)) return true;
-  if (/\b(itt|ttt|time\s*trial)\b/i.test(`${race.zr?.event?.subType ?? ''} ${race.title}`)) {
-    return true;
-  }
-  return false;
-}
-
-function isPodiumActivity(race: MergedRace): boolean {
-  if (race.zr?.place?.didNotFinish || race.zr?.place?.disqualified) return false;
-  if (race.truePlace != null) return isPodium(race.truePlace);
-  return isPodium(race.zpPlace);
-}
 
 function matchesSearchQuery(race: MergedRace, query: string): boolean {
   if (!query) return true;
@@ -452,7 +435,6 @@ function MergedTab({
   riderWeightGrams?: number;
 }) {
   const [typeFilter, setTypeFilter] = useState<ActivityTypeFilter>('all');
-  const [quickTag, setQuickTag] = useState<QuickTagFilter>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const summary = useMemo(() => summarize(mergedRaces), [mergedRaces]);
@@ -464,21 +446,15 @@ function MergedTab({
       workout: 0,
       free_ride: 0,
     };
-    let podiums = 0;
-    let tt = 0;
 
     for (const item of mergedActivities) {
       const t: ActivityType = item.activityType ?? 'race';
       byType[t] += 1;
-      if (isPodiumActivity(item)) podiums += 1;
-      if (isTimeTrialActivity(item)) tt += 1;
     }
 
     return {
       all: mergedActivities.length,
       ...byType,
-      podiums,
-      tt,
     };
   }, [mergedActivities]);
 
@@ -487,19 +463,16 @@ function MergedTab({
     () =>
       mergedActivities.filter((item) => {
         if (typeFilter !== 'all' && (item.activityType ?? 'race') !== typeFilter) return false;
-        if (quickTag === 'podiums' && !isPodiumActivity(item)) return false;
-        if (quickTag === 'tt' && !isTimeTrialActivity(item)) return false;
         if (trimmedQuery && !matchesSearchQuery(item, trimmedQuery)) return false;
         return true;
       }),
-    [mergedActivities, typeFilter, quickTag, trimmedQuery],
+    [mergedActivities, typeFilter, trimmedQuery],
   );
 
-  const hasActiveFilter = typeFilter !== 'all' || quickTag !== null || trimmedQuery !== '';
+  const hasActiveFilter = typeFilter !== 'all' || trimmedQuery !== '';
 
   function resetFilters() {
     setTypeFilter('all');
-    setQuickTag(null);
     setSearchQuery('');
   }
 
@@ -530,11 +503,6 @@ function MergedTab({
     { id: 'ride', label: 'Group Rides', count: counts.ride },
     { id: 'workout', label: 'Workouts', count: counts.workout },
     { id: 'free_ride', label: 'Free Rides', count: counts.free_ride },
-  ];
-
-  const quickChips: Array<{ id: Exclude<QuickTagFilter, null>; label: string; count: number }> = [
-    { id: 'podiums', label: 'Podiums', count: counts.podiums },
-    { id: 'tt', label: 'TT / TTT', count: counts.tt },
   ];
 
   return (
@@ -578,52 +546,30 @@ function MergedTab({
       </p>
 
       <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3 space-y-2.5">
-        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Activity type filter">
-          {typeTabs.map((tab) => {
-            const active = typeFilter === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                aria-pressed={active}
-                onClick={() => setTypeFilter(tab.id)}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors ${
-                  active
-                    ? 'bg-[#fc6719] border-[#fc6719] text-white'
-                    : 'bg-slate-900/80 border-slate-700/80 text-slate-300 hover:border-slate-500 hover:text-white'
-                }`}
-              >
-                <span>{tab.label}</span>
-                <span
-                  className={`rounded-full px-1.5 py-0.2 text-[11px] ${
-                    active ? 'bg-black/20 text-white' : 'bg-slate-800 text-slate-400'
-                  }`}
-                >
-                  {tab.count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Quick filters">
-            {quickChips.map((chip) => {
-              const active = quickTag === chip.id;
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Activity type filter">
+            {typeTabs.map((tab) => {
+              const active = typeFilter === tab.id;
               return (
                 <button
-                  key={chip.id}
+                  key={tab.id}
                   type="button"
                   aria-pressed={active}
-                  onClick={() => setQuickTag(active ? null : chip.id)}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                  onClick={() => setTypeFilter(tab.id)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors ${
                     active
-                      ? 'bg-[#fc6719]/20 border-[#fc6719]/60 text-[#fc6719]'
-                      : 'bg-slate-900/60 border-slate-700/70 text-slate-300 hover:border-slate-500 hover:text-white'
+                      ? 'bg-[#fc6719] border-[#fc6719] text-white'
+                      : 'bg-slate-900/80 border-slate-700/80 text-slate-300 hover:border-slate-500 hover:text-white'
                   }`}
                 >
-                  <span>{chip.label}</span>
-                  <span className="text-[11px] opacity-75">({chip.count})</span>
+                  <span>{tab.label}</span>
+                  <span
+                    className={`rounded-full px-1.5 py-0.2 text-[11px] ${
+                      active ? 'bg-black/20 text-white' : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
                 </button>
               );
             })}

@@ -57,29 +57,6 @@ function getPowerZoneLabel(pctFtp: number): { zone: string; tone: string } {
   return { zone: 'Z6 · Anaerobic', tone: 'bg-red-500' };
 }
 
-function flattenScalarFields(source: Record<string, unknown> | undefined): Array<[string, string]> {
-  if (!source) return [];
-  const excluded = new Set([
-    'profile',
-    'activitySnapshots',
-    'snapshots',
-    'images',
-    'activityImages',
-    'photos',
-    'subgroupResults',
-    'fitnessData',
-    'eventInfo',
-  ]);
-  const rows: Array<[string, string]> = [];
-  for (const [key, value] of Object.entries(source)) {
-    if (excluded.has(key) || value === null || value === undefined || value === '') continue;
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      rows.push([key, String(value)]);
-    }
-  }
-  return rows.sort((a, b) => a[0].localeCompare(b[0]));
-}
-
 export default function ActivityDetailPage() {
   const { loading: authLoading, profile, logout, getAccessToken } = useAuth();
   const { riderId: riderIdParam, activityId } = useParams<{
@@ -343,10 +320,6 @@ export default function ActivityDetailPage() {
   const commentsCount = detail?.activityCommentCount ?? baseActivity?.activityCommentCount;
   const privacy = detail?.privacy ?? baseActivity?.privacy;
   const isPrivate = detail?.privateActivity ?? baseActivity?.privateActivity;
-  const hasFitFile = Boolean(
-    (detail?.fitFileBucket && detail?.fitFileKey) ||
-      (baseActivity?.fitFileBucket && baseActivity?.fitFileKey),
-  );
 
   const linkedEventId =
     passedRace?.eventId || (detail?.eventInfo?.id ? String(detail.eventInfo.id) : '');
@@ -354,9 +327,6 @@ export default function ActivityDetailPage() {
     passedRace?.zr?.event?.subgroupId ?? passedRace?.zp?.category ?? undefined;
 
   const photos = extractActivityPhotos(baseActivity, detail);
-  const rawAttributes = flattenScalarFields(
-    (detail ?? baseActivity) as Record<string, unknown> | undefined,
-  );
 
   return (
     <main className="min-h-dvh max-w-6xl mx-auto p-4 sm:p-8 space-y-6">
@@ -652,18 +622,16 @@ export default function ActivityDetailPage() {
             <dd className="mt-0.5 font-semibold">{privacy ?? (isPrivate ? 'Private' : 'Public')}</dd>
           </div>
           <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
-            <dt className="text-slate-400">Ride Ons / Comments</dt>
-            <dd className="mt-0.5 font-semibold">
-              {rideOns ?? 0} / {commentsCount ?? 0}
-            </dd>
+            <dt className="text-slate-400">Ride Ons</dt>
+            <dd className="mt-0.5 font-semibold">{rideOns ?? 0}</dd>
+          </div>
+          <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
+            <dt className="text-slate-400">Comments</dt>
+            <dd className="mt-0.5 font-semibold">{commentsCount ?? 0}</dd>
           </div>
           <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
             <dt className="text-slate-400">Rider Weight (Activity)</dt>
             <dd className="mt-0.5 font-semibold">{formatWeight(weightGrams, units)}</dd>
-          </div>
-          <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
-            <dt className="text-slate-400">FIT Telemetry</dt>
-            <dd className="mt-0.5 font-semibold">{hasFitFile ? 'Available (.fit)' : '—'}</dd>
           </div>
         </dl>
 
@@ -693,22 +661,6 @@ export default function ActivityDetailPage() {
               </Link>
             )}
           </div>
-        )}
-
-        {rawAttributes.length > 0 && (
-          <details className="rounded-xl bg-slate-950/50 border border-slate-800 p-4">
-            <summary className="cursor-pointer text-xs font-semibold text-slate-300">
-              Raw Zwift Core activity attributes ({rawAttributes.length} fields)
-            </summary>
-            <dl className="mt-3 divide-y divide-slate-800/70 text-xs">
-              {rawAttributes.map(([key, value]) => (
-                <div key={key} className="flex flex-col sm:flex-row sm:justify-between gap-1 py-1.5">
-                  <dt className="font-mono text-slate-400 break-all">{key}</dt>
-                  <dd className="font-mono text-slate-200 sm:text-right break-all">{value}</dd>
-                </div>
-              ))}
-            </dl>
-          </details>
         )}
       </section>
     </main>
