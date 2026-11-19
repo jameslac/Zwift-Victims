@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import ZwiftRacingProfileSection from '../components/ZwiftRacingProfileSection';
 import ZwiftVictimsSection from '../components/ZwiftVictimsSection';
 import { useFavorites } from '../lib/FavoritesContext';
 import { ordinal } from '../lib/headToHead';
@@ -909,6 +910,8 @@ export default function ProfilePage({
         powerProfileState={powerProfileState}
         zpState={zpState}
       />
+
+      <ZwiftRacingProfileSection profileId={profile.id} zrState={zrState} />
 
       <RaceHistorySection
         zpState={zpState}
