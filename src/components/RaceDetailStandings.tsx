@@ -11,7 +11,7 @@ type RowFilter = 'all' | 'zp' | 'hidden' | 'tracked';
 type SplitsUnit = 'w' | 'wkg';
 
 const COLUMN_DEFS = [
-  { id: 'expectedPosition', label: 'Est. #' },
+  { id: 'expectedPosition', label: 'Est. # (Route / Ovr)' },
   { id: 'riderCategory', label: 'Rider Cat' },
   { id: 'zrs', label: 'ZRS' },
   { id: 'velo', label: 'vELO' },
@@ -23,8 +23,8 @@ const COLUMN_DEFS = [
   { id: 'np', label: 'NP' },
   { id: 'avgWkg', label: 'Avg W/kg' },
   { id: 'splits', label: '5s / 1m / 5m / 20m' },
-  { id: 'hr', label: 'HR' },
-  { id: 'speed', label: 'Speed' },
+  { id: 'hr', label: 'HR (Avg / Max)' },
+  { id: 'speed', label: 'Speed (Avg / Max)' },
   { id: 'weight', label: 'Weight' },
   { id: 'status', label: 'Status' },
 ] as const;
@@ -32,7 +32,7 @@ const COLUMN_DEFS = [
 type ColumnId = (typeof COLUMN_DEFS)[number]['id'];
 type ColumnVisibility = Record<ColumnId, boolean>;
 
-const COLS_STORAGE_KEY = 'zv.raceDetail.standingsCols.v4';
+const COLS_STORAGE_KEY = 'zv.raceDetail.standingsCols.v5';
 const SPLITS_UNIT_STORAGE_KEY = 'zv.raceDetail.splitsUnit';
 
 const DEFAULT_COLUMNS: ColumnVisibility = {
@@ -51,7 +51,7 @@ const DEFAULT_COLUMNS: ColumnVisibility = {
   hr: true,
   speed: true,
   weight: true,
-  status: true,
+  status: false,
 };
 
 function loadColumns(): ColumnVisibility {
@@ -390,14 +390,17 @@ export default function RaceDetailStandings({
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wide">
+              <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wide align-bottom">
                 <th className="py-2 pr-3 whitespace-nowrap">#</th>
                 {columns.expectedPosition && (
                   <th
                     className="py-2 pr-3 whitespace-nowrap"
-                    title="ZwiftRacing.app course-weighted vELO v2 expected finish position"
+                    title="Route (course-weighted vELO v2) expected finish, with Overall/Legacy estimate below when different"
                   >
-                    Est. #
+                    <span>Est. #</span>
+                    <span className="block text-[9px] font-normal normal-case tracking-normal text-slate-500">
+                      Route / Ovr
+                    </span>
                   </th>
                 )}
                 <th className="py-2 pr-3 whitespace-nowrap">Rider</th>
@@ -411,12 +414,18 @@ export default function RaceDetailStandings({
                 )}
                 {columns.zrs && (
                   <th className="py-2 pr-3 whitespace-nowrap" title="Zwift Racing Score">
-                    ZRS
+                    <span>ZRS</span>
+                    <span className="block text-[9px] font-normal normal-case tracking-normal text-slate-500">
+                      Score ±Δ
+                    </span>
                   </th>
                 )}
                 {columns.velo && (
                   <th className="py-2 pr-3 whitespace-nowrap" title="ZwiftRacing.app vELO">
-                    vELO
+                    <span>vELO</span>
+                    <span className="block text-[9px] font-normal normal-case tracking-normal text-slate-500">
+                      Rating ±Δ
+                    </span>
                   </th>
                 )}
                 {columns.phenotype && <th className="py-2 pr-3 whitespace-nowrap">Phenotype</th>}
@@ -428,16 +437,32 @@ export default function RaceDetailStandings({
                 {columns.avgWkg && <th className="py-2 pr-3 whitespace-nowrap">W/kg</th>}
                 {columns.splits && (
                   <th className="py-2 pr-3 whitespace-nowrap">
-                    5s / 1m / 5m / 20m ({splitsUnit === 'w' ? 'W' : 'W/kg'})
+                    <span>Splits ({splitsUnit === 'w' ? 'W' : 'W/kg'})</span>
+                    <span className="block text-[9px] font-normal normal-case tracking-normal text-slate-500">
+                      5s / 1m / 5m / 20m
+                    </span>
                   </th>
                 )}
-                {columns.hr && <th className="py-2 pr-3 whitespace-nowrap">HR</th>}
+                {columns.hr && (
+                  <th
+                    className="py-2 pr-3 whitespace-nowrap"
+                    title="Average / Max heart rate in bpm"
+                  >
+                    <span>HR</span>
+                    <span className="block text-[9px] font-normal normal-case tracking-normal text-slate-500">
+                      Avg / Max
+                    </span>
+                  </th>
+                )}
                 {columns.speed && (
                   <th
                     className="py-2 pr-3 whitespace-nowrap"
-                    title="Avg / Max speed (Max speed available for active rider's matched activity)"
+                    title="Average / Max speed (Max speed available for active rider's matched activity)"
                   >
-                    Speed
+                    <span>Speed</span>
+                    <span className="block text-[9px] font-normal normal-case tracking-normal text-slate-500">
+                      Avg / Max
+                    </span>
                   </th>
                 )}
                 {columns.weight && <th className="py-2 pr-3 whitespace-nowrap">Weight</th>}
@@ -491,8 +516,21 @@ export default function RaceDetailStandings({
                               !row.didNotFinish && !row.disqualified && row.rank != null
                                 ? estRounded - row.rank
                                 : null;
+                            const ovrRounded =
+                              row.overallExpectedPosition != null
+                                ? Math.round(row.overallExpectedPosition)
+                                : null;
+                            const ovrBeat =
+                              ovrRounded != null &&
+                              !row.didNotFinish &&
+                              !row.disqualified &&
+                              row.rank != null
+                                ? ovrRounded - row.rank
+                                : null;
                             const range = row.expectedPlaceRange;
-                            const parts = [`Course-weighted Est. ${row.expectedPosition.toFixed(1)}`];
+                            const parts = [
+                              `Route (course-weighted) Est. ${row.expectedPosition.toFixed(1)}`,
+                            ];
                             if (range?.low != null && range?.high != null) {
                               parts.push(`(range ${range.low}–${range.high})`);
                             }
@@ -500,22 +538,40 @@ export default function RaceDetailStandings({
                               parts.push(`Power-seed Est. ${row.seedExpectedPosition.toFixed(1)}`);
                             }
                             if (row.overallExpectedPosition != null) {
-                              parts.push(`Overall/Legacy Est. #${Math.round(row.overallExpectedPosition)}`);
+                              parts.push(
+                                `Overall/Legacy Est. #${Math.round(row.overallExpectedPosition)}`,
+                              );
                             }
                             const titleText = parts.join(' · ');
                             return (
-                              <span title={titleText} className="text-slate-300">
-                                {estRounded}
-                                {beat !== null && beat !== 0 && (
-                                  <span
-                                    className={`ml-1 text-[10px] ${
-                                      beat > 0 ? 'text-emerald-400' : 'text-red-400'
-                                    }`}
-                                  >
-                                    {beat > 0 ? `+${beat}` : beat}
-                                  </span>
+                              <div title={titleText} className="leading-tight">
+                                <div className="text-slate-300">
+                                  {estRounded}
+                                  {beat !== null && beat !== 0 && (
+                                    <span
+                                      className={`ml-1 text-[10px] ${
+                                        beat > 0 ? 'text-emerald-400' : 'text-red-400'
+                                      }`}
+                                    >
+                                      {beat > 0 ? `+${beat}` : beat}
+                                    </span>
+                                  )}
+                                </div>
+                                {ovrRounded != null && (
+                                  <div className="text-[10px] text-slate-400 mt-0.5">
+                                    ovr {ovrRounded}
+                                    {ovrBeat !== null && ovrBeat !== 0 && (
+                                      <span
+                                        className={`ml-1 ${
+                                          ovrBeat > 0 ? 'text-emerald-400/80' : 'text-red-400/80'
+                                        }`}
+                                      >
+                                        {ovrBeat > 0 ? `+${ovrBeat}` : ovrBeat}
+                                      </span>
+                                    )}
+                                  </div>
                                 )}
-                              </span>
+                              </div>
                             );
                           })()
                         ) : (
