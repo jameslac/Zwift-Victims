@@ -520,7 +520,7 @@ export default function RaceRatingsSection({
                   (() => {
                     const cardClass = `rounded-xl border p-3.5 space-y-1 text-left w-full ${cardToneClasses(deltaTone(expectedBeat))} ${
                       canToggleExpected
-                        ? 'cursor-pointer transition hover:border-[#fc6719]/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#fc6719]'
+                        ? 'cursor-pointer transition hover:border-accent/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent'
                         : ''
                     }`;
                     const content = (
@@ -531,7 +531,7 @@ export default function RaceRatingsSection({
                             <span
                               className={`rounded px-1.5 py-0.5 text-[10px] font-medium normal-case tracking-normal ${
                                 canToggleExpected
-                                  ? 'bg-slate-800/80 border border-slate-700 text-[#fc6719]'
+                                  ? 'bg-slate-800/80 border border-slate-700 text-accent-text'
                                   : 'bg-slate-800/60 text-slate-300'
                               }`}
                             >

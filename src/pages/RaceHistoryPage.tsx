@@ -128,14 +128,13 @@ function MergedRaceCard({
 
   const mainBody = (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-2.5">
         <div className="min-w-0 flex-1">
-          <h3 className="font-bold text-base group-hover:text-accent-text transition-colors">
+          <h3 className="font-bold text-base group-hover:text-accent-text transition-colors leading-snug break-words">
             {race.title}
           </h3>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-400 mt-0.5">
             {formatUnixSeconds(race.date)}
-            {category ? ` · Cat ${category}` : ''}
             {zr?.event?.subType ? ` · ${zr.event.subType}` : ''}
             {zr?.event?.routeName ? ` · ${zr.event.routeName}` : ''}
             {!zr?.event?.routeName && worldName ? ` · ${worldName}` : ''}
@@ -144,7 +143,12 @@ function MergedRaceCard({
             {!race.eventId && race.activityId ? ` · activity ${race.activityId}` : ''}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-1.5 shrink-0 ml-auto">
+          {category && (
+            <span className="rounded-full bg-slate-800 border border-slate-700 px-2 py-0.5 text-xs font-bold text-slate-200">
+              Cat {category}
+            </span>
+          )}
           <ActivityTypeBadge type={activityType} label={activityTypeLabel} />
           <PlacingBadge
             truePlace={race.truePlace}
@@ -167,56 +171,19 @@ function MergedRaceCard({
               UPG
             </span>
           )}
-          {!zp && Boolean(zr) && (
-            <span className="rounded-full bg-slate-700/40 border border-slate-600 px-2 py-0.5 text-xs text-slate-300">
-              ZwiftRacing only
-            </span>
-          )}
-          {Boolean(zp) && !zr && activityType === 'race' && (
-            <span className="rounded-full bg-slate-700/40 border border-slate-600 px-2 py-0.5 text-xs text-slate-300">
-              No ZwiftRacing data
-            </span>
-          )}
-          {isStandaloneCore && (
-            <span className="rounded-full bg-slate-700/40 border border-slate-600 px-2 py-0.5 text-xs text-slate-300">
-              Zwift Feed
-            </span>
-          )}
         </div>
       </div>
 
-      {race.truePlace != null ? (
-        <div
-          className={`rounded-lg border p-3 text-sm ${
-            inflated
-              ? 'bg-amber-500/10 border-amber-500/30'
-              : 'bg-slate-900/70 border-slate-800'
-          }`}
-        >
-          <p>
-            <span className="font-bold">Finished {ordinal(race.truePlace)}</span>
-            {race.fieldSize ? ` of ${race.fieldSize}` : ''} in category{' '}
-            <span className="text-xs text-slate-400">(ZwiftRacing — includes private riders)</span>
-          </p>
-          {race.zpPlace != null && (
-            <p className="text-xs text-slate-300 mt-1">
-              ZwiftPower shows {ordinal(race.zpPlace)}
-              {inflated
-                ? ` — ${race.placeInflation} place${race.placeInflation === 1 ? '' : 's'} better than reality because hidden riders are dropped${
-                    podiumMismatch ? ' (ZwiftPower shows a podium that wasn’t)' : ''
-                  }.`
-                : '.'}
-            </p>
-          )}
+      {race.truePlace != null && inflated && race.zpPlace != null && (
+        <div className="rounded-lg border bg-amber-500/10 border-amber-500/30 p-2.5 text-xs text-amber-200">
+          ZwiftPower shows <span className="font-bold">{ordinal(race.zpPlace)}</span> —{' '}
+          <span className="font-bold">
+            {race.placeInflation} place{race.placeInflation === 1 ? '' : 's'} better
+          </span>{' '}
+          than reality ({ordinal(race.truePlace)}
+          {race.fieldSize ? ` / ${race.fieldSize}` : ''}) because hidden riders are dropped
+          {podiumMismatch ? ' (ZwiftPower shows a podium that wasn’t)' : ''}.
         </div>
-      ) : (
-        zp &&
-        (activityType === 'race' || (zp.position_in_cat != null && zp.position_in_cat > 0)) && (
-          <p className="text-xs text-slate-400">
-            ZwiftPower category place: {zp.position_in_cat ?? '—'} (field may exclude hidden riders; no
-            ZwiftRacing result to verify — older than 90 days or unscored).
-          </p>
-        )
       )}
 
       {isStandaloneCore ? (

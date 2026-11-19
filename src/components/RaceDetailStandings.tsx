@@ -360,7 +360,7 @@ export default function RaceDetailStandings({
                 type="button"
                 onClick={() => handleSplitsUnit(u)}
                 className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
-                  splitsUnit === u ? 'bg-[#fc6719] text-white' : 'text-slate-300 hover:text-white'
+                  splitsUnit === u ? 'bg-accent text-white' : 'text-slate-300 hover:text-white'
                 }`}
               >
                 {u === 'w' ? 'W' : 'W/kg'}
@@ -386,7 +386,7 @@ export default function RaceDetailStandings({
             <button
               type="button"
               onClick={resetColumns}
-              className="text-xs text-[#fc6719] hover:underline"
+              className="text-xs text-accent-text hover:underline"
             >
               Reset defaults
             </button>
@@ -401,7 +401,7 @@ export default function RaceDetailStandings({
                   type="checkbox"
                   checked={columns[col.id]}
                   onChange={() => toggleColumn(col.id)}
-                  className="accent-[#fc6719] rounded"
+                  className="accent-[var(--zv-accent)] rounded"
                 />
                 <span>{col.label}</span>
               </label>
@@ -424,7 +424,7 @@ export default function RaceDetailStandings({
                 onClick={() => onSelectPen(pen)}
                 className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
                   isActive
-                    ? 'bg-[#fc6719] border-[#fc6719] text-white'
+                    ? 'bg-accent border-accent text-white'
                     : 'bg-slate-950 border-slate-700 text-slate-300 hover:bg-slate-800'
                 }`}
               >
@@ -504,10 +504,10 @@ export default function RaceDetailStandings({
                           ? 'Showing Route (course-weighted) expected finish. Click to switch to Overall.'
                           : 'Showing Overall expected finish. Click to switch to Route (course-weighted).'
                       }
-                      className="text-left uppercase tracking-wide group cursor-pointer rounded focus:outline-none focus-visible:ring-1 focus-visible:ring-[#fc6719]"
+                      className="text-left uppercase tracking-wide group cursor-pointer rounded focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
                     >
                       <span className="group-hover:text-slate-200 transition-colors">Est. #</span>
-                      <span className="block text-[9px] font-normal normal-case tracking-normal text-[#fc6719] group-hover:underline">
+                      <span className="block text-[9px] font-normal normal-case tracking-normal text-accent-text group-hover:underline">
                         {expectedMode === 'route' ? 'Route ⇄' : 'Overall ⇄'}
                       </span>
                     </button>
@@ -587,13 +587,13 @@ export default function RaceDetailStandings({
 
                 const rowBg =
                   isTarget || isYou
-                    ? 'bg-[#fc6719]/15'
+                    ? 'bg-accent/15'
                     : isFav
                       ? 'bg-amber-400/15'
                       : 'hover:bg-slate-900/50';
                 const nameTone =
                   isTarget || isYou
-                    ? 'text-[#fc6719] font-bold'
+                    ? 'text-accent-text font-bold'
                     : isFav
                       ? 'text-amber-300 font-bold'
                       : 'font-medium';
@@ -665,7 +665,7 @@ export default function RaceDetailStandings({
                               type="button"
                               onClick={onToggleExpectedMode}
                               title={titleText}
-                              className="inline-flex items-baseline text-left cursor-pointer rounded text-slate-300 hover:text-white focus:outline-none focus-visible:ring-1 focus-visible:ring-[#fc6719]"
+                              className="inline-flex items-baseline text-left cursor-pointer rounded text-slate-300 hover:text-white focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
                             >
                               <span>{estRounded}</span>
                               {beat !== null && beat !== 0 && (
@@ -691,7 +691,7 @@ export default function RaceDetailStandings({
                             className={`hover:underline ${
                               isFav && !isTarget && !isYou
                                 ? 'hover:text-amber-200'
-                                : 'hover:text-[#fc6719]'
+                                : 'hover:text-accent-text'
                             } ${nameTone}`}
                           >
                             {row.name}
@@ -700,12 +700,12 @@ export default function RaceDetailStandings({
                           <span className={nameTone}>{row.name}</span>
                         )}
                         {isYou && (
-                          <span className="rounded bg-[#fc6719]/25 px-1.5 py-0.5 text-[10px] font-semibold text-[#fc6719]">
+                          <span className="rounded bg-accent/25 px-1.5 py-0.5 text-[10px] font-semibold text-accent-text">
                             You
                           </span>
                         )}
                         {isTarget && !isYou && (
-                          <span className="rounded bg-[#fc6719]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[#fc6719]">
+                          <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] font-semibold text-accent-text">
                             Rider
                           </span>
                         )}

@@ -5,7 +5,7 @@ import type { ZwiftProfile } from '../api/zwiftCore';
 import { useAuth } from '../auth/AuthContext';
 import { useFavorites } from '../lib/FavoritesContext';
 import { useTheme } from '../lib/ThemeContext';
-import { COLOR_SCHEMES, NAV_STYLES, PROFILE_LAYOUTS } from '../lib/themeConfig';
+import { COLOR_SCHEMES } from '../lib/themeConfig';
 import { formatRiderName, getFavoriteCategory } from '../lib/useRiderProfile';
 import type { UnitSystem } from '../lib/units';
 
@@ -90,192 +90,88 @@ function PaletteIcon({ className = 'w-4 h-4' }: { className?: string }) {
   );
 }
 
-export function StyleStudioModal({ onClose }: { onClose: () => void }) {
-  const {
-    colorScheme,
-    setColorScheme,
-    navStyle,
-    setNavStyle,
-    profileLayout,
-    setProfileLayout,
-  } = useTheme();
+export function ThemePreferencesModal({ onClose }: { onClose: () => void }) {
+  const { colorScheme, setColorScheme } = useTheme();
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-6"
       role="dialog"
       aria-modal="true"
-      aria-label="UI Style and Layout Studio"
+      aria-label="Color Theme Preferences"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl max-h-[88dvh] overflow-y-auto rounded-2xl bg-slate-900 border border-slate-700/90 shadow-2xl p-5 sm:p-6 space-y-6"
+        className="w-full max-w-2xl max-h-[88dvh] overflow-y-auto rounded-2xl bg-slate-900 border border-slate-700/90 shadow-2xl p-5 sm:p-6 space-y-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
           <div className="space-y-1">
             <div className="inline-flex items-center gap-2 rounded-full bg-accent/15 border border-accent/40 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-accent-text">
               <PaletteIcon className="w-3.5 h-3.5" />
-              <span>UI Redesign Studio</span>
+              <span>Theme Preferences</span>
             </div>
             <h2 className="text-lg sm:text-xl font-extrabold text-slate-100">
-              Color Scheme, Navigation &amp; Layout
+              Choose Your Color Scheme
             </h2>
             <p className="text-xs text-slate-400">
-              Preview different modern color palettes, mobile/web navigation styles, and profile page
-              layouts live. Your selections save automatically on this device.
+              Personalize your app palette. Your choice is saved automatically on this device.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close style studio"
-            className="rounded-lg border border-slate-700 bg-slate-950/80 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-white"
+            aria-label="Close theme preferences"
+            className="rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-white"
           >
             Done
           </button>
         </div>
 
-        {/* 1. Color Schemes */}
-        <div className="space-y-2.5">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-              1. Color Scheme
-            </h3>
-            <span className="text-[11px] text-slate-400">Replaces ZwiftTools slate + orange</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {COLOR_SCHEMES.map((scheme) => {
-              const active = colorScheme === scheme.id;
-              return (
-                <button
-                  key={scheme.id}
-                  type="button"
-                  onClick={() => setColorScheme(scheme.id)}
-                  aria-pressed={active}
-                  className={`text-left rounded-xl border p-3 transition-all flex items-start gap-3 ${
-                    active
-                      ? 'border-accent bg-accent/10 ring-1 ring-accent'
-                      : 'border-slate-800 bg-slate-950/70 hover:border-slate-700'
-                  }`}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+          {COLOR_SCHEMES.map((scheme) => {
+            const active = colorScheme === scheme.id;
+            return (
+              <button
+                key={scheme.id}
+                type="button"
+                onClick={() => setColorScheme(scheme.id)}
+                aria-pressed={active}
+                className={`text-left rounded-xl border p-3 transition-all flex items-start gap-3 ${
+                  active
+                    ? 'border-accent bg-accent/10 ring-1 ring-accent'
+                    : 'border-slate-800 bg-slate-950/70 hover:border-slate-700'
+                }`}
+              >
+                <div
+                  className="w-9 h-9 rounded-lg border border-white/15 shrink-0 flex items-center justify-center shadow-inner"
+                  style={{ backgroundColor: scheme.surfaceHex }}
                 >
-                  <div
-                    className="w-9 h-9 rounded-lg border border-white/15 shrink-0 flex items-center justify-center shadow-inner"
-                    style={{ backgroundColor: scheme.surfaceHex }}
-                  >
-                    <div className="flex -space-x-1">
-                      <span
-                        className="w-3.5 h-3.5 rounded-full border border-black/40"
-                        style={{ backgroundColor: scheme.accentHex }}
-                      />
-                      <span
-                        className="w-3.5 h-3.5 rounded-full border border-black/40"
-                        style={{ backgroundColor: scheme.secondaryHex }}
-                      />
-                    </div>
+                  <div className="flex -space-x-1">
+                    <span
+                      className="w-3.5 h-3.5 rounded-full border border-black/40"
+                      style={{ backgroundColor: scheme.accentHex }}
+                    />
+                    <span
+                      className="w-3.5 h-3.5 rounded-full border border-black/40"
+                      style={{ backgroundColor: scheme.secondaryHex }}
+                    />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-sm font-bold text-slate-100">{scheme.name}</span>
-                      {scheme.recommended && (
-                        <span className="rounded-full bg-accent/20 border border-accent/40 px-1.5 py-0.2 text-[10px] font-bold text-accent-text">
-                          Recommended
-                        </span>
-                      )}
-                      {scheme.legacy && (
-                        <span className="rounded-full bg-slate-800 border border-slate-700 px-1.5 py-0.2 text-[10px] font-semibold text-slate-400">
-                          Legacy
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                      {scheme.tagline}
-                    </p>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-sm font-bold text-slate-100">{scheme.name}</span>
+                    {scheme.badge && (
+                      <span className="rounded-full bg-accent/20 border border-accent/40 px-1.5 py-0.2 text-[10px] font-bold text-accent-text">
+                        {scheme.badge}
+                      </span>
+                    )}
                   </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* 2. Navigation Style */}
-        <div className="space-y-2.5">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-              2. Navigation Style (Mobile &amp; Web)
-            </h3>
-            <span className="text-[11px] text-slate-400">Profile · Race History · Victims</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            {NAV_STYLES.map((style) => {
-              const active = navStyle === style.id;
-              return (
-                <button
-                  key={style.id}
-                  type="button"
-                  onClick={() => setNavStyle(style.id)}
-                  aria-pressed={active}
-                  className={`text-left rounded-xl border p-3 transition-all flex flex-col justify-between gap-2 ${
-                    active
-                      ? 'border-accent bg-accent/10 ring-1 ring-accent'
-                      : 'border-slate-800 bg-slate-950/70 hover:border-slate-700'
-                  }`}
-                >
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center justify-between gap-1">
-                      <span className="text-xs font-bold text-slate-100">{style.shortName}</span>
-                      {style.recommended && (
-                        <span className="rounded-full bg-accent/20 border border-accent/40 px-1.5 py-0.2 text-[10px] font-bold text-accent-text">
-                          Best UX
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-400 leading-snug">{style.description}</p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* 3. Profile Page Layout */}
-        <div className="space-y-2.5">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-              3. Profile Page Layout
-            </h3>
-            <span className="text-[11px] text-slate-400">Compare Profile page architectures</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            {PROFILE_LAYOUTS.map((layout) => {
-              const active = profileLayout === layout.id;
-              return (
-                <button
-                  key={layout.id}
-                  type="button"
-                  onClick={() => setProfileLayout(layout.id)}
-                  aria-pressed={active}
-                  className={`text-left rounded-xl border p-3 transition-all flex flex-col justify-between gap-2 ${
-                    active
-                      ? 'border-accent bg-accent/10 ring-1 ring-accent'
-                      : 'border-slate-800 bg-slate-950/70 hover:border-slate-700'
-                  }`}
-                >
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center justify-between gap-1">
-                      <span className="text-xs font-bold text-slate-100">{layout.shortName}</span>
-                      {layout.recommended && (
-                        <span className="rounded-full bg-accent/20 border border-accent/40 px-1.5 py-0.2 text-[10px] font-bold text-accent-text">
-                          Default
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-400 leading-snug">{layout.description}</p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">{scheme.tagline}</p>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -305,7 +201,7 @@ export function AppHeader({
   const location = useLocation();
   const { profile: authProfile } = useAuth();
   const { favorites } = useFavorites();
-  const { colorScheme, navStyle, studioOpen, setStudioOpen } = useTheme();
+  const { colorScheme, setColorScheme, studioOpen, setStudioOpen } = useTheme();
   const [lookupId, setLookupId] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -373,33 +269,10 @@ export function AppHeader({
 
   return (
     <>
-      <header className="sticky top-0 z-30 -mx-4 sm:-mx-8 px-4 sm:px-8 py-3 backdrop-blur-xl bg-slate-950/85 border-b border-slate-800/80 space-y-2.5">
+      <header className="sticky top-0 z-30 -mx-4 sm:-mx-8 px-4 sm:px-8 py-3 backdrop-blur-xl bg-slate-950/88 border-b border-slate-800/80">
         <div className="flex items-center justify-between gap-2 sm:gap-3">
-          {/* Left: Hamburger (if drawer mode) + Brand + Back/Context Link */}
+          {/* Left: Brand + Back/Context Link */}
           <div className="flex items-center gap-2.5 min-w-0">
-            {navStyle === 'drawer' && (
-              <button
-                type="button"
-                onClick={() => setDrawerOpen(true)}
-                aria-label="Open navigation menu"
-                className="inline-flex items-center justify-center rounded-xl border border-slate-700/80 bg-slate-900 p-2 text-slate-200 hover:border-accent/60 hover:text-accent-text transition-colors"
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  className="w-4 h-4"
-                  aria-hidden="true"
-                >
-                  <line x1="4" y1="6" x2="20" y2="6" />
-                  <line x1="4" y1="12" x2="20" y2="12" />
-                  <line x1="4" y1="18" x2="20" y2="18" />
-                </svg>
-              </button>
-            )}
-
             <Link
               to="/"
               className="inline-flex items-center gap-2.5 font-extrabold text-base sm:text-lg tracking-tight text-slate-100 hover:opacity-90 transition-opacity shrink-0"
@@ -434,58 +307,56 @@ export function AppHeader({
             )}
           </div>
 
-          {/* Center: Desktop Segmented Navigation (in hybrid or tabs mode) */}
-          {navStyle !== 'drawer' && (
-            <nav
-              aria-label="Primary navigation"
-              className="hidden md:flex items-center rounded-xl bg-slate-900/90 border border-slate-800 p-1 gap-1"
-            >
-              {navItems.map((item) => {
-                const active = inferredTab === item.id;
-                return (
-                  <Link
-                    key={item.id}
-                    to={item.to}
-                    aria-current={active ? 'page' : undefined}
-                    className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all ${
-                      active
-                        ? 'bg-accent text-white shadow-sm'
-                        : 'text-slate-300 hover:text-white hover:bg-slate-800/70'
-                    }`}
-                  >
-                    {item.icon}
-                    <span>{item.label}</span>
-                    {item.badge !== undefined && (
-                      <span
-                        className={`rounded-full px-1.5 py-0.2 text-[10px] font-extrabold tabular-nums ${
-                          active
-                            ? 'bg-black/25 text-white'
-                            : 'bg-slate-800 text-slate-300 border border-slate-700'
-                        }`}
-                      >
-                        {item.badge}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
-            </nav>
-          )}
+          {/* Center: Desktop Segmented Navigation (md+) */}
+          <nav
+            aria-label="Primary navigation"
+            className="hidden md:flex items-center rounded-xl bg-slate-900/90 border border-slate-800 p-1 gap-1"
+          >
+            {navItems.map((item) => {
+              const active = inferredTab === item.id;
+              return (
+                <Link
+                  key={item.id}
+                  to={item.to}
+                  aria-current={active ? 'page' : undefined}
+                  className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all ${
+                    active
+                      ? 'bg-accent text-white shadow-sm'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/70'
+                  }`}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                  {item.badge !== undefined && (
+                    <span
+                      className={`rounded-full px-1.5 py-0.2 text-[10px] font-extrabold tabular-nums ${
+                        active
+                          ? 'bg-black/25 text-white'
+                          : 'bg-slate-800 text-slate-300 border border-slate-700'
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
 
-          {/* Right: Style Studio + Desktop Search & Controls + Mobile Menu Button */}
+          {/* Right: Theme Picker + Desktop Search & Controls + Mobile Menu Button */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               type="button"
               onClick={() => setStudioOpen(true)}
-              title="Customize color scheme, navigation style & layout"
+              title={`Theme: ${currentScheme.name} (Click to change)`}
               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700/90 bg-slate-900/90 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:border-accent/60 hover:text-accent-text transition-colors"
             >
               <span
                 className="w-2.5 h-2.5 rounded-full shrink-0"
                 style={{ backgroundColor: currentScheme.accentHex }}
               />
-              <span className="hidden sm:inline">Theme &amp; Layout</span>
-              <span className="sm:hidden">Style</span>
+              <span className="hidden sm:inline">{currentScheme.name}</span>
+              <span className="sm:hidden">Theme</span>
             </button>
 
             <form onSubmit={handleLookupSubmit} className="hidden lg:flex items-center gap-1">
@@ -547,14 +418,12 @@ export function AppHeader({
               Log out
             </button>
 
-            {/* Mobile (or lg- lookup) Utility Menu Button */}
+            {/* Mobile / Tablet Utility Menu Button */}
             <button
               type="button"
               onClick={() => setDrawerOpen(true)}
               aria-label="Open menu and rider lookup"
-              className={`inline-flex items-center justify-center rounded-xl border border-slate-700/90 bg-slate-900 p-2 text-slate-200 hover:border-accent/60 hover:text-accent-text transition-colors ${
-                navStyle === 'drawer' ? 'hidden' : 'lg:hidden'
-              }`}
+              className="inline-flex lg:hidden items-center justify-center rounded-xl border border-slate-700/90 bg-slate-900 p-2 text-slate-200 hover:border-accent/60 hover:text-accent-text transition-colors"
             >
               <svg
                 viewBox="0 0 24 24"
@@ -572,51 +441,15 @@ export function AppHeader({
             </button>
           </div>
         </div>
-
-        {/* Mobile Top Segmented Tabs when navStyle === 'tabs' */}
-        {navStyle === 'tabs' && (
-          <nav
-            aria-label="Mobile top tabs"
-            className="flex md:hidden items-center rounded-xl bg-slate-900/95 border border-slate-800 p-1 gap-1"
-          >
-            {navItems.map((item) => {
-              const active = inferredTab === item.id;
-              return (
-                <Link
-                  key={item.id}
-                  to={item.to}
-                  aria-current={active ? 'page' : undefined}
-                  className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg py-1.5 px-2 text-xs font-bold transition-all ${
-                    active
-                      ? 'bg-accent text-white shadow-sm'
-                      : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  {item.icon}
-                  <span>{item.shortLabel}</span>
-                  {item.badge !== undefined && (
-                    <span
-                      className={`rounded-full px-1.5 py-0.2 text-[10px] font-extrabold tabular-nums ${
-                        active ? 'bg-black/25 text-white' : 'bg-slate-800 text-slate-300'
-                      }`}
-                    >
-                      {item.badge}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
-        )}
       </header>
 
-      {/* Slide-Over Hamburger & Utility Drawer */}
+      {/* Slide-Over Utility & Options Drawer */}
       {drawerOpen && (
         <div
           className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
-          aria-label="Navigation & utility menu"
+          aria-label="Navigation & preferences menu"
           onClick={() => setDrawerOpen(false)}
         >
           <div
@@ -634,7 +467,7 @@ export function AppHeader({
                   >
                     Z
                   </span>
-                  <span>Menu</span>
+                  <span>Menu &amp; Options</span>
                 </div>
                 <button
                   type="button"
@@ -643,6 +476,32 @@ export function AppHeader({
                 >
                   Close
                 </button>
+              </div>
+
+              {/* Rider Lookup */}
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1">
+                  Inspect Rider by Zwift ID
+                </p>
+                <form onSubmit={handleLookupSubmit} className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="Enter Zwift ID…"
+                    aria-label="View rider by Zwift ID"
+                    value={lookupId}
+                    onChange={(e) => setLookupId(e.target.value)}
+                    className="flex-1 rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-accent"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!/^\d+$/.test(lookupId.trim())}
+                    className="rounded-xl bg-accent px-3.5 py-2 text-sm font-bold text-white disabled:opacity-40"
+                  >
+                    Go
+                  </button>
+                </form>
               </div>
 
               {/* Navigation Links */}
@@ -658,9 +517,7 @@ export function AppHeader({
                       to={item.to}
                       onClick={() => setDrawerOpen(false)}
                       className={`flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-bold transition-colors ${
-                        active
-                          ? 'bg-accent text-white'
-                          : 'text-slate-200 hover:bg-slate-800'
+                        active ? 'bg-accent text-white' : 'text-slate-200 hover:bg-slate-800'
                       }`}
                     >
                       <span className="flex items-center gap-2.5">
@@ -688,32 +545,6 @@ export function AppHeader({
                     <span>← Back to My Profile</span>
                   </Link>
                 )}
-              </div>
-
-              {/* Rider Lookup */}
-              <div className="space-y-1.5">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1">
-                  Inspect Rider by Zwift ID
-                </p>
-                <form onSubmit={handleLookupSubmit} className="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    placeholder="Enter Zwift ID…"
-                    aria-label="View rider by Zwift ID"
-                    value={lookupId}
-                    onChange={(e) => setLookupId(e.target.value)}
-                    className="flex-1 rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-accent"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!/^\d+$/.test(lookupId.trim())}
-                    className="rounded-xl bg-accent px-3.5 py-2 text-sm font-bold text-white disabled:opacity-40"
-                  >
-                    Go
-                  </button>
-                </form>
               </div>
 
               {/* Units Toggle */}
@@ -747,28 +578,55 @@ export function AppHeader({
                 </div>
               </div>
 
-              {/* Quick Theme Studio Launcher */}
-              <div className="space-y-1.5">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1">
-                  Appearance &amp; Layout
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDrawerOpen(false);
-                    setStudioOpen(true);
-                  }}
-                  className="w-full flex items-center justify-between rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs font-bold text-slate-200 hover:border-accent/60"
-                >
-                  <span className="flex items-center gap-2">
-                    <PaletteIcon className="w-4 h-4 text-accent-text" />
-                    <span>Open Theme &amp; Layout Studio</span>
-                  </span>
-                  <span
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: currentScheme.accentHex }}
-                  />
-                </button>
+              {/* Inline Color Theme Picker */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Color Scheme
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDrawerOpen(false);
+                      setStudioOpen(true);
+                    }}
+                    className="text-[11px] font-semibold text-accent-text hover:underline"
+                  >
+                    Details
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {COLOR_SCHEMES.map((scheme) => {
+                    const active = colorScheme === scheme.id;
+                    return (
+                      <button
+                        key={scheme.id}
+                        type="button"
+                        onClick={() => setColorScheme(scheme.id)}
+                        aria-pressed={active}
+                        className={`rounded-xl border p-2 text-left transition-all flex flex-col gap-1.5 ${
+                          active
+                            ? 'border-accent bg-accent/15'
+                            : 'border-slate-800 bg-slate-950/70 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span
+                            className="w-3 h-3 rounded-full shrink-0"
+                            style={{ backgroundColor: scheme.accentHex }}
+                          />
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: scheme.secondaryHex }}
+                          />
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-200 leading-tight truncate">
+                          {scheme.name.replace('Neon ', '').replace('Classic ', '')}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
@@ -788,43 +646,41 @@ export function AppHeader({
         </div>
       )}
 
-      {/* Mobile Fixed Bottom Navigation Bar (when navStyle === 'hybrid') */}
-      {navStyle === 'hybrid' && (
-        <nav
-          aria-label="Mobile bottom navigation"
-          className="fixed bottom-0 inset-x-0 z-30 md:hidden backdrop-blur-xl bg-slate-950/92 border-t border-slate-800/90 px-3 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))]"
-        >
-          <div className="max-w-md mx-auto grid grid-cols-3 gap-1">
-            {navItems.map((item) => {
-              const active = inferredTab === item.id;
-              return (
-                <Link
-                  key={item.id}
-                  to={item.to}
-                  aria-current={active ? 'page' : undefined}
-                  className={`relative flex flex-col items-center justify-center gap-0.5 rounded-xl py-1.5 px-2 text-[11px] font-bold transition-colors ${
-                    active
-                      ? 'bg-accent/15 text-accent-text'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <div className="relative flex items-center justify-center">
-                    {item.icon}
-                    {item.badge !== undefined && (
-                      <span className="absolute -top-1.5 -right-3.5 rounded-full bg-accent px-1.5 py-0.1 text-[9px] font-extrabold text-white tabular-nums shadow">
-                        {item.badge}
-                      </span>
-                    )}
-                  </div>
-                  <span>{item.shortLabel}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </nav>
-      )}
+      {/* Mobile Fixed Bottom Navigation Bar (< md) */}
+      <nav
+        aria-label="Mobile bottom navigation"
+        className="fixed bottom-0 inset-x-0 z-30 md:hidden backdrop-blur-xl bg-slate-950/95 border-t border-slate-800/90 px-3 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+      >
+        <div className="max-w-md mx-auto grid grid-cols-3 gap-1">
+          {navItems.map((item) => {
+            const active = inferredTab === item.id;
+            return (
+              <Link
+                key={item.id}
+                to={item.to}
+                aria-current={active ? 'page' : undefined}
+                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-xl py-1.5 px-2 text-[11px] font-bold transition-colors ${
+                  active
+                    ? 'bg-accent/15 text-accent-text'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <div className="relative flex items-center justify-center">
+                  {item.icon}
+                  {item.badge !== undefined && (
+                    <span className="absolute -top-1.5 -right-3.5 rounded-full bg-accent px-1.5 py-0.1 text-[9px] font-extrabold text-white tabular-nums shadow">
+                      {item.badge}
+                    </span>
+                  )}
+                </div>
+                <span>{item.shortLabel}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
 
-      {studioOpen && <StyleStudioModal onClose={() => setStudioOpen(false)} />}
+      {studioOpen && <ThemePreferencesModal onClose={() => setStudioOpen(false)} />}
     </>
   );
 }

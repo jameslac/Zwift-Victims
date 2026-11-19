@@ -13,8 +13,8 @@ export default defineConfig({
         name: 'Zwift Victims',
         short_name: 'ZwiftVictims',
         description: 'Head-to-Head Zwift Race Tracker & Analytics',
-        theme_color: '#fc6719',
-        background_color: '#0f172a',
+        theme_color: '#070b0e',
+        background_color: '#070b0e',
         display: 'standalone',
         icons: [
           {

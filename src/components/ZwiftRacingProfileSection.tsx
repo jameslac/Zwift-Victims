@@ -1098,6 +1098,7 @@ export default function ZwiftRacingProfileSection({
 }) {
   const [nowSec] = useState(() => Math.floor(Date.now() / 1000));
   const [scaleMode, setScaleMode] = useState<VeloScaleMode>('velo2');
+  const [zrTab, setZrTab] = useState<'velo' | 'phenotype' | 'factors'>('velo');
   const [selectedPointKey, setSelectedPointKey] = useState<string | null>(null);
   const [selectedAxisId, setSelectedAxisId] = useState<PhenotypeAxis['id'] | null>(null);
 
@@ -1272,8 +1273,58 @@ export default function ZwiftRacingProfileSection({
         </div>
       </div>
 
+      {/* Sub-Tabs for ZwiftRacing Section */}
+      <div
+        role="tablist"
+        aria-label="ZwiftRacing sections"
+        className="flex flex-wrap items-center gap-1.5 rounded-xl bg-slate-950/75 border border-slate-800 p-1"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={zrTab === 'velo'}
+          onClick={() => setZrTab('velo')}
+          className={`flex-1 rounded-lg py-1.5 px-2.5 text-xs font-bold transition-colors ${
+            zrTab === 'velo'
+              ? 'bg-accent text-white'
+              : 'text-slate-400 hover:text-slate-100'
+          }`}
+        >
+          vELO &amp; Chart
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={zrTab === 'phenotype'}
+          onClick={() => setZrTab('phenotype')}
+          className={`flex-1 rounded-lg py-1.5 px-2.5 text-xs font-bold transition-colors ${
+            zrTab === 'phenotype'
+              ? 'bg-accent text-white'
+              : 'text-slate-400 hover:text-slate-100'
+          }`}
+        >
+          Phenotype &amp; Rankings
+        </button>
+        {(factorBreakdown.hasData || powerModelMetrics.length > 0) && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={zrTab === 'factors'}
+            onClick={() => setZrTab('factors')}
+            className={`flex-1 rounded-lg py-1.5 px-2.5 text-xs font-bold transition-colors ${
+              zrTab === 'factors'
+                ? 'bg-accent text-white'
+                : 'text-slate-400 hover:text-slate-100'
+            }`}
+          >
+            Factors &amp; Seed
+          </button>
+        )}
+      </div>
+
       {/* Group 1: vELO Rating, Windows & Progression Chart */}
-      <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-4">
+      {zrTab === 'velo' && (
+        <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-4">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
           {/* Card 1: Current vELO */}
           <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3 space-y-2">
@@ -1415,19 +1466,22 @@ export default function ZwiftRacingProfileSection({
           onSelectPointKey={setSelectedPointKey}
         />
       </div>
+      )}
 
       {/* Group 2: Phenotype Radar & 90-Day Race Outcomes */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <PhenotypeRadarCard
-          phenotype={phenotype}
-          selectedAxisId={selectedAxisId}
-          onSelectAxisId={setSelectedAxisId}
-        />
-        <RaceOutcomesCard raceBreakdown={raceBreakdown} rankingsSummary={rankingsSummary} />
-      </div>
+      {zrTab === 'phenotype' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <PhenotypeRadarCard
+            phenotype={phenotype}
+            selectedAxisId={selectedAxisId}
+            onSelectAxisId={setSelectedAxisId}
+          />
+          <RaceOutcomesCard raceBreakdown={raceBreakdown} rankingsSummary={rankingsSummary} />
+        </div>
+      )}
 
       {/* Group 3: vELO Factors, Seed & RaceCraft + Conditional Power Model */}
-      {(factorBreakdown.hasData || powerModelMetrics.length > 0) && (
+      {zrTab === 'factors' && (factorBreakdown.hasData || powerModelMetrics.length > 0) && (
         <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-4">
           {factorBreakdown.hasData && (
             <div className="space-y-3">

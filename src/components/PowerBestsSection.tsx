@@ -298,11 +298,6 @@ export default function PowerBestsSection({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-bold">Power Curve ({rangeBadge})</h2>
-            {isOwnProfile && vo2max !== undefined && (
-              <span className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-xs font-semibold text-slate-200">
-                VO2max {vo2max.toFixed(1)}
-              </span>
-            )}
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
             {isOwnProfile
