@@ -19,7 +19,7 @@ type RowFilter = 'all' | 'zp' | 'hidden' | 'tracked';
 type SplitsUnit = 'w' | 'wkg';
 
 const COLUMN_DEFS = [
-  { id: 'zpPlace', label: 'ZP #' },
+  { id: 'expectedPosition', label: 'Est. #' },
   { id: 'riderCategory', label: 'Rider Cat' },
   { id: 'zrs', label: 'ZRS' },
   { id: 'velo', label: 'vELO' },
@@ -33,23 +33,22 @@ const COLUMN_DEFS = [
   { id: 'splits', label: '5s / 1m / 5m / 20m' },
   { id: 'hr', label: 'HR' },
   { id: 'weight', label: 'Weight' },
-  { id: 'powerSource', label: 'Power Src' },
   { id: 'status', label: 'Status' },
 ] as const;
 
 type ColumnId = (typeof COLUMN_DEFS)[number]['id'];
 type ColumnVisibility = Record<ColumnId, boolean>;
 
-const COLS_STORAGE_KEY = 'zv.raceDetail.standingsCols';
+const COLS_STORAGE_KEY = 'zv.raceDetail.standingsCols.v2';
 const SPLITS_UNIT_STORAGE_KEY = 'zv.raceDetail.splitsUnit';
 
 const DEFAULT_COLUMNS: ColumnVisibility = {
-  zpPlace: true,
+  expectedPosition: true,
   riderCategory: true,
   zrs: true,
   velo: true,
   phenotype: true,
-  team: true,
+  team: false,
   time: true,
   gap: true,
   avgW: true,
@@ -58,7 +57,6 @@ const DEFAULT_COLUMNS: ColumnVisibility = {
   splits: true,
   hr: true,
   weight: true,
-  powerSource: true,
   status: true,
 };
 
@@ -351,7 +349,7 @@ export default function RaceDetailStandings({
               onClick={resetColumns}
               className="text-xs text-[#fc6719] hover:underline"
             >
-              Reset all on
+              Reset defaults
             </button>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 text-xs">
@@ -456,7 +454,14 @@ export default function RaceDetailStandings({
             <thead>
               <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wide">
                 <th className="py-2 pr-3 whitespace-nowrap">#</th>
-                {columns.zpPlace && <th className="py-2 pr-3 whitespace-nowrap">ZP #</th>}
+                {columns.expectedPosition && (
+                  <th
+                    className="py-2 pr-3 whitespace-nowrap"
+                    title="ZwiftRacing.app estimated finish position"
+                  >
+                    Est. #
+                  </th>
+                )}
                 <th className="py-2 pr-3 whitespace-nowrap">Rider</th>
                 {columns.riderCategory && (
                   <th
@@ -490,7 +495,6 @@ export default function RaceDetailStandings({
                 )}
                 {columns.hr && <th className="py-2 pr-3 whitespace-nowrap">HR</th>}
                 {columns.weight && <th className="py-2 pr-3 whitespace-nowrap">Weight</th>}
-                {columns.powerSource && <th className="py-2 pr-3 whitespace-nowrap">Power</th>}
                 {columns.status && <th className="py-2 whitespace-nowrap">Status</th>}
               </tr>
             </thead>
@@ -532,9 +536,38 @@ export default function RaceDetailStandings({
                   <tr key={row.key} className={rowBg}>
                     <td className="py-2 pr-3 font-semibold whitespace-nowrap">{rankDisplay}</td>
 
-                    {columns.zpPlace && (
-                      <td className="py-2 pr-3 text-slate-400 whitespace-nowrap">
-                        {row.zpPlace != null ? row.zpPlace : '—'}
+                    {columns.expectedPosition && (
+                      <td className="py-2 pr-3 font-mono whitespace-nowrap">
+                        {row.expectedPosition != null ? (
+                          (() => {
+                            const estRounded = Math.round(row.expectedPosition);
+                            const beat =
+                              !row.didNotFinish && !row.disqualified && row.rank != null
+                                ? estRounded - row.rank
+                                : null;
+                            const range = row.expectedPlaceRange;
+                            const titleText =
+                              range?.low != null && range?.high != null
+                                ? `Expected ${row.expectedPosition.toFixed(1)} (range ${range.low}–${range.high})`
+                                : `Expected ${row.expectedPosition.toFixed(1)}`;
+                            return (
+                              <span title={titleText} className="text-slate-300">
+                                {estRounded}
+                                {beat !== null && beat !== 0 && (
+                                  <span
+                                    className={`ml-1 text-[10px] ${
+                                      beat > 0 ? 'text-emerald-400' : 'text-red-400'
+                                    }`}
+                                  >
+                                    {beat > 0 ? `+${beat}` : beat}
+                                  </span>
+                                )}
+                              </span>
+                            );
+                          })()
+                        ) : (
+                          <span className="text-slate-500">—</span>
+                        )}
                       </td>
                     )}
 
@@ -565,8 +598,12 @@ export default function RaceDetailStandings({
                           </span>
                         )}
                         {isFav && (
-                          <span className="rounded bg-amber-400/20 border border-amber-400/40 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
-                            ★ Favorite
+                          <span
+                            aria-label="Favorited rider"
+                            title="Favorited rider"
+                            className="text-amber-300 text-xs"
+                          >
+                            ★
                           </span>
                         )}
                       </div>
@@ -687,12 +724,6 @@ export default function RaceDetailStandings({
                     {columns.weight && (
                       <td className="py-2 pr-3 whitespace-nowrap">
                         {formatWeight(row.weightGrams, units)}
-                      </td>
-                    )}
-
-                    {columns.powerSource && (
-                      <td className="py-2 pr-3 text-slate-400 whitespace-nowrap">
-                        {row.powerSource ?? '—'}
                       </td>
                     )}
 

@@ -43,6 +43,7 @@ export interface UnifiedStandingRow {
   velo?: number;
   veloDelta?: number;
   expectedPosition?: number;
+  expectedPlaceRange?: { low?: number; high?: number };
   phenotype?: string;
   weightGrams?: number;
   timeSec?: number;
@@ -58,7 +59,6 @@ export interface UnifiedStandingRow {
     m5: SplitPair;
     m20: SplitPair;
   };
-  powerSource?: string;
   didNotFinish: boolean;
   disqualified: boolean;
   penalty?: string;
@@ -476,12 +476,6 @@ export function mergePenStandings(opts: {
       zr?.velo?.elo?.rawChange ??
       (veloAfter != null && veloBefore != null ? veloAfter - veloBefore : undefined);
 
-    const powerTypeFallback = zpView?.power_type ?? zpZwift?.power_type;
-    const powerSource =
-      core?.sensorData?.powerType ??
-      zr?.sensor?.powerType ??
-      (powerTypeFallback != null ? `ZP #${powerTypeFallback}` : undefined);
-
     const hiddenOnZp = zpViewLoaded && !zpView && (Boolean(core) || Boolean(zr) || Boolean(zpZwift));
 
     rows.push({
@@ -498,6 +492,7 @@ export function mergePenStandings(opts: {
       velo: veloAfter,
       veloDelta,
       expectedPosition: zr?.expectedPosition ?? zr?.velo?.elo?.expectedPosition,
+      expectedPlaceRange: zr?.expectedPlaceRange,
       phenotype: formatPhenotype(zr?.phenotype?.label),
       weightGrams,
       timeSec,
@@ -531,7 +526,6 @@ export function mergePenStandings(opts: {
           weightKg,
         ),
       },
-      powerSource,
       didNotFinish,
       disqualified,
       penalty,

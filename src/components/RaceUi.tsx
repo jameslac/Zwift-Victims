@@ -13,50 +13,37 @@ export function Stat({ label, value }: { label: string; value: string | number |
   );
 }
 
-export function AttributeList({ rows }: { rows: [string, string][] }) {
-  return (
-    <dl className="divide-y divide-slate-800 text-sm mt-2">
-      {rows.map(([key, value]) => (
-        <div key={key} className="flex flex-col sm:flex-row sm:justify-between gap-1 py-2">
-          <dt className="font-mono text-slate-400 break-all">{key}</dt>
-          <dd className="font-mono sm:text-right break-all">{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-export function AttributeKeysSummary({ label, keys }: { label: string; keys: string[] }) {
-  if (keys.length === 0) return null;
-  return (
-    <details className="rounded-xl bg-slate-950/70 border border-slate-800 p-4">
-      <summary className="cursor-pointer text-sm font-medium text-slate-300">
-        {label} ({keys.length} keys)
-      </summary>
-      <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs font-mono text-slate-400">
-        {keys.map((key) => (
-          <li key={key} className="break-all">
-            {key}
-          </li>
-        ))}
-      </ul>
-    </details>
-  );
-}
-
 export function MetricGrid({
   items,
 }: {
-  items: Array<{ label: string; value: string | number | undefined }>;
+  items: Array<{
+    label: string;
+    value: string | number | undefined;
+    tone?: 'positive' | 'negative';
+  }>;
 }) {
   return (
     <dl className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
-      {items.map((item) => (
-        <div key={item.label} className="rounded-lg bg-slate-900/70 border border-slate-800/80 p-2">
-          <dt className="text-slate-400">{item.label}</dt>
-          <dd className="mt-0.5 font-semibold">{item.value ?? '—'}</dd>
-        </div>
-      ))}
+      {items.map((item) => {
+        const containerTone =
+          item.tone === 'positive'
+            ? 'bg-emerald-500/10 border-emerald-500/30'
+            : item.tone === 'negative'
+              ? 'bg-red-500/10 border-red-500/30'
+              : 'bg-slate-900/70 border-slate-800/80';
+        const valueTone =
+          item.tone === 'positive'
+            ? 'text-emerald-400'
+            : item.tone === 'negative'
+              ? 'text-red-400'
+              : '';
+        return (
+          <div key={item.label} className={`rounded-lg border p-2 ${containerTone}`}>
+            <dt className="text-slate-400">{item.label}</dt>
+            <dd className={`mt-0.5 font-semibold ${valueTone}`}>{item.value ?? '—'}</dd>
+          </div>
+        );
+      })}
     </dl>
   );
 }

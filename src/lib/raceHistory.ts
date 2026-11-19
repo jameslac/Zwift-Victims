@@ -13,31 +13,6 @@ export type AsyncState<T> =
   | { status: 'error'; message: string }
   | { status: 'loaded'; data: T };
 
-/** Flatten nested JSON into dotted-key/value string pairs for display. */
-export function flatten(obj: unknown, prefix = ''): [string, string][] {
-  if (obj === null || typeof obj !== 'object') return [[prefix, String(obj)]];
-  const entries = Object.entries(obj as Record<string, unknown>);
-  if (entries.length === 0) return [[prefix, Array.isArray(obj) ? '[]' : '{}']];
-  return entries.flatMap(([k, v]) => {
-    const key = prefix ? (Array.isArray(obj) ? `${prefix}[${k}]` : `${prefix}.${k}`) : k;
-    return v !== null && typeof v === 'object' ? flatten(v, key) : [[key, String(v)] as [string, string]];
-  });
-}
-
-export function collectKeys(items: unknown[], excludePrefix?: string): string[] {
-  return Array.from(
-    new Set(
-      items.flatMap((item) =>
-        flatten(item)
-          .map(([key]) => key)
-          .filter((key) =>
-            excludePrefix ? !key.startsWith(`${excludePrefix}.`) && key !== excludePrefix : true,
-          ),
-      ),
-    ),
-  ).sort();
-}
-
 export function zpVal(v: unknown): string | number | undefined {
   const raw = Array.isArray(v) ? v[0] : v;
   if (raw === undefined || raw === null || raw === '') return undefined;
