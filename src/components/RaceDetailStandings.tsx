@@ -1,17 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type {
-  ZwiftProfile,
-  ZwiftPublicEvent,
-  ZwiftRaceResultEntry,
-} from '../api/zwiftCore';
-import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
-import type { ZwiftRacingEventResponse } from '../api/zwiftRacing';
+import type { ZwiftProfile } from '../api/zwiftCore';
 import { useFavorites } from '../lib/FavoritesContext';
 import { ordinal } from '../lib/raceHistory';
-import type { AsyncState } from '../lib/raceHistory';
-import { buildPenOptions, mergePenStandings } from '../lib/raceStandings';
-import type { PenOption, PenSystem, SplitPair } from '../lib/raceStandings';
+import type { PenOption, PenSystem, SplitPair, UnifiedStandingRow } from '../lib/raceStandings';
 import { formatDurationMs, formatWeight } from '../lib/units';
 import type { UnitSystem } from '../lib/units';
 
@@ -32,6 +24,8 @@ const COLUMN_DEFS = [
   { id: 'avgWkg', label: 'Avg W/kg' },
   { id: 'splits', label: '5s / 1m / 5m / 20m' },
   { id: 'hr', label: 'HR' },
+  { id: 'speed', label: 'Speed' },
+  { id: 'cadence', label: 'Cadence' },
   { id: 'weight', label: 'Weight' },
   { id: 'status', label: 'Status' },
 ] as const;
@@ -39,7 +33,7 @@ const COLUMN_DEFS = [
 type ColumnId = (typeof COLUMN_DEFS)[number]['id'];
 type ColumnVisibility = Record<ColumnId, boolean>;
 
-const COLS_STORAGE_KEY = 'zv.raceDetail.standingsCols.v2';
+const COLS_STORAGE_KEY = 'zv.raceDetail.standingsCols.v3';
 const SPLITS_UNIT_STORAGE_KEY = 'zv.raceDetail.splitsUnit';
 
 const DEFAULT_COLUMNS: ColumnVisibility = {
@@ -56,6 +50,8 @@ const DEFAULT_COLUMNS: ColumnVisibility = {
   avgWkg: true,
   splits: true,
   hr: true,
+  speed: true,
+  cadence: true,
   weight: true,
   status: true,
 };
@@ -95,6 +91,28 @@ function formatRowGap(gapSec: number | undefined): string {
   return `+${formatDurationMs(gapSec * 1000)}`;
 }
 
+function formatRowSpeed(
+  avgMps: number | undefined,
+  maxMps: number | undefined,
+  units: UnitSystem,
+): string {
+  if (avgMps == null && maxMps == null) return '—';
+  const factor = units === 'metric' ? 3.6 : 2.23694;
+  const suffix = units === 'metric' ? 'km/h' : 'mph';
+  if (avgMps != null && maxMps != null) {
+    return `${(avgMps * factor).toFixed(1)} / ${(maxMps * factor).toFixed(1)} ${suffix}`;
+  }
+  if (avgMps != null) return `${(avgMps * factor).toFixed(1)} ${suffix}`;
+  return `— / ${(maxMps! * factor).toFixed(1)} ${suffix}`;
+}
+
+function formatRowCadence(avg: number | undefined, max: number | undefined): string {
+  if (avg != null && max != null) return `${Math.round(avg)} / ${Math.round(max)} rpm`;
+  if (avg != null) return `${Math.round(avg)} rpm`;
+  if (max != null) return `— / ${Math.round(max)} rpm`;
+  return '—';
+}
+
 function penSystemBadge(system: PenSystem): { label: string; title: string } {
   switch (system) {
     case 'zrs':
@@ -119,29 +137,25 @@ export default function RaceDetailStandings({
   raceKey,
   targetRiderId,
   loggedInProfile,
-  targetProfile,
-  publicEvent,
-  zrEvent,
-  selectedSubgroupId,
-  selectedCategory,
+  penSystem,
+  pens,
+  activePen,
+  combinedRows,
+  anyLoading,
+  zpViewLoaded,
   onSelectPen,
-  coreResults,
-  zpViewResults,
-  zpZwiftResults,
   units,
 }: {
   raceKey: string;
   targetRiderId: number;
   loggedInProfile?: ZwiftProfile | null;
-  targetProfile?: ZwiftProfile;
-  publicEvent: AsyncState<ZwiftPublicEvent>;
-  zrEvent: AsyncState<ZwiftRacingEventResponse | null>;
-  selectedSubgroupId: number | null;
-  selectedCategory?: string;
+  penSystem: PenSystem;
+  pens: PenOption[];
+  activePen: PenOption | null;
+  combinedRows: UnifiedStandingRow[];
+  anyLoading: boolean;
+  zpViewLoaded: boolean;
   onSelectPen: (pen: PenOption) => void;
-  coreResults: AsyncState<ZwiftRaceResultEntry[]> | null;
-  zpViewResults: AsyncState<ZwiftPowerRaceEntry[]>;
-  zpZwiftResults: AsyncState<ZwiftPowerRaceEntry[]>;
   units: UnitSystem;
 }) {
   const { isFavorite } = useFavorites();
@@ -149,68 +163,6 @@ export default function RaceDetailStandings({
   const [splitsUnit, setSplitsUnit] = useState<SplitsUnit>(loadSplitsUnit);
   const [columns, setColumns] = useState<ColumnVisibility>(loadColumns);
   const [showColumnPicker, setShowColumnPicker] = useState(false);
-
-  const publicEventData = publicEvent.status === 'loaded' ? publicEvent.data : undefined;
-  const zrEventData = zrEvent.status === 'loaded' ? zrEvent.data : undefined;
-  const zpViewList = useMemo(
-    () => (zpViewResults.status === 'loaded' ? zpViewResults.data : []),
-    [zpViewResults],
-  );
-  const zpZwiftList = useMemo(
-    () => (zpZwiftResults.status === 'loaded' ? zpZwiftResults.data : []),
-    [zpZwiftResults],
-  );
-  const coreList = useMemo(
-    () => (coreResults?.status === 'loaded' ? coreResults.data : []),
-    [coreResults],
-  );
-
-  const { penSystem, pens } = useMemo(
-    () => buildPenOptions(publicEventData, zrEventData, zpViewList, zpZwiftList),
-    [publicEventData, zrEventData, zpViewList, zpZwiftList],
-  );
-
-  const activePen = useMemo(() => {
-    if (pens.length === 0) return null;
-    if (selectedSubgroupId != null) {
-      const bySg = pens.find((p) => p.subgroupId === selectedSubgroupId);
-      if (bySg) return bySg;
-    }
-    if (selectedCategory) {
-      const base = selectedCategory.trim().toUpperCase().replace(/\+$/, '');
-      const byCat = pens.find((p) => p.category?.toUpperCase() === base);
-      if (byCat) return byCat;
-    }
-    return pens[0];
-  }, [pens, selectedSubgroupId, selectedCategory]);
-
-  const combinedRows = useMemo(
-    () =>
-      mergePenStandings({
-        selectedPen: activePen,
-        totalPensCount: pens.length,
-        coreResults: coreList,
-        zrEvent: zrEventData,
-        zpViewResults: zpViewList,
-        zpZwiftResults: zpZwiftList,
-        zpViewLoaded: zpViewResults.status === 'loaded',
-        targetRiderId,
-        targetProfile,
-        loggedInProfile,
-      }),
-    [
-      activePen,
-      pens.length,
-      coreList,
-      zrEventData,
-      zpViewList,
-      zpZwiftList,
-      zpViewResults.status,
-      targetRiderId,
-      targetProfile,
-      loggedInProfile,
-    ],
-  );
 
   const loggedInId = loggedInProfile?.id;
   const favoritedInPen = useMemo(
@@ -281,11 +233,6 @@ export default function RaceDetailStandings({
 
   const enabledColCount = COLUMN_DEFS.filter((d) => columns[d.id]).length;
   const systemBadge = penSystemBadge(penSystem);
-  const anyLoading =
-    coreResults?.status === 'loading' ||
-    zpViewResults.status === 'loading' ||
-    zpZwiftResults.status === 'loading' ||
-    zrEvent.status === 'loading';
 
   return (
     <section
@@ -401,7 +348,7 @@ export default function RaceDetailStandings({
           {(
             [
               { id: 'all', label: `All (${combinedRows.length})`, show: true },
-              { id: 'zp', label: `ZwiftPower (${zpCount})`, show: zpViewResults.status === 'loaded' },
+              { id: 'zp', label: `ZwiftPower (${zpCount})`, show: zpViewLoaded },
               { id: 'hidden', label: `Hidden on ZP (${hiddenCount})`, show: hiddenCount > 0 },
               { id: 'tracked', label: `Rider & Favorites (${trackedCount})`, show: trackedCount > 0 },
             ] as const
@@ -494,6 +441,22 @@ export default function RaceDetailStandings({
                   </th>
                 )}
                 {columns.hr && <th className="py-2 pr-3 whitespace-nowrap">HR</th>}
+                {columns.speed && (
+                  <th
+                    className="py-2 pr-3 whitespace-nowrap"
+                    title="Avg / Max speed (Max speed available for active rider's matched activity)"
+                  >
+                    Speed
+                  </th>
+                )}
+                {columns.cadence && (
+                  <th
+                    className="py-2 pr-3 whitespace-nowrap"
+                    title="Avg / Max cadence in rpm (available for active rider's matched activity)"
+                  >
+                    Cadence
+                  </th>
+                )}
                 {columns.weight && <th className="py-2 pr-3 whitespace-nowrap">Weight</th>}
                 {columns.status && <th className="py-2 whitespace-nowrap">Status</th>}
               </tr>
@@ -718,6 +681,18 @@ export default function RaceDetailStandings({
                               row.maxHr != null ? Math.round(row.maxHr) : '—'
                             }`
                           : '—'}
+                      </td>
+                    )}
+
+                    {columns.speed && (
+                      <td className="py-2 pr-3 whitespace-nowrap">
+                        {formatRowSpeed(row.avgSpeedMps, row.maxSpeedMps, units)}
+                      </td>
+                    )}
+
+                    {columns.cadence && (
+                      <td className="py-2 pr-3 whitespace-nowrap">
+                        {formatRowCadence(row.avgCadence, row.maxCadence)}
                       </td>
                     )}
 

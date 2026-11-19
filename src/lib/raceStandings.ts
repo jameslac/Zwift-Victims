@@ -1,4 +1,6 @@
 import type {
+  ZwiftActivity,
+  ZwiftActivityDetail,
   ZwiftEventSubgroup,
   ZwiftProfile,
   ZwiftPublicEvent,
@@ -29,6 +31,19 @@ export interface SplitPair {
   wkg?: number;
 }
 
+export const POWER_CURVE_INTERVALS = [
+  { key: 's5', label: '5s' },
+  { key: 's15', label: '15s' },
+  { key: 's30', label: '30s' },
+  { key: 'm1', label: '1m' },
+  { key: 'm2', label: '2m' },
+  { key: 'm5', label: '5m' },
+  { key: 'm20', label: '20m' },
+] as const;
+
+export type PowerCurveKey = (typeof POWER_CURVE_INTERVALS)[number]['key'];
+export type PowerCurveSplits = Record<PowerCurveKey, SplitPair>;
+
 export interface UnifiedStandingRow {
   key: string;
   riderId: number;
@@ -53,12 +68,11 @@ export interface UnifiedStandingRow {
   avgWkg?: number;
   avgHr?: number;
   maxHr?: number;
-  splits: {
-    s5: SplitPair;
-    m1: SplitPair;
-    m5: SplitPair;
-    m20: SplitPair;
-  };
+  avgSpeedMps?: number;
+  maxSpeedMps?: number;
+  avgCadence?: number;
+  maxCadence?: number;
+  splits: PowerCurveSplits;
   didNotFinish: boolean;
   disqualified: boolean;
   penalty?: string;
@@ -265,7 +279,11 @@ function matchesZpZwiftPen(
   return totalPens <= 1;
 }
 
-function makeSplit(
+function positiveNum(v: unknown): number | undefined {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined;
+}
+
+export function makeSplit(
   zpWatts: unknown,
   zpWkg: unknown,
   zrWkg: number | undefined,
@@ -305,6 +323,9 @@ export function mergePenStandings(opts: {
   targetRiderId: number;
   targetProfile?: ZwiftProfile;
   loggedInProfile?: ZwiftProfile | null;
+  eventDistanceMeters?: number;
+  targetActivity?: ZwiftActivity;
+  targetActivityDetail?: ZwiftActivityDetail;
 }): UnifiedStandingRow[] {
   const {
     selectedPen,
@@ -317,6 +338,9 @@ export function mergePenStandings(opts: {
     targetRiderId,
     targetProfile,
     loggedInProfile,
+    eventDistanceMeters,
+    targetActivity,
+    targetActivityDetail,
   } = opts;
 
   const zrPen = findMatchingZrPen(
@@ -451,6 +475,65 @@ export function mergePenStandings(opts: {
       zpNum(zpZwiftRec?.bpm);
     const maxHr = zpNum(zpView?.max_hr) ?? core?.sensorData?.heartRateData?.maxHeartRate;
 
+    let avgSpeedMps: number | undefined;
+    if (typeof zr?.avgSpeed === 'number' && Number.isFinite(zr.avgSpeed) && zr.avgSpeed > 0) {
+      avgSpeedMps = zr.avgSpeed / 3.6;
+    } else if (
+      core?.activityData?.segmentDistanceInCentimeters != null &&
+      core.activityData.segmentDistanceInCentimeters > 0 &&
+      core?.activityData?.durationInMilliseconds != null &&
+      core.activityData.durationInMilliseconds > 0
+    ) {
+      avgSpeedMps =
+        core.activityData.segmentDistanceInCentimeters /
+        100 /
+        (core.activityData.durationInMilliseconds / 1000);
+    } else if (!didNotFinish && timeSec != null && timeSec > 30) {
+      const rowDistMeters =
+        zr?.distance != null && zr.distance > 0
+          ? zr.distance * 1000
+          : zpView?.distance != null && zpView.distance > 0
+            ? zpView.distance * 1000
+            : eventDistanceMeters;
+      if (rowDistMeters != null && rowDistMeters > 100) {
+        const mps = rowDistMeters / timeSec;
+        if (mps > 0 && mps < 30) avgSpeedMps = mps;
+      }
+    }
+    if (
+      avgSpeedMps == null &&
+      riderId === targetRiderId &&
+      targetActivityDetail?.avgSpeedInMetersPerSecond != null &&
+      targetActivityDetail.avgSpeedInMetersPerSecond > 0
+    ) {
+      avgSpeedMps = targetActivityDetail.avgSpeedInMetersPerSecond;
+    }
+
+    const maxSpeedMps =
+      riderId === targetRiderId
+        ? positiveNum(targetActivityDetail?.maxSpeedInMetersPerSecond)
+        : undefined;
+
+    const coreSensorRec = core?.sensorData as Record<string, unknown> | undefined;
+    const coreCadenceRec =
+      coreSensorRec?.cadenceData && typeof coreSensorRec.cadenceData === 'object'
+        ? (coreSensorRec.cadenceData as Record<string, unknown>)
+        : undefined;
+    const avgCadence =
+      positiveNum(coreSensorRec?.avgCadence) ??
+      positiveNum(coreCadenceRec?.avgCadence) ??
+      (riderId === targetRiderId
+        ? positiveNum(targetActivityDetail?.avgCadenceInRotationsPerMinute) ??
+          positiveNum(targetActivity?.avgCadence)
+        : undefined);
+    const maxCadence =
+      positiveNum(coreSensorRec?.maxCadence) ??
+      positiveNum(coreCadenceRec?.maxCadence) ??
+      (riderId === targetRiderId
+        ? positiveNum(targetActivityDetail?.maxCadenceInRotationsPerMinute) ??
+          positiveNum(targetActivity?.maxCadence)
+        : undefined);
+
     const coreZrs = extractCoreZrs(core);
     const profileZrsFallback =
       riderId === targetRiderId
@@ -502,8 +585,20 @@ export function mergePenStandings(opts: {
       avgWkg,
       avgHr,
       maxHr,
+      avgSpeedMps,
+      maxSpeedMps,
+      avgCadence,
+      maxCadence,
       splits: {
         s5: makeSplit(zpView?.w5, zpView?.wkg5, zr?.wkg5, undefined, weightKg),
+        s15: makeSplit(
+          zpView?.w15,
+          zpView?.wkg15,
+          zr?.wkg15,
+          core?.criticalP?.criticalP15Seconds,
+          weightKg,
+        ),
+        s30: makeSplit(zpView?.w30, zpView?.wkg30, zr?.wkg30, undefined, weightKg),
         m1: makeSplit(
           zpView?.w60,
           zpView?.wkg60,
@@ -511,6 +606,7 @@ export function mergePenStandings(opts: {
           core?.criticalP?.criticalP1Minute,
           weightKg,
         ),
+        m2: makeSplit(zpView?.w120, zpView?.wkg120, zr?.wkg120, undefined, weightKg),
         m5: makeSplit(
           zpView?.w300,
           zpView?.wkg300,

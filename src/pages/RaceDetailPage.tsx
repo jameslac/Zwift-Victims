@@ -25,6 +25,8 @@ import type {
 } from '../api/zwiftRacing';
 import { useAuth } from '../auth/AuthContext';
 import RaceDetailStandings from '../components/RaceDetailStandings';
+import RacePowerCurve from '../components/RacePowerCurve';
+import RaceRatingsSection from '../components/RaceRatingsSection';
 import { AppHeader, MetricGrid, PlacingBadge } from '../components/RaceUi';
 import {
   decodeHtmlEntities,
@@ -40,12 +42,12 @@ import {
   zpVal,
 } from '../lib/raceHistory';
 import type { AsyncState, MergedRace } from '../lib/raceHistory';
-import type { PenOption } from '../lib/raceStandings';
+import { buildPenOptions, makeSplit, mergePenStandings } from '../lib/raceStandings';
+import type { PenOption, PowerCurveSplits } from '../lib/raceStandings';
 import {
   formatDistance,
   formatDurationMs,
   formatElevation,
-  formatSpeed,
   formatWeight,
 } from '../lib/units';
 import { useUnits } from '../lib/UnitsContext';
@@ -78,17 +80,6 @@ function asNumericIdString(val: unknown): string | undefined {
   if (typeof val === 'string' && /^\d+$/.test(val.trim())) return val.trim();
   if (typeof val === 'number' && Number.isFinite(val) && val > 0) return String(val);
   return undefined;
-}
-
-function formatBoolean(val: unknown): string | undefined {
-  if (val === true || val === 1) return 'Yes';
-  if (val === false || val === 0) return 'No';
-  return undefined;
-}
-
-function deltaTone(val: number | undefined): 'positive' | 'negative' | undefined {
-  if (val == null || !Number.isFinite(val) || val === 0) return undefined;
-  return val > 0 ? 'positive' : 'negative';
 }
 
 export default function RaceDetailPage() {
@@ -436,6 +427,134 @@ export default function RaceDetailPage() {
     return null;
   }, [activityIdStr, activityDetailRaw, activitiesState.status, coreResultsState?.status]);
 
+  const targetProfile =
+    targetProfileState.status === 'loaded' ? targetProfileState.data : undefined;
+  const publicEvent = publicEventState.status === 'loaded' ? publicEventState.data : undefined;
+  const zrEvent = zrEventState.status === 'loaded' ? zrEventState.data : null;
+  const zrEventRider = zrEventMatch.rider;
+  const zrEventPen = zrEventMatch.pen;
+  const activityDetail =
+    activityDetailState?.status === 'loaded' ? activityDetailState.data : undefined;
+  const selectedSubgroup = publicEvent?.eventSubgroups?.find((sg) => sg.id === selectedSubgroupId);
+
+  const raceWeightGrams =
+    zpNum(bestZpEntry?.weight) != null
+      ? zpNum(bestZpEntry?.weight)! * 1000
+      : zrEntry?.race?.weight != null
+        ? zrEntry.race.weight * 1000
+        : zrEventRider?.weight != null
+          ? zrEventRider.weight * 1000
+          : myCoreEntry?.profileData?.weightInGrams;
+  const raceWeightKg = raceWeightGrams != null ? raceWeightGrams / 1000 : undefined;
+
+  const eventDistanceMeters = useMemo(() => {
+    if (bestZpEntry?.distance != null) return bestZpEntry.distance * 1000;
+    if (zrEntry?.race?.distance != null) return zrEntry.race.distance * 1000;
+    if (zrEventRider?.distance != null) return zrEventRider.distance * 1000;
+    if (zrEntry?.event?.distance != null) return zrEntry.event.distance * 1000;
+    if (zrEvent?.distance != null) return zrEvent.distance * 1000;
+    if (myCoreEntry?.activityData?.segmentDistanceInCentimeters != null) {
+      return myCoreEntry.activityData.segmentDistanceInCentimeters / 100;
+    }
+    return selectedSubgroup?.distanceInMeters ?? publicEvent?.distanceInMeters;
+  }, [
+    bestZpEntry?.distance,
+    zrEntry?.race?.distance,
+    zrEntry?.event?.distance,
+    zrEventRider?.distance,
+    zrEvent?.distance,
+    myCoreEntry?.activityData?.segmentDistanceInCentimeters,
+    selectedSubgroup?.distanceInMeters,
+    publicEvent?.distanceInMeters,
+  ]);
+
+  const zpViewList = useMemo(
+    () => (zpViewState.status === 'loaded' ? zpViewState.data : []),
+    [zpViewState],
+  );
+  const zpZwiftList = useMemo(
+    () => (zpZwiftState.status === 'loaded' ? zpZwiftState.data : []),
+    [zpZwiftState],
+  );
+  const coreList = useMemo(
+    () => (coreResultsState?.status === 'loaded' ? coreResultsState.data : []),
+    [coreResultsState],
+  );
+
+  const { penSystem, pens } = useMemo(
+    () => buildPenOptions(publicEvent, zrEvent, zpViewList, zpZwiftList),
+    [publicEvent, zrEvent, zpViewList, zpZwiftList],
+  );
+
+  const activePen = useMemo(() => {
+    if (pens.length === 0) return null;
+    if (selectedSubgroupId != null) {
+      const bySg = pens.find((p) => p.subgroupId === selectedSubgroupId);
+      if (bySg) return bySg;
+    }
+    if (selectedCategory) {
+      const base = selectedCategory.trim().toUpperCase().replace(/\+$/, '');
+      const byCat = pens.find((p) => p.category?.toUpperCase() === base);
+      if (byCat) return byCat;
+    }
+    return pens[0];
+  }, [pens, selectedSubgroupId, selectedCategory]);
+
+  const combinedRows = useMemo(
+    () =>
+      mergePenStandings({
+        selectedPen: activePen,
+        totalPensCount: pens.length,
+        coreResults: coreList,
+        zrEvent,
+        zpViewResults: zpViewList,
+        zpZwiftResults: zpZwiftList,
+        zpViewLoaded: zpViewState.status === 'loaded',
+        targetRiderId: targetRiderId ?? 0,
+        targetProfile,
+        loggedInProfile: profile,
+        eventDistanceMeters,
+        targetActivity: matchedActivity,
+        targetActivityDetail: activityDetail,
+      }),
+    [
+      activePen,
+      pens.length,
+      coreList,
+      zrEvent,
+      zpViewList,
+      zpZwiftList,
+      zpViewState.status,
+      targetRiderId,
+      targetProfile,
+      profile,
+      eventDistanceMeters,
+      matchedActivity,
+      activityDetail,
+    ],
+  );
+
+  const targetFallbackSplits = useMemo<PowerCurveSplits>(() => {
+    const zp = bestZpEntry;
+    const zrR = zrEntry?.race ?? zrEventRider;
+    const cp = myCoreEntry?.criticalP;
+    return {
+      s5: makeSplit(zp?.w5, zp?.wkg5, zrR?.wkg5, undefined, raceWeightKg),
+      s15: makeSplit(zp?.w15, zp?.wkg15, zrR?.wkg15, cp?.criticalP15Seconds, raceWeightKg),
+      s30: makeSplit(zp?.w30, zp?.wkg30, zrR?.wkg30, undefined, raceWeightKg),
+      m1: makeSplit(zp?.w60, zp?.wkg60, zrR?.wkg60, cp?.criticalP1Minute, raceWeightKg),
+      m2: makeSplit(zp?.w120, zp?.wkg120, zrR?.wkg120, undefined, raceWeightKg),
+      m5: makeSplit(zp?.w300, zp?.wkg300, zrR?.wkg300, cp?.criticalP5Minutes, raceWeightKg),
+      m20: makeSplit(zp?.w1200, zp?.wkg1200, zrR?.wkg1200, cp?.criticalP20Minutes, raceWeightKg),
+    };
+  }, [bestZpEntry, zrEntry, zrEventRider, myCoreEntry, raceWeightKg]);
+
+  const standingsAnyLoading =
+    coreResultsState?.status === 'loading' ||
+    zpViewState.status === 'loading' ||
+    zpZwiftState.status === 'loading' ||
+    zrEventState.status === 'loading';
+
   function handleSelectPen(pen: PenOption) {
     setPenChoice({ raceKey, subgroupId: pen.subgroupId, category: pen.category });
   }
@@ -482,21 +601,11 @@ export default function RaceDetailPage() {
   }
 
   const backPath = isOwnProfile ? '/' : `/riders/${targetRiderId}`;
-  const targetProfile =
-    targetProfileState.status === 'loaded' ? targetProfileState.data : undefined;
   const rawRiderName = targetProfile
     ? [targetProfile.firstName, targetProfile.lastName].filter(Boolean).join(' ') ||
       `Rider ${targetRiderId}`
     : bestZpEntry?.name || zrEventMatch.rider?.name || `Rider ${targetRiderId}`;
   const riderName = decodeHtmlEntities(rawRiderName);
-
-  const publicEvent = publicEventState.status === 'loaded' ? publicEventState.data : undefined;
-  const zrEvent = zrEventState.status === 'loaded' ? zrEventState.data : null;
-  const zrEventRider = zrEventMatch.rider;
-  const zrEventPen = zrEventMatch.pen;
-  const activityDetail =
-    activityDetailState?.status === 'loaded' ? activityDetailState.data : undefined;
-  const selectedSubgroup = publicEvent?.eventSubgroups?.find((sg) => sg.id === selectedSubgroupId);
 
   const raceTitle = decodeHtmlEntities(
     bestZpEntry?.event_title ||
@@ -550,36 +659,12 @@ export default function RaceDetailPage() {
       ? myCoreEntry.activityData.durationInMilliseconds / 1000
       : undefined);
   const gapSec = bestZpEntry?.gap ?? zrEntry?.race?.gap ?? zrEventRider?.gap;
-  const distMeters =
-    bestZpEntry?.distance != null
-      ? bestZpEntry.distance * 1000
-      : zrEntry?.race?.distance != null
-        ? zrEntry.race.distance * 1000
-        : zrEventRider?.distance != null
-          ? zrEventRider.distance * 1000
-          : zrEntry?.event?.distance != null
-            ? zrEntry.event.distance * 1000
-            : zrEvent?.distance != null
-              ? zrEvent.distance * 1000
-              : myCoreEntry?.activityData?.segmentDistanceInCentimeters != null
-                ? myCoreEntry.activityData.segmentDistanceInCentimeters / 100
-                : (selectedSubgroup?.distanceInMeters ?? publicEvent?.distanceInMeters);
   const elevationMeters =
     zrEntry?.event?.elevation ??
     zrEvent?.elevation ??
     (myCoreEntry?.activityData?.elevationInCentimeters != null
       ? myCoreEntry.activityData.elevationInCentimeters / 100
       : matchedActivity?.totalElevation);
-
-  const raceWeightGrams =
-    zpNum(bestZpEntry?.weight) != null
-      ? zpNum(bestZpEntry?.weight)! * 1000
-      : zrEntry?.race?.weight != null
-        ? zrEntry.race.weight * 1000
-        : zrEventRider?.weight != null
-          ? zrEventRider.weight * 1000
-          : myCoreEntry?.profileData?.weightInGrams;
-  const raceWeightKg = raceWeightGrams != null ? raceWeightGrams / 1000 : undefined;
 
   const avgPower =
     zpVal(bestZpEntry?.avg_power) ??
@@ -611,15 +696,6 @@ export default function RaceDetailPage() {
   const calories = myCoreEntry?.activityData?.calories ?? matchedActivity?.calories;
   const movingTimeMs = matchedActivity?.movingTimeInMs;
 
-  const avgHr =
-    zpVal(bestZpEntry?.avg_hr) ??
-    myCoreEntry?.sensorData?.heartRateData?.avgHeartRate ??
-    activityDetail?.avgHeartRate;
-  const maxHr =
-    zpVal(bestZpEntry?.max_hr) ??
-    myCoreEntry?.sensorData?.heartRateData?.maxHeartRate ??
-    activityDetail?.maxHeartRate;
-
   const coreZrs = extractCoreZrs(myCoreEntry);
 
   const activityPhotos = extractActivityPhotos(matchedActivity, activityDetail);
@@ -642,93 +718,11 @@ export default function RaceDetailPage() {
     publicEvent?.laps ??
     activityDetail?.eventInfo?.laps;
 
-  const powerCurveRows = [
-    {
-      interval: '5s',
-      zpW: zpVal(bestZpEntry?.w5),
-      zpWkg: zpVal(bestZpEntry?.wkg5),
-      zrWkg: (zrEntry?.race?.wkg5 ?? zrEventRider?.wkg5)?.toFixed(2),
-      coreW: undefined as number | undefined,
-    },
-    {
-      interval: '15s',
-      zpW: zpVal(bestZpEntry?.w15),
-      zpWkg: zpVal(bestZpEntry?.wkg15),
-      zrWkg: (zrEntry?.race?.wkg15 ?? zrEventRider?.wkg15)?.toFixed(2),
-      coreW: myCoreEntry?.criticalP?.criticalP15Seconds,
-    },
-    {
-      interval: '30s',
-      zpW: zpVal(bestZpEntry?.w30),
-      zpWkg: zpVal(bestZpEntry?.wkg30),
-      zrWkg: (zrEntry?.race?.wkg30 ?? zrEventRider?.wkg30)?.toFixed(2),
-      coreW: undefined,
-    },
-    {
-      interval: '1m',
-      zpW: zpVal(bestZpEntry?.w60),
-      zpWkg: zpVal(bestZpEntry?.wkg60),
-      zrWkg: (zrEntry?.race?.wkg60 ?? zrEventRider?.wkg60)?.toFixed(2),
-      coreW: myCoreEntry?.criticalP?.criticalP1Minute,
-    },
-    {
-      interval: '2m',
-      zpW: zpVal(bestZpEntry?.w120),
-      zpWkg: zpVal(bestZpEntry?.wkg120),
-      zrWkg: (zrEntry?.race?.wkg120 ?? zrEventRider?.wkg120)?.toFixed(2),
-      coreW: undefined,
-    },
-    {
-      interval: '5m',
-      zpW: zpVal(bestZpEntry?.w300),
-      zpWkg: zpVal(bestZpEntry?.wkg300),
-      zrWkg: (zrEntry?.race?.wkg300 ?? zrEventRider?.wkg300)?.toFixed(2),
-      coreW: myCoreEntry?.criticalP?.criticalP5Minutes,
-    },
-    {
-      interval: '20m',
-      zpW: zpVal(bestZpEntry?.w1200),
-      zpWkg: zpVal(bestZpEntry?.wkg1200),
-      zrWkg: (zrEntry?.race?.wkg1200 ?? zrEventRider?.wkg1200)?.toFixed(2),
-      coreW: myCoreEntry?.criticalP?.criticalP20Minutes,
-    },
-  ];
-
-  const eloBefore = zrEntry?.velo?.elo?.before ?? zrEventRider?.velo?.elo?.before;
-  const eloAfter = zrEntry?.velo?.elo?.after ?? zrEventRider?.velo?.elo?.after;
-  const eloAdjDelta = zrEntry?.velo?.elo?.adjustedChange ?? zrEventRider?.velo?.elo?.adjustedChange;
-  const eloRawDelta = zrEntry?.velo?.elo?.rawChange ?? zrEventRider?.velo?.elo?.rawChange;
-  const sof = zrEntry?.velo?.elo?.eventRating ?? zrEventRider?.velo?.elo?.eventRating;
-  const expectedPos =
-    zrEntry?.velo?.elo?.expectedPosition ??
-    zrEventRider?.velo?.elo?.expectedPosition ??
-    zrEventRider?.expectedPosition;
-  const intensity = zrEntry?.velo?.intensity ?? zrEventRider?.velo?.intensity;
-  const eloFactorsMap = zrEntry?.velo?.elo?.factors ?? zrEventRider?.velo?.elo?.factors;
-  const eloFactors = eloFactorsMap ? Object.entries(eloFactorsMap) : [];
-
   const switchedPenDifferent =
     selectedCategory &&
     riderCategory &&
     selectedCategory.trim().toUpperCase().replace(/\+$/, '') !==
       riderCategory.trim().toUpperCase().replace(/\+$/, '');
-
-  const eloDeltaVal =
-    eloAfter != null && eloBefore != null ? eloAfter - eloBefore : eloAdjDelta;
-  const expectedBeat =
-    bestVerifiedPlace != null && expectedPos != null
-      ? Math.round(expectedPos) - bestVerifiedPlace
-      : undefined;
-  const legacyBefore = zrEntry?.legacy?.ratingBefore ?? zrEventRider?.ratingBefore;
-  const legacyAfter = zrEntry?.legacy?.rating ?? zrEventRider?.rating;
-  const legacyDelta =
-    zrEntry?.legacy?.ratingDelta ??
-    zrEventRider?.ratingDelta ??
-    (legacyAfter != null && legacyBefore != null ? legacyAfter - legacyBefore : undefined);
-  const zpSkillGainNum =
-    bestZpEntry?.skill_gain != null && bestZpEntry.skill_gain !== ''
-      ? Number(bestZpEntry.skill_gain)
-      : undefined;
 
   return (
     <main className="min-h-dvh max-w-6xl mx-auto p-4 sm:p-8 space-y-6">
@@ -924,7 +918,7 @@ export default function RaceDetailPage() {
               value: timeSec != null ? formatDurationMs(timeSec * 1000) : undefined,
             },
             { label: 'Gap', value: formatGapSeconds(gapSec) },
-            { label: 'Distance', value: formatDistance(distMeters, units) },
+            { label: 'Distance', value: formatDistance(eventDistanceMeters, units) },
             { label: 'Elevation', value: formatElevation(elevationMeters, units) },
             { label: 'Avg Power', value: avgPower !== undefined ? `${avgPower} W` : undefined },
             { label: 'NP', value: np !== undefined ? `${np} W` : undefined },
@@ -941,327 +935,38 @@ export default function RaceDetailPage() {
         />
       </section>
 
-      {/* Tier 2: Full Power Curve & Physiology */}
-      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-4">
-        <div>
-          <h2 className="text-lg font-bold">Power Curve, Physiology &amp; Sensors</h2>
-          <p className="text-xs text-slate-400">
-            Critical power splits and heart rate / cadence / sensor telemetry across ZwiftPower,
-            ZwiftRacing.app, and Zwift Core.
-          </p>
-        </div>
+      {/* Tier 2: Interactive Multi-Rider Power Curve */}
+      <RacePowerCurve
+        penKey={`${raceKey}:${activePen?.key ?? 'default'}`}
+        targetRiderId={targetRiderId}
+        targetRiderName={riderName}
+        targetFallbackSplits={targetFallbackSplits}
+        rows={combinedRows}
+        hrEfficiency={zpVal(bestZpEntry?.hreff)}
+      />
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wide">
-                <th className="py-2 pr-4">Interval</th>
-                <th className="py-2 pr-4">ZP Watts</th>
-                <th className="py-2 pr-4">ZP W/kg</th>
-                <th className="py-2 pr-4">ZwiftRacing W/kg</th>
-                <th className="py-2">Zwift Core criticalP</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/70">
-              {powerCurveRows.map((row) => (
-                <tr key={row.interval}>
-                  <td className="py-2 pr-4 font-semibold">{row.interval}</td>
-                  <td className="py-2 pr-4 font-mono">
-                    {row.zpW !== undefined ? `${row.zpW} W` : '—'}
-                  </td>
-                  <td className="py-2 pr-4 font-mono">
-                    {row.zpWkg !== undefined ? `${row.zpWkg} W/kg` : '—'}
-                  </td>
-                  <td className="py-2 pr-4 font-mono">
-                    {row.zrWkg !== undefined ? `${row.zrWkg} W/kg` : '—'}
-                  </td>
-                  <td className="py-2 font-mono">
-                    {row.coreW !== undefined ? `${Math.round(row.coreW)} W` : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <MetricGrid
-          items={[
-            {
-              label: 'Avg / Max HR',
-              value:
-                avgHr !== undefined || maxHr !== undefined
-                  ? `${avgHr ?? '—'} / ${maxHr ?? '—'} bpm`
-                  : undefined,
-            },
-            { label: 'HR Recovery (hrr)', value: zpVal(bestZpEntry?.hrr) },
-            { label: 'HR Efficiency', value: zpVal(bestZpEntry?.hreff) },
-            {
-              label: 'Avg / Max Cadence',
-              value:
-                activityDetail?.avgCadenceInRotationsPerMinute != null ||
-                activityDetail?.maxCadenceInRotationsPerMinute != null
-                  ? `${
-                      activityDetail.avgCadenceInRotationsPerMinute != null
-                        ? Math.round(activityDetail.avgCadenceInRotationsPerMinute)
-                        : '—'
-                    } / ${
-                      activityDetail.maxCadenceInRotationsPerMinute != null
-                        ? Math.round(activityDetail.maxCadenceInRotationsPerMinute)
-                        : '—'
-                    } rpm`
-                  : undefined,
-            },
-            {
-              label: 'Avg Speed',
-              value:
-                activityDetail?.avgSpeedInMetersPerSecond != null
-                  ? formatSpeed(activityDetail.avgSpeedInMetersPerSecond, units)
-                  : zrEventRider?.avgSpeed != null
-                    ? formatSpeed(zrEventRider.avgSpeed / 3.6, units)
-                    : undefined,
-            },
-            {
-              label: 'Max Speed',
-              value: formatSpeed(activityDetail?.maxSpeedInMetersPerSecond, units),
-            },
-            {
-              label: 'Power Type',
-              value:
-                zrEntry?.sensor?.powerType ??
-                zrEventRider?.sensor?.powerType ??
-                myCoreEntry?.sensorData?.powerType ??
-                (bestZpEntry?.power_type != null ? `ZP type ${bestZpEntry.power_type}` : undefined),
-            },
-            {
-              label: 'Steering',
-              value:
-                formatBoolean(zrEntry?.sensor?.steering ?? zrEventRider?.sensor?.steering) ??
-                formatBoolean(myCoreEntry?.sensorData?.pairedSteeringDevice),
-            },
-            {
-              label: 'Trainer Diff.',
-              value:
-                (zrEntry?.sensor?.trainerDifficulty ??
-                  zrEventRider?.sensor?.trainerDifficulty) != null
-                  ? `${Math.round((zrEntry?.sensor?.trainerDifficulty ?? zrEventRider?.sensor?.trainerDifficulty)! * 100)}%`
-                  : undefined,
-            },
-            {
-              label: 'HRM',
-              value:
-                formatBoolean(
-                  zrEntry?.sensor?.heartRateMonitor ?? zrEventRider?.sensor?.heartRateMonitor,
-                ) ?? (bestZpEntry?.hrm != null ? formatBoolean(bestZpEntry.hrm) : undefined),
-            },
-            { label: 'Power Src (ZP)', value: bestZpEntry?.src },
-            {
-              label: 'Estimated Power',
-              value:
-                bestZpEntry?.is_guess != null
-                  ? bestZpEntry.is_guess === 1
-                    ? 'Estimated'
-                    : 'Measured'
-                  : undefined,
-            },
-          ]}
-        />
-      </section>
-
-      {/* Tier 2: Ratings, Points & Event Internals */}
-      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-5">
-        <div>
-          <h2 className="text-lg font-bold">Ratings, Points &amp; Event Internals</h2>
-          <p className="text-xs text-slate-400">
-            ZwiftRacing vELO deltas, Strength of Field, ZRS, and ZwiftPower ranking metrics.
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <h3 className="text-xs uppercase tracking-wide text-slate-400 font-semibold">
-            ZwiftRacing.app vELO &amp; Points
-          </h3>
-          <MetricGrid
-            items={[
-              {
-                label: 'vELO',
-                value:
-                  eloBefore != null && eloAfter != null
-                    ? `${eloBefore.toFixed(1)} → ${eloAfter.toFixed(1)}`
-                    : zrEventRider?.riderVelo?.race != null
-                      ? zrEventRider.riderVelo.race.toFixed(1)
-                      : undefined,
-                tone: deltaTone(eloDeltaVal),
-              },
-              {
-                label: 'Adjusted Δ',
-                value:
-                  eloAdjDelta != null
-                    ? `${eloAdjDelta >= 0 ? '+' : ''}${eloAdjDelta.toFixed(2)}`
-                    : undefined,
-                tone: deltaTone(eloAdjDelta),
-              },
-              {
-                label: 'Raw Δ',
-                value:
-                  eloRawDelta != null
-                    ? `${eloRawDelta >= 0 ? '+' : ''}${eloRawDelta.toFixed(2)}`
-                    : undefined,
-                tone: deltaTone(eloRawDelta),
-              },
-              {
-                label: 'SOF (eventRating)',
-                value: sof != null ? sof.toFixed(0) : undefined,
-              },
-              {
-                label: 'Expected Pos',
-                value:
-                  expectedPos != null
-                    ? `${expectedPos.toFixed(1)}${
-                        expectedBeat != null && expectedBeat !== 0
-                          ? ` (${expectedBeat > 0 ? `+${expectedBeat}` : expectedBeat})`
-                          : ''
-                      }`
-                    : undefined,
-                tone: deltaTone(expectedBeat),
-              },
-              {
-                label: 'Intensity',
-                value: intensity != null ? intensity.toFixed(2) : undefined,
-              },
-              {
-                label: 'zPoints',
-                value:
-                  zrEntry?.velo?.points?.value != null
-                    ? zrEntry.velo.points.value.toFixed(1)
-                    : undefined,
-              },
-              {
-                label: 'GC / Sprint / Climb',
-                value:
-                  zrEntry?.velo?.points &&
-                  (zrEntry.velo.points.gc != null ||
-                    zrEntry.velo.points.sprint != null ||
-                    zrEntry.velo.points.climb != null)
-                    ? `${zrEntry.velo.points.gc ?? '—'} / ${zrEntry.velo.points.sprint ?? '—'} / ${zrEntry.velo.points.climb ?? '—'}`
-                    : undefined,
-              },
-              {
-                label: 'ZRS (Core)',
-                value:
-                  coreZrs.score != null
-                    ? `${Math.round(coreZrs.score)}${coreZrs.delta != null && coreZrs.delta !== 0 ? ` (${coreZrs.delta > 0 ? '+' : ''}${Math.round(coreZrs.delta)})` : ''}`
-                    : targetProfile?.competitionMetrics?.racingScore != null
-                      ? Math.round(targetProfile.competitionMetrics.racingScore)
-                      : undefined,
-                tone: deltaTone(coreZrs.delta),
-              },
-              {
-                label: 'Legacy Rating',
-                value:
-                  legacyBefore != null && legacyAfter != null
-                    ? `${legacyBefore.toFixed(0)} → ${legacyAfter.toFixed(0)}`
-                    : undefined,
-                tone: deltaTone(legacyDelta),
-              },
-              {
-                label: 'Legacy Δ',
-                value:
-                  legacyDelta != null
-                    ? `${legacyDelta >= 0 ? '+' : ''}${legacyDelta.toFixed(1)}`
-                    : undefined,
-                tone: deltaTone(legacyDelta),
-              },
-              { label: 'Points Status', value: zrEntry?.pointsStatus ?? zrEventRider?.pointsStatus },
-            ]}
-          />
-
-          {eloFactors.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {eloFactors.map(([k, v]) => {
-                let displayVal: string;
-                let factorDelta: number | undefined;
-                if (typeof v === 'number') {
-                  displayVal = v.toFixed(2);
-                } else if (v && typeof v === 'object' && !Array.isArray(v)) {
-                  const rec = v as Record<string, unknown>;
-                  if (typeof rec.skillDelta === 'number' && Number.isFinite(rec.skillDelta)) {
-                    factorDelta = rec.skillDelta;
-                  } else if (typeof rec.before === 'number' && typeof rec.after === 'number') {
-                    factorDelta = rec.after - rec.before;
-                  }
-                  if (typeof rec.before === 'number' && typeof rec.after === 'number') {
-                    displayVal = `${rec.before.toFixed(1)} → ${rec.after.toFixed(1)}`;
-                  } else {
-                    displayVal = JSON.stringify(v);
-                  }
-                } else {
-                  displayVal = String(v);
-                }
-                const factorTone = deltaTone(factorDelta);
-                const chipClasses =
-                  factorTone === 'positive'
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                    : factorTone === 'negative'
-                      ? 'bg-red-500/10 border-red-500/30 text-red-300'
-                      : 'bg-slate-950/70 border-slate-800 text-slate-300';
-                return (
-                  <span
-                    key={k}
-                    className={`rounded-lg border px-2.5 py-1 text-[11px] font-mono ${chipClasses}`}
-                  >
-                    {k}: {displayVal}
-                  </span>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <h3 className="text-xs uppercase tracking-wide text-slate-400 font-semibold">
-            ZwiftPower Ranking Internals
-          </h3>
-          <MetricGrid
-            items={[
-              { label: 'Skill', value: bestZpEntry?.skill },
-              { label: 'Skill Before', value: bestZpEntry?.skill_b },
-              {
-                label: 'Skill Gain',
-                value: bestZpEntry?.skill_gain,
-                tone: deltaTone(
-                  zpSkillGainNum != null && Number.isFinite(zpSkillGainNum)
-                    ? zpSkillGainNum
-                    : undefined,
-                ),
-              },
-              { label: 'Division', value: bestZpEntry?.div },
-              { label: 'Women Div', value: bestZpEntry?.divw },
-              { label: 'ZP Points', value: bestZpEntry?.pts },
-              { label: 'Points Pos', value: bestZpEntry?.pts_pos },
-              { label: 'zEff', value: bestZpEntry?.zeff },
-              { label: 'CP', value: bestZpEntry?.cp },
-              { label: 'VTTA', value: bestZpEntry?.vtta },
-              { label: 'ZADA', value: bestZpEntry?.zada },
-              { label: 'Info / Strike', value: bestZpEntry?.strike ?? bestZpEntry?.info },
-            ]}
-          />
-        </div>
-      </section>
+      {/* Tier 2: Ratings & Performance Impact */}
+      <RaceRatingsSection
+        zrEntry={zrEntry}
+        zrEventRider={zrEventRider}
+        bestZpEntry={bestZpEntry}
+        coreZrs={coreZrs}
+        fallbackZrsScore={targetProfile?.competitionMetrics?.racingScore}
+        bestVerifiedPlace={bestVerifiedPlace}
+      />
 
       {/* Tier 2: Combined Event Standings */}
       <RaceDetailStandings
         raceKey={raceKey}
         targetRiderId={targetRiderId}
         loggedInProfile={profile}
-        targetProfile={targetProfile}
-        publicEvent={publicEventState}
-        zrEvent={zrEventState}
-        selectedSubgroupId={selectedSubgroupId}
-        selectedCategory={selectedCategory}
+        penSystem={penSystem}
+        pens={pens}
+        activePen={activePen}
+        combinedRows={combinedRows}
+        anyLoading={standingsAnyLoading}
+        zpViewLoaded={zpViewState.status === 'loaded'}
         onSelectPen={handleSelectPen}
-        coreResults={coreResultsState}
-        zpViewResults={zpViewState}
-        zpZwiftResults={zpZwiftState}
         units={units}
       />
     </main>
