@@ -3,11 +3,16 @@ import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
 import { isRaceEntry } from './raceHistory';
 
 /**
- * Standard power-curve durations from 5 seconds up to 1 hour (3600 seconds),
- * covering Zwift Feed's 5s–40m intervals plus 2m (ZwiftPower) and 60m (1 hr).
+ * Standard power-curve durations from 1 second up to 1 hour (3600 seconds),
+ * covering Zwift Feed's intervals plus 2m (ZwiftPower) and 60m (1 hr).
  */
 export const STANDARD_POWER_DURATIONS = [
-  5, 15, 30, 60, 120, 180, 300, 600, 720, 900, 1200, 1800, 2400, 3600,
+  1, 5, 15, 30, 60, 120, 180, 300, 600, 720, 900, 1200, 1800, 2400, 3600,
+] as const;
+
+/** Default benchmark intervals shown as selectable markers on the chart. */
+export const DEFAULT_MARKED_DURATIONS = [
+  1, 5, 15, 30, 60, 180, 300, 600, 900, 1200, 2400, 3600,
 ] as const;
 
 const ZP_SPLIT_DURATIONS = new Set([5, 15, 30, 60, 120, 300, 1200]);
@@ -295,4 +300,97 @@ export function buildPowerBests({
     zwift90Day: zwift90DayMap.get(seconds),
     zpRaceBest: getZpRaceBest(raceEntries, seconds, coreWeightKg),
   }));
+}
+
+export type PowerMetricUnit = 'watts' | 'wkg';
+export type PowerSeriesKey = 'zwiftAllTime' | 'zwift90Day' | 'zpRaceBest';
+
+export interface PowerSeriesConfig {
+  key: PowerSeriesKey;
+  label: string;
+  color: string;
+  ownOnly: boolean;
+}
+
+export const POWER_SERIES_CONFIGS: readonly PowerSeriesConfig[] = [
+  { key: 'zwiftAllTime', label: 'Zwift All-Time', color: '#fc6719', ownOnly: true },
+  { key: 'zwift90Day', label: 'Zwift 90-Day', color: '#38bdf8', ownOnly: true },
+  { key: 'zpRaceBest', label: 'ZwiftPower Race Best', color: '#34d399', ownOnly: false },
+];
+
+const PREFERRED_LOG_TICKS = new Set([1, 5, 15, 30, 60, 180, 300, 600, 1200, 2400, 3600]);
+
+export function getEffortMetricValue(
+  effort: PowerEffort | undefined,
+  unit: PowerMetricUnit,
+): number | undefined {
+  if (!effort) return undefined;
+  return unit === 'watts' ? effort.watts : effort.wkg;
+}
+
+export function formatEffortPrimary(
+  effort: PowerEffort | undefined,
+  unit: PowerMetricUnit,
+): string {
+  if (!effort) return '—';
+  if (unit === 'watts') {
+    return effort.watts !== undefined ? `${Math.round(effort.watts)} W` : '—';
+  }
+  return effort.wkg !== undefined ? `${effort.wkg.toFixed(2)} W/kg` : '—';
+}
+
+export function formatEffortSecondary(
+  effort: PowerEffort | undefined,
+  unit: PowerMetricUnit,
+): string | undefined {
+  if (!effort) return undefined;
+  if (unit === 'watts') {
+    return effort.wkg !== undefined ? `${effort.wkg.toFixed(2)} W/kg` : undefined;
+  }
+  return effort.watts !== undefined ? `${Math.round(effort.watts)} W` : undefined;
+}
+
+export function formatEffortDate(date: string | number | undefined): string | undefined {
+  if (date === undefined || date === null || date === '') return undefined;
+  const parsed = typeof date === 'number' ? new Date(date * 1000) : new Date(date);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return parsed.toLocaleDateString(undefined, { dateStyle: 'medium' });
+}
+
+export function computeNiceYScale(
+  maxVal: number,
+  unit: PowerMetricUnit,
+): { maxY: number; ticks: number[] } {
+  const safeMax = maxVal > 0 ? maxVal : unit === 'watts' ? 400 : 6;
+  const rawStep = safeMax / 4;
+  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const residual = rawStep / mag;
+  const niceFactor =
+    residual <= 1 ? 1 : residual <= 2 ? 2 : residual <= 2.5 ? 2.5 : residual <= 5 ? 5 : 10;
+  const step = niceFactor * mag;
+  const maxY = Math.ceil(safeMax / step) * step;
+  const ticks: number[] = [];
+  for (let v = 0; v <= maxY + step * 0.001; v += step) {
+    ticks.push(Number(v.toFixed(4)));
+  }
+  return { maxY, ticks };
+}
+
+export function pickLogAxisTicks(
+  rows: PowerBestRow[],
+  xFor: (seconds: number) => number,
+  minPixelGap = 32,
+): PowerBestRow[] {
+  const candidates = rows.filter((r) => PREFERRED_LOG_TICKS.has(r.seconds));
+  const pool = candidates.length >= 2 ? candidates : rows;
+  const chosen: PowerBestRow[] = [];
+  let lastX = -Infinity;
+  for (const row of pool) {
+    const x = xFor(row.seconds);
+    if (x - lastX >= minPixelGap) {
+      chosen.push(row);
+      lastX = x;
+    }
+  }
+  return chosen;
 }

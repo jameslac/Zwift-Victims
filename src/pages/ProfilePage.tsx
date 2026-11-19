@@ -899,8 +899,13 @@ export default function ProfilePage({
       )}
 
       <PowerBestsSection
+        riderName={name}
         isOwnProfile={isOwnProfile}
         weightGrams={profile.weight}
+        units={units}
+        ftp={profile.ftp}
+        zftp={zftp}
+        zmap={zmap}
         powerProfileState={powerProfileState}
         zpState={zpState}
       />
