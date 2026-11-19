@@ -32,7 +32,7 @@ const COLUMN_DEFS = [
 type ColumnId = (typeof COLUMN_DEFS)[number]['id'];
 type ColumnVisibility = Record<ColumnId, boolean>;
 
-const COLS_STORAGE_KEY = 'zv.raceDetail.standingsCols.v6';
+const STANDINGS_COLS_PREF = 'zv.raceDetail.standingsCols.v6';
 const SPLITS_UNIT_STORAGE_KEY = 'zv.raceDetail.splitsUnit';
 
 const DEFAULT_COLUMNS: ColumnVisibility = {
@@ -56,7 +56,7 @@ const DEFAULT_COLUMNS: ColumnVisibility = {
 
 function loadColumns(): ColumnVisibility {
   try {
-    const raw = localStorage.getItem(COLS_STORAGE_KEY);
+    const raw = localStorage.getItem(STANDINGS_COLS_PREF);
     if (!raw) return DEFAULT_COLUMNS;
     const parsed = JSON.parse(raw) as Partial<Record<ColumnId, unknown>>;
     const next = { ...DEFAULT_COLUMNS };
@@ -196,7 +196,7 @@ export default function RaceDetailStandings({
     setColumns((prev) => {
       const next = { ...prev, [id]: !prev[id] };
       try {
-        localStorage.setItem(COLS_STORAGE_KEY, JSON.stringify(next));
+        localStorage.setItem(STANDINGS_COLS_PREF, JSON.stringify(next));
       } catch {
         // Ignore storage errors
       }
@@ -207,7 +207,7 @@ export default function RaceDetailStandings({
   function resetColumns() {
     setColumns(DEFAULT_COLUMNS);
     try {
-      localStorage.setItem(COLS_STORAGE_KEY, JSON.stringify(DEFAULT_COLUMNS));
+      localStorage.setItem(STANDINGS_COLS_PREF, JSON.stringify(DEFAULT_COLUMNS));
     } catch {
       // Ignore storage errors
     }

@@ -1,0 +1,6 @@
+# False positives on localStorage column preference key (`COLS_STORAGE_KEY`) in historical commits
+2940a6973b89d7bde7a88224a36f3698576e9f39:src/components/RaceDetailStandings.tsx:generic-api-key:35
+1381b7b1d64a5703afb7823d811ff3d5321797e6:src/components/RaceDetailStandings.tsx:generic-api-key:35
+272c5b221267c4389077370f5772fc2d49aa8d5e:src/components/RaceDetailStandings.tsx:generic-api-key:35
+ddcd5bd73298b52fd32131c326aa4a856e7efabc:src/components/RaceDetailStandings.tsx:generic-api-key:36
+66ca19fed8a7906c0beeffc0cfd0d060f5fbefc7:src/components/RaceDetailStandings.tsx:generic-api-key:42
