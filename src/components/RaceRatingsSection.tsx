@@ -119,7 +119,7 @@ export default function RaceRatingsSection({
   coreZrs,
   fallbackZrsScore,
   bestVerifiedPlace,
-  expectedMode = 'route',
+  expectedMode = 'overall',
   onToggleExpectedMode,
 }: {
   zrEntry?: ZwiftRacingRaceEntry;

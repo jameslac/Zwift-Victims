@@ -60,9 +60,9 @@ const EXPECTED_MODE_STORAGE_KEY = 'zv.raceDetail.expectedMode';
 
 function loadExpectedMode(): ExpectedPositionMode {
   try {
-    return localStorage.getItem(EXPECTED_MODE_STORAGE_KEY) === 'overall' ? 'overall' : 'route';
+    return localStorage.getItem(EXPECTED_MODE_STORAGE_KEY) === 'route' ? 'route' : 'overall';
   } catch {
-    return 'route';
+    return 'overall';
   }
 }
 
@@ -130,6 +130,7 @@ export default function RaceDetailPage() {
     useState<KeyedState<ZwiftActivityDetail> | null>(null);
   const [expectedMode, setExpectedMode] = useState<ExpectedPositionMode>(loadExpectedMode);
   const [penProfilesMap, setPenProfilesMap] = useState<Map<number, ZwiftProfile>>(() => new Map());
+  const [visibleCandidateKey, setVisibleCandidateKey] = useState<string>('');
   const failedProfileIdsRef = useRef<Set<number>>(new Set());
 
   const toggleExpectedMode = useCallback(() => {
@@ -593,23 +594,17 @@ export default function RaceDetailPage() {
     ],
   );
 
-  // Wait for ZwiftPower results to settle, then look up Zwift Core profiles for any riders still missing a category.
-  const candidateProfileKey = useMemo(() => {
-    if (!raceKey || zpViewState.status === 'loading' || zpZwiftState.status === 'loading') {
-      return '';
-    }
-    const ids: number[] = [];
-    for (const row of combinedRows) {
-      if (row.riderId > 0 && row.categorySource !== 'zp' && row.categorySource !== 'core') {
-        ids.push(row.riderId);
-      }
-    }
-    return ids.join(',');
-  }, [raceKey, zpViewState.status, zpZwiftState.status, combinedRows]);
-
+  // Wait for ZwiftPower results to settle, then look up Zwift Core profiles only for visible-page riders still missing a category.
   useEffect(() => {
-    if (!candidateProfileKey) return;
-    const toFetch = candidateProfileKey
+    if (
+      !raceKey ||
+      zpViewState.status === 'loading' ||
+      zpZwiftState.status === 'loading' ||
+      !visibleCandidateKey
+    ) {
+      return;
+    }
+    const toFetch = visibleCandidateKey
       .split(',')
       .map(Number)
       .filter(
@@ -667,7 +662,7 @@ export default function RaceDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [candidateProfileKey, getAccessToken]);
+  }, [raceKey, zpViewState.status, zpZwiftState.status, visibleCandidateKey, getAccessToken]);
 
   const targetFallbackSplits = useMemo<PowerCurveSplits>(() => {
     const zp = bestZpEntry;
@@ -1079,6 +1074,7 @@ export default function RaceDetailPage() {
         onSelectPen={handleSelectPen}
         expectedMode={expectedMode}
         onToggleExpectedMode={toggleExpectedMode}
+        onVisibleCandidateKeyChange={setVisibleCandidateKey}
         units={units}
       />
     </main>
