@@ -1,7 +1,9 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import PowerBestsSection from '../components/PowerBestsSection';
 import { AppHeader, MetricGrid, PlacingBadge, RaceExternalLinks, Stat } from '../components/RaceUi';
+import ZwiftRacingProfileSection from '../components/ZwiftRacingProfileSection';
 import ZwiftVictimsSection from '../components/ZwiftVictimsSection';
 import { useFavorites } from '../lib/FavoritesContext';
 import { useUnits } from '../lib/UnitsContext';
@@ -15,8 +17,10 @@ import {
   formatWkg,
 } from '../lib/units';
 import type { UnitSystem } from '../lib/units';
+import { fetchPowerProfile } from '../api/zwiftCore';
+import type { ZwiftPowerProfile, ZwiftProfile } from '../api/zwiftCore';
 import { getXpProgress } from '../lib/profileXp';
-import type { ZwiftProfile } from '../api/zwiftCore';
+import { extractPowerProfileMetrics } from '../lib/powerBests';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
 import type { ZwiftRacingRiderResponse } from '../api/zwiftRacing';
 import {
@@ -91,7 +95,6 @@ function XpProgressBar({ profile }: { profile: ZwiftProfile }) {
     </div>
   );
 }
-
 function MergedRaceCard({
   race,
   profileId,
@@ -401,15 +404,44 @@ export default function ProfilePage({
   profile: ZwiftProfile;
   isOwnProfile?: boolean;
 }) {
-  const { logout } = useAuth();
+  const { logout, getAccessToken } = useAuth();
   // Default to the rider's Zwift preference until they pick a unit system here.
   const { units, setUnits } = useUnits(profile.useMetric === false ? 'imperial' : 'metric');
   const { favorites, isFavorite, toggleFavorite, upsertFavorite, removeFavorite } = useFavorites();
   const { zpState, zrState, mergedRaces } = useRiderRaceHistory(profile.id, {
     includeActivities: true,
   });
+  const [powerProfileState, setPowerProfileState] = useState<AsyncState<ZwiftPowerProfile> | null>(
+    () => (isOwnProfile ? { status: 'loading' } : null),
+  );
+
+  useEffect(() => {
+    if (!isOwnProfile) return;
+    let cancelled = false;
+
+    getAccessToken()
+      .then(fetchPowerProfile)
+      .then((data) => {
+        if (!cancelled) setPowerProfileState({ status: 'loaded', data });
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setPowerProfileState({
+            status: 'error',
+            message: err instanceof Error ? err.message : 'Failed to load Zwift power profile.',
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile.id, isOwnProfile, getAccessToken]);
   const name = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Zwift rider';
   const metrics = profile.competitionMetrics;
+  const { zftp, zmap } = extractPowerProfileMetrics(
+    powerProfileState?.status === 'loaded' ? powerProfileState.data : null,
+  );
   const racingScore =
     metrics?.racingScore != null && Number.isFinite(metrics.racingScore)
       ? Math.round(metrics.racingScore)
@@ -448,7 +480,7 @@ export default function ProfilePage({
   ]);
 
   return (
-    <main className="min-h-dvh max-w-3xl mx-auto p-4 sm:p-8 space-y-6">
+    <main className="min-h-dvh max-w-4xl mx-auto p-4 sm:p-8 space-y-6">
       <AppHeader
         isOwnProfile={isOwnProfile}
         units={units}
@@ -512,6 +544,40 @@ export default function ProfilePage({
         <dl className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <Stat label="FTP" value={profile.ftp ? `${profile.ftp} W` : undefined} />
           <Stat label="W/kg" value={formatWkg(profile.ftp, profile.weight)} />
+          {isOwnProfile && (
+            <>
+              <Stat
+                label="zFTP"
+                value={
+                  powerProfileState?.status === 'loading'
+                    ? '…'
+                    : zftp !== undefined
+                      ? `${Math.round(zftp)} W`
+                      : undefined
+                }
+                subValue={
+                  zftp !== undefined && profile.weight
+                    ? formatWkg(zftp, profile.weight)
+                    : undefined
+                }
+              />
+              <Stat
+                label="zMAP"
+                value={
+                  powerProfileState?.status === 'loading'
+                    ? '…'
+                    : zmap !== undefined
+                      ? `${Math.round(zmap)} W`
+                      : undefined
+                }
+                subValue={
+                  zmap !== undefined && profile.weight
+                    ? formatWkg(zmap, profile.weight)
+                    : undefined
+                }
+              />
+            </>
+          )}
           <Stat label="Weight" value={formatWeight(profile.weight, units)} />
           <Stat label="Height" value={formatHeight(profile.height, units)} />
           <Stat label="Racing Score" value={racingScore} />
@@ -532,6 +598,20 @@ export default function ProfilePage({
           profileZrState={zrState}
         />
       )}
+
+      <PowerBestsSection
+        riderName={name}
+        isOwnProfile={isOwnProfile}
+        weightGrams={profile.weight}
+        units={units}
+        ftp={profile.ftp}
+        zftp={zftp}
+        zmap={zmap}
+        powerProfileState={powerProfileState}
+        zpState={zpState}
+      />
+
+      <ZwiftRacingProfileSection profileId={profile.id} zrState={zrState} />
 
       <RaceHistorySection
         zpState={zpState}

@@ -12,11 +12,20 @@ import {
 } from '../lib/raceHistory';
 import type { UnitSystem } from '../lib/units';
 
-export function Stat({ label, value }: { label: string; value: string | number | undefined }) {
+export function Stat({
+  label,
+  value,
+  subValue,
+}: {
+  label: string;
+  value: string | number | undefined;
+  subValue?: string;
+}) {
   return (
     <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-4">
       <dt className="text-xs uppercase tracking-wide text-slate-400">{label}</dt>
       <dd className="mt-1 text-xl font-bold">{value ?? '—'}</dd>
+      {subValue && <dd className="mt-0.5 text-xs text-slate-400">{subValue}</dd>}
     </div>
   );
 }

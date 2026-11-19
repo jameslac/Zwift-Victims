@@ -234,6 +234,40 @@ export interface ZwiftPublicEvent {
   [key: string]: unknown;
 }
 
+export interface ZwiftPowerCurvePoint {
+  value?: number;
+  watts?: number;
+  power?: number;
+  wkg?: number;
+  date?: string;
+  timestamp?: string;
+  activityId?: string | number;
+  [key: string]: unknown;
+}
+
+export interface ZwiftPowerProfile {
+  zftp?: number;
+  zmap?: number;
+  vo2max?: number;
+  validPowerProfile?: boolean;
+  category?: string;
+  categoryWomen?: string;
+  cpBestEfforts?: {
+    pointsWatts?: Record<string, ZwiftPowerCurvePoint | number>;
+    pointsWkg?: Record<string, ZwiftPowerCurvePoint | number>;
+    activityIds?: Record<string, string | number>;
+    [key: string]: unknown;
+  };
+  relevantCpEfforts?: {
+    pointsWatts?: Record<string, ZwiftPowerCurvePoint | number>;
+    pointsWkg?: Record<string, ZwiftPowerCurvePoint | number>;
+    activityIds?: Record<string, string | number>;
+    [key: string]: unknown;
+  };
+  /** /api/power-curve/power-profile returns additional fields; keep them all accessible. */
+  [key: string]: unknown;
+}
+
 export class AuthError extends Error {}
 
 async function tokenRequest(params: Record<string, string>): Promise<TokenSet> {
@@ -320,6 +354,13 @@ export async function fetchMyProfile(accessToken: string): Promise<ZwiftProfile>
 
 export const fetchProfileById = (accessToken: string, riderId: number): Promise<ZwiftProfile> =>
   fetchAuthorizedJson<ZwiftProfile>(accessToken, `/api/zwift/api/profiles/${riderId}`, 'profile');
+
+export const fetchPowerProfile = (accessToken: string): Promise<ZwiftPowerProfile> =>
+  fetchAuthorizedJson<ZwiftPowerProfile>(
+    accessToken,
+    '/api/zwift/api/power-curve/power-profile',
+    'power profile',
+  );
 
 export const fetchActivityDetail = (
   accessToken: string,

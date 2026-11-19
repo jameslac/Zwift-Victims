@@ -20,6 +20,8 @@ const ZWIFT_API_ALLOWLIST = [
   /^\/api\/activities\/\d+$/,
   /^\/api\/race-results\/entries$/,
   /^\/api\/public\/events\/\d+$/,
+  /^\/api\/power-curve\/(power-profile|best-all-time|all-time|best)$/,
+  /^\/api\/competition-metrics\/\d+$/,
 ];
 const ALLOWED_CORE_QUERY_PARAMS: Record<string, RegExp> = {
   start: /^\d+$/,
