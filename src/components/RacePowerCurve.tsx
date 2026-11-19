@@ -396,7 +396,7 @@ export default function RacePowerCurve({
               type="button"
               onClick={() => handleUnitChange(u)}
               className={`rounded-md px-3 py-1 text-xs font-medium transition ${
-                unit === u ? 'bg-[#fc6719] text-white' : 'text-slate-300 hover:text-white'
+                unit === u ? 'bg-accent text-white' : 'text-slate-300 hover:text-white'
               }`}
             >
               {u === 'wkg' ? 'W/kg' : 'Watts (W)'}
@@ -416,7 +416,7 @@ export default function RacePowerCurve({
                 onChange={(e) => setRiderSearch(e.target.value)}
                 placeholder="Filter riders…"
                 aria-label="Filter pen riders to compare"
-                className="w-36 rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#fc6719]"
+                className="w-36 rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-accent"
               />
               <select
                 aria-label="Select rider to compare power curve"
@@ -429,7 +429,7 @@ export default function RacePowerCurve({
                     setRiderSearch('');
                   }
                 }}
-                className="max-w-xs rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-[#fc6719] disabled:opacity-50"
+                className="max-w-xs rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-accent disabled:opacity-50"
               >
                 <option value="">
                   {comparedIds.length >= MAX_COMPARED

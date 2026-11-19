@@ -28,7 +28,7 @@ export default function LoginPage() {
   }
 
   const input =
-    'w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2.5 text-base focus:outline-none focus:border-[#fc6719]';
+    'w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2.5 text-base focus:outline-none focus:border-accent';
 
   return (
     <main className="min-h-dvh flex items-center justify-center p-4">
@@ -67,7 +67,7 @@ export default function LoginPage() {
           )}
           <button
             disabled={busy}
-            className="w-full rounded-lg bg-[#fc6719] py-2.5 font-bold text-white disabled:opacity-60"
+            className="w-full rounded-lg bg-accent hover:bg-accent-hover transition-colors py-2.5 font-bold text-white disabled:opacity-60"
           >
             {busy ? 'Logging in…' : 'Log in'}
           </button>

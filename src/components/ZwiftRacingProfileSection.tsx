@@ -273,8 +273,8 @@ function VeloProgressionChart({
         >
           <defs>
             <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#fc6719" stopOpacity="0.24" />
-              <stop offset="100%" stopColor="#fc6719" stopOpacity="0" />
+              <stop offset="0%" stopColor="var(--zv-accent)" stopOpacity="0.24" />
+              <stop offset="100%" stopColor="var(--zv-accent)" stopOpacity="0" />
             </linearGradient>
           </defs>
 
@@ -414,7 +414,7 @@ function VeloProgressionChart({
             <path
               d={pathD}
               fill="none"
-              stroke="#fc6719"
+              stroke="var(--zv-accent)"
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -426,7 +426,7 @@ function VeloProgressionChart({
             const isActive = idx === activeIndex;
             const deltaVal = pt.delta ?? 0;
             const dotColor = pt.isLive
-              ? '#fc6719'
+              ? 'var(--zv-accent)'
               : deltaVal > 0.05
                 ? '#34d399'
                 : deltaVal < -0.05
@@ -473,7 +473,7 @@ function VeloProgressionChart({
               <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
                 <span>{activePoint.isLive ? 'Current rating' : formatShortDate(activePoint.time)}</span>
                 {activePoint.isLive ? (
-                  <span className="rounded-full bg-[#fc6719]/20 border border-[#fc6719]/40 px-2 py-0.5 text-[10px] font-semibold text-[#fc6719]">
+                  <span className="rounded-full bg-accent/20 border border-accent/40 px-2 py-0.5 text-[10px] font-semibold text-accent-text">
                     Live
                   </span>
                 ) : activePoint.didNotFinish ? (
@@ -642,7 +642,7 @@ function PhenotypeRadarCard({
             Phenotype
           </h3>
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="rounded-full bg-[#fc6719]/20 border border-[#fc6719]/40 px-2.5 py-0.5 text-xs font-bold text-[#fc6719]">
+            <span className="rounded-full bg-accent/20 border border-accent/40 px-2.5 py-0.5 text-xs font-bold text-accent-text">
               {phenotype.label}
             </span>
             {phenotype.value !== undefined && (
@@ -735,9 +735,9 @@ function PhenotypeRadarCard({
             {/* Rider phenotype shape */}
             <polygon
               points={polygonPoints}
-              fill="#fc6719"
+              fill="var(--zv-accent)"
               fillOpacity="0.24"
-              stroke="#fc6719"
+              stroke="var(--zv-accent)"
               strokeWidth="2.25"
               strokeLinejoin="round"
             />
@@ -766,7 +766,7 @@ function PhenotypeRadarCard({
                       cx={vertex.x}
                       cy={vertex.y}
                       r="8"
-                      fill="#fc6719"
+                      fill="var(--zv-accent)"
                       fillOpacity="0.28"
                     />
                   )}
@@ -774,7 +774,7 @@ function PhenotypeRadarCard({
                     cx={vertex.x}
                     cy={vertex.y}
                     r={isSelected ? 4.5 : 3.25}
-                    fill={isSelected ? '#fb923c' : '#fc6719'}
+                    fill={isSelected ? 'var(--zv-accent-text)' : 'var(--zv-accent)'}
                     stroke="#020617"
                     strokeWidth="1.5"
                   />
@@ -1098,6 +1098,7 @@ export default function ZwiftRacingProfileSection({
 }) {
   const [nowSec] = useState(() => Math.floor(Date.now() / 1000));
   const [scaleMode, setScaleMode] = useState<VeloScaleMode>('velo2');
+  const [zrTab, setZrTab] = useState<'velo' | 'phenotype' | 'factors'>('velo');
   const [selectedPointKey, setSelectedPointKey] = useState<string | null>(null);
   const [selectedAxisId, setSelectedAxisId] = useState<PhenotypeAxis['id'] | null>(null);
 
@@ -1221,7 +1222,7 @@ export default function ZwiftRacingProfileSection({
               href={buildZwiftRacingRiderUrl(profileId)}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-950 px-2.5 py-0.5 text-xs font-medium text-slate-300 hover:border-[#fc6719]/60 hover:text-[#fc6719] transition-colors"
+              className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-950 px-2.5 py-0.5 text-xs font-medium text-slate-300 hover:border-accent/60 hover:text-accent-text transition-colors"
             >
               <span>zwiftracing.app</span>
               <span aria-hidden="true">↗</span>
@@ -1251,7 +1252,7 @@ export default function ZwiftRacingProfileSection({
             onClick={() => setScaleMode('velo2')}
             className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
               effectiveScale === 'velo2'
-                ? 'bg-[#fc6719] text-white'
+                ? 'bg-accent text-white'
                 : 'text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed'
             }`}
           >
@@ -1263,7 +1264,7 @@ export default function ZwiftRacingProfileSection({
             onClick={() => setScaleMode('legacy')}
             className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
               effectiveScale === 'legacy'
-                ? 'bg-[#fc6719] text-white'
+                ? 'bg-accent text-white'
                 : 'text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed'
             }`}
           >
@@ -1272,8 +1273,58 @@ export default function ZwiftRacingProfileSection({
         </div>
       </div>
 
+      {/* Sub-Tabs for ZwiftRacing Section */}
+      <div
+        role="tablist"
+        aria-label="ZwiftRacing sections"
+        className="flex flex-wrap items-center gap-1.5 rounded-xl bg-slate-950/75 border border-slate-800 p-1"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={zrTab === 'velo'}
+          onClick={() => setZrTab('velo')}
+          className={`flex-1 rounded-lg py-1.5 px-2.5 text-xs font-bold transition-colors ${
+            zrTab === 'velo'
+              ? 'bg-accent text-white'
+              : 'text-slate-400 hover:text-slate-100'
+          }`}
+        >
+          vELO &amp; Chart
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={zrTab === 'phenotype'}
+          onClick={() => setZrTab('phenotype')}
+          className={`flex-1 rounded-lg py-1.5 px-2.5 text-xs font-bold transition-colors ${
+            zrTab === 'phenotype'
+              ? 'bg-accent text-white'
+              : 'text-slate-400 hover:text-slate-100'
+          }`}
+        >
+          Phenotype &amp; Rankings
+        </button>
+        {(factorBreakdown.hasData || powerModelMetrics.length > 0) && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={zrTab === 'factors'}
+            onClick={() => setZrTab('factors')}
+            className={`flex-1 rounded-lg py-1.5 px-2.5 text-xs font-bold transition-colors ${
+              zrTab === 'factors'
+                ? 'bg-accent text-white'
+                : 'text-slate-400 hover:text-slate-100'
+            }`}
+          >
+            Factors &amp; Seed
+          </button>
+        )}
+      </div>
+
       {/* Group 1: vELO Rating, Windows & Progression Chart */}
-      <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-4">
+      {zrTab === 'velo' && (
+        <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-4">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
           {/* Card 1: Current vELO */}
           <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3 space-y-2">
@@ -1415,19 +1466,22 @@ export default function ZwiftRacingProfileSection({
           onSelectPointKey={setSelectedPointKey}
         />
       </div>
+      )}
 
       {/* Group 2: Phenotype Radar & 90-Day Race Outcomes */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <PhenotypeRadarCard
-          phenotype={phenotype}
-          selectedAxisId={selectedAxisId}
-          onSelectAxisId={setSelectedAxisId}
-        />
-        <RaceOutcomesCard raceBreakdown={raceBreakdown} rankingsSummary={rankingsSummary} />
-      </div>
+      {zrTab === 'phenotype' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <PhenotypeRadarCard
+            phenotype={phenotype}
+            selectedAxisId={selectedAxisId}
+            onSelectAxisId={setSelectedAxisId}
+          />
+          <RaceOutcomesCard raceBreakdown={raceBreakdown} rankingsSummary={rankingsSummary} />
+        </div>
+      )}
 
       {/* Group 3: vELO Factors, Seed & RaceCraft + Conditional Power Model */}
-      {(factorBreakdown.hasData || powerModelMetrics.length > 0) && (
+      {zrTab === 'factors' && (factorBreakdown.hasData || powerModelMetrics.length > 0) && (
         <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-4">
           {factorBreakdown.hasData && (
             <div className="space-y-3">

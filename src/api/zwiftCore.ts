@@ -417,12 +417,33 @@ export function fetchProfileById(accessToken: string, riderId: number): Promise<
   return request;
 }
 
-export const fetchPowerProfile = (accessToken: string): Promise<ZwiftPowerProfile> =>
-  fetchAuthorizedJson<ZwiftPowerProfile>(
+let cachedPowerProfile: ZwiftPowerProfile | null = null;
+let powerProfileInFlight: Promise<ZwiftPowerProfile> | null = null;
+
+export function getCachedPowerProfile(): ZwiftPowerProfile | null {
+  return cachedPowerProfile;
+}
+
+export function fetchPowerProfile(accessToken: string): Promise<ZwiftPowerProfile> {
+  if (cachedPowerProfile) return Promise.resolve(cachedPowerProfile);
+  if (powerProfileInFlight) return powerProfileInFlight;
+
+  const request = fetchAuthorizedJson<ZwiftPowerProfile>(
     accessToken,
     '/api/zwift/api/power-curve/power-profile',
     'power profile',
-  );
+  )
+    .then((loaded) => {
+      cachedPowerProfile = loaded;
+      return loaded;
+    })
+    .finally(() => {
+      powerProfileInFlight = null;
+    });
+
+  powerProfileInFlight = request;
+  return request;
+}
 
 export const fetchActivityDetail = (
   accessToken: string,

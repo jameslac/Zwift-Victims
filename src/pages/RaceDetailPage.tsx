@@ -128,6 +128,9 @@ export default function RaceDetailPage() {
   );
   const [activityDetailRaw, setActivityDetailRaw] =
     useState<KeyedState<ZwiftActivityDetail> | null>(null);
+  const [raceTab, setRaceTab] = useState<'standings' | 'ratings' | 'power' | 'overview'>(
+    'standings',
+  );
   const [expectedMode, setExpectedMode] = useState<ExpectedPositionMode>(loadExpectedMode);
   const [penProfilesMap, setPenProfilesMap] = useState<Map<number, ZwiftProfile>>(() => new Map());
   const [visibleCandidateKey, setVisibleCandidateKey] = useState<string>('');
@@ -705,7 +708,7 @@ export default function RaceDetailPage() {
           </p>
           <Link
             to="/login"
-            className="inline-block rounded-lg bg-[#fc6719] px-5 py-2.5 text-sm font-bold text-white"
+            className="inline-block rounded-lg bg-accent px-5 py-2.5 text-sm font-bold text-white"
           >
             Log in with Zwift
           </Link>
@@ -721,7 +724,7 @@ export default function RaceDetailPage() {
           <p className="text-red-400 text-sm">Invalid rider or event ID in URL.</p>
           <Link
             to="/"
-            className="inline-block rounded-lg bg-[#fc6719] px-4 py-2 text-sm font-bold text-white"
+            className="inline-block rounded-lg bg-accent px-4 py-2 text-sm font-bold text-white"
           >
             Back to profile
           </Link>
@@ -731,6 +734,7 @@ export default function RaceDetailPage() {
   }
 
   const backPath = isOwnProfile ? '/' : `/riders/${targetRiderId}`;
+  const historyPath = isOwnProfile ? '/history' : `/riders/${targetRiderId}/history`;
   const rawRiderName = targetProfile
     ? [targetProfile.firstName, targetProfile.lastName].filter(Boolean).join(' ') ||
       `Rider ${targetRiderId}`
@@ -885,28 +889,31 @@ export default function RaceDetailPage() {
     : undefined;
 
   return (
-    <main className="min-h-dvh max-w-6xl mx-auto p-4 sm:p-8 space-y-6">
+    <main className="min-h-dvh max-w-6xl mx-auto p-4 sm:p-8 pb-24 md:pb-12 space-y-6">
       <AppHeader
         isOwnProfile={isOwnProfile}
+        targetRiderId={targetRiderId ?? undefined}
         units={units}
         onUnitsChange={setUnits}
         onLogout={logout}
-        backTo={backPath}
-        backLabel={`← ${riderName}`}
+        backTo={historyPath}
+        backLabel="← History"
       />
 
-      {/* Hero Header */}
-      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
+      {/* Compact Race Hero Header */}
+      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1 min-w-0 flex-1">
             <p className="text-xs text-slate-400">
               Race Details ·{' '}
-              <Link to={backPath} className="text-[#fc6719] hover:underline font-medium">
+              <Link to={backPath} className="text-accent-text hover:underline font-medium">
                 {riderName}
               </Link>{' '}
               (ID {targetRiderId})
             </p>
-            <h1 className="text-2xl sm:text-3xl font-extrabold">{raceTitle}</h1>
+            <h1 className="text-xl sm:text-3xl font-extrabold leading-snug break-words">
+              {raceTitle}
+            </h1>
             <p className="text-xs text-slate-400">
               {formatUnixSeconds(raceDateSec)}
               {riderCategory ? ` · Cat ${riderCategory}` : ''}
@@ -919,7 +926,7 @@ export default function RaceDetailPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center justify-end gap-1.5 shrink-0 ml-auto">
             <PlacingBadge
               truePlace={bestVerifiedPlace}
               fieldSize={truePlace != null ? zrFieldSize : coreFieldSize}
@@ -944,63 +951,40 @@ export default function RaceDetailPage() {
           </div>
         </div>
 
-        {zrEvent?.rules &&
-          (zrEvent.rules.powerMeterRequired ||
-            zrEvent.rules.powerupsAllowed === false ||
-            zrEvent.rules.draftingDisabled) && (
-            <div className="flex flex-wrap gap-1.5 text-[11px]">
-              {zrEvent.rules.powerMeterRequired && (
-                <span className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-slate-300">
-                  Power Meter Required
-                </span>
-              )}
-              {zrEvent.rules.powerupsAllowed === false && (
-                <span className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-slate-300">
-                  No PowerUps
-                </span>
-              )}
-              {zrEvent.rules.draftingDisabled && (
-                <span className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-slate-300">
-                  No Drafting
-                </span>
-              )}
-            </div>
-          )}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <RaceExternalLinks
+            zpZid={linkZpZid}
+            zrEventId={linkZrEventId}
+            zrSubgroup={linkZrSubgroup}
+            routeName={routeName}
+            activityId={activityIdStr ?? undefined}
+            align="start"
+            showLabels
+          />
 
-        <RaceExternalLinks
-          zpZid={linkZpZid}
-          zrEventId={linkZrEventId}
-          zrSubgroup={linkZrSubgroup}
-          routeName={routeName}
-          activityId={activityIdStr ?? undefined}
-          align="start"
-          showLabels
-        />
-
-        {galleryPhotos.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {galleryPhotos.map((photo) => (
-              <a
-                key={photo.url}
-                href={photo.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group rounded-xl overflow-hidden border border-slate-800 bg-slate-950 block hover:border-[#fc6719]/70 transition-colors"
-              >
-                <img
-                  src={photo.url}
-                  alt={`${photo.label} for ${raceTitle}`}
-                  loading="lazy"
-                  className="w-full h-44 object-cover group-hover:opacity-95 transition-opacity"
-                />
-                <div className="px-3 py-1.5 text-[11px] text-slate-400 flex items-center justify-between gap-2">
-                  <span className="truncate">{photo.label}</span>
-                  <span className="text-[#fc6719] shrink-0 group-hover:underline">Full size ↗</span>
-                </div>
-              </a>
-            ))}
-          </div>
-        )}
+          {zrEvent?.rules &&
+            (zrEvent.rules.powerMeterRequired ||
+              zrEvent.rules.powerupsAllowed === false ||
+              zrEvent.rules.draftingDisabled) && (
+              <div className="flex flex-wrap gap-1.5 text-[11px]">
+                {zrEvent.rules.powerMeterRequired && (
+                  <span className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-slate-300">
+                    Power Meter Required
+                  </span>
+                )}
+                {zrEvent.rules.powerupsAllowed === false && (
+                  <span className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-slate-300">
+                    No PowerUps
+                  </span>
+                )}
+                {zrEvent.rules.draftingDisabled && (
+                  <span className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-slate-300">
+                    No Drafting
+                  </span>
+                )}
+              </div>
+            )}
+        </div>
 
         {inflation != null && inflation > 0 && (
           <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3 text-xs text-amber-200">
@@ -1012,71 +996,150 @@ export default function RaceDetailPage() {
             drops private or non-opted-in riders.
           </div>
         )}
-
-        <MetricGrid
-          items={[
-            {
-              label: 'Time',
-              value: timeSec != null ? formatDurationMs(timeSec * 1000) : undefined,
-            },
-            { label: 'Gap', value: formatGapSeconds(gapSec) },
-            { label: 'Distance', value: formatDistance(eventDistanceMeters, units) },
-            { label: 'Elevation', value: formatElevation(elevationMeters, units) },
-            { label: 'Avg / NP', value: avgNpText },
-            { label: 'Max Power', value: maxWatts !== undefined ? `${maxWatts} W` : undefined },
-            { label: 'Avg W/kg', value: avgWkg !== undefined ? `${avgWkg} W/kg` : undefined },
-            { label: 'Race FTP', value: raceFtp !== undefined ? `${raceFtp} W` : undefined },
-            { label: 'Avg / Max Cadence', value: cadenceText },
-            { label: 'Race Weight', value: formatWeight(raceWeightGrams, units) },
-            {
-              label: 'Calories',
-              value: calories != null ? `${Math.round(calories)} kcal` : undefined,
-            },
-            { label: 'Moving Time', value: formatDurationMs(movingTimeMs) },
-          ]}
-        />
       </section>
 
-      {/* Tier 2: Interactive Multi-Rider Power Curve */}
-      <RacePowerCurve
-        penKey={`${raceKey}:${activePen?.key ?? 'default'}`}
-        targetRiderId={targetRiderId}
-        targetRiderName={riderName}
-        targetFallbackSplits={targetFallbackSplits}
-        rows={combinedRows}
-        hrEfficiency={zpVal(bestZpEntry?.hreff)}
-      />
+      {/* Sub-Tabbed Race Detail Navigation */}
+      <div
+        role="tablist"
+        aria-label="Race detail sections"
+        className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 rounded-2xl bg-slate-900 border border-slate-800 p-1.5"
+      >
+        {(
+          [
+            { id: 'standings', label: 'Standings' },
+            { id: 'ratings', label: 'Ratings & Impact' },
+            { id: 'power', label: 'Power Curve' },
+            { id: 'overview', label: 'Metrics & Photos' },
+          ] as const
+        ).map((tab) => {
+          const active = raceTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setRaceTab(tab.id)}
+              className={`rounded-xl py-2.5 px-3 text-xs sm:text-sm font-bold transition-all ${
+                active
+                  ? 'bg-accent text-white shadow'
+                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+              }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
 
-      {/* Tier 2: Ratings & Performance Impact */}
-      <RaceRatingsSection
-        zrEntry={zrEntry}
-        zrEventRider={zrEventRider}
-        zrEventPen={zrEventPen ?? activeZrPen}
-        bestZpEntry={bestZpEntry}
-        coreZrs={coreZrs}
-        fallbackZrsScore={targetProfile?.competitionMetrics?.racingScore}
-        bestVerifiedPlace={bestVerifiedPlace}
-        expectedMode={expectedMode}
-        onToggleExpectedMode={toggleExpectedMode}
-      />
+      {/* Sub-Tab 1: Combined Event Standings */}
+      {raceTab === 'standings' && (
+        <RaceDetailStandings
+          raceKey={raceKey}
+          targetRiderId={targetRiderId}
+          loggedInProfile={profile}
+          penSystem={penSystem}
+          pens={pens}
+          activePen={activePen}
+          combinedRows={combinedRows}
+          anyLoading={standingsAnyLoading}
+          zpViewLoaded={zpViewState.status === 'loaded'}
+          onSelectPen={handleSelectPen}
+          expectedMode={expectedMode}
+          onToggleExpectedMode={toggleExpectedMode}
+          onVisibleCandidateKeyChange={setVisibleCandidateKey}
+          units={units}
+        />
+      )}
 
-      {/* Tier 2: Combined Event Standings */}
-      <RaceDetailStandings
-        raceKey={raceKey}
-        targetRiderId={targetRiderId}
-        loggedInProfile={profile}
-        penSystem={penSystem}
-        pens={pens}
-        activePen={activePen}
-        combinedRows={combinedRows}
-        anyLoading={standingsAnyLoading}
-        zpViewLoaded={zpViewState.status === 'loaded'}
-        onSelectPen={handleSelectPen}
-        expectedMode={expectedMode}
-        onToggleExpectedMode={toggleExpectedMode}
-        onVisibleCandidateKeyChange={setVisibleCandidateKey}
-        units={units}
-      />
+      {/* Sub-Tab 2: Ratings & Performance Impact */}
+      {raceTab === 'ratings' && (
+        <RaceRatingsSection
+          zrEntry={zrEntry}
+          zrEventRider={zrEventRider}
+          zrEventPen={zrEventPen ?? activeZrPen}
+          bestZpEntry={bestZpEntry}
+          coreZrs={coreZrs}
+          fallbackZrsScore={targetProfile?.competitionMetrics?.racingScore}
+          bestVerifiedPlace={bestVerifiedPlace}
+          expectedMode={expectedMode}
+          onToggleExpectedMode={toggleExpectedMode}
+        />
+      )}
+
+      {/* Sub-Tab 3: Interactive Multi-Rider Power Curve */}
+      {raceTab === 'power' && (
+        <RacePowerCurve
+          penKey={`${raceKey}:${activePen?.key ?? 'default'}`}
+          targetRiderId={targetRiderId}
+          targetRiderName={riderName}
+          targetFallbackSplits={targetFallbackSplits}
+          rows={combinedRows}
+          hrEfficiency={zpVal(bestZpEntry?.hreff)}
+        />
+      )}
+
+      {/* Sub-Tab 4: Summary Metrics & Photos */}
+      {raceTab === 'overview' && (
+        <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-5">
+          <div>
+            <h2 className="text-lg font-bold">Race Telemetry &amp; Media</h2>
+            <p className="text-xs text-slate-400">
+              Rider performance summary and snapshots captured during {raceTitle}.
+            </p>
+          </div>
+
+          <MetricGrid
+            items={[
+              {
+                label: 'Time',
+                value: timeSec != null ? formatDurationMs(timeSec * 1000) : undefined,
+              },
+              { label: 'Gap', value: formatGapSeconds(gapSec) },
+              { label: 'Distance', value: formatDistance(eventDistanceMeters, units) },
+              { label: 'Elevation', value: formatElevation(elevationMeters, units) },
+              { label: 'Avg / NP', value: avgNpText },
+              { label: 'Max Power', value: maxWatts !== undefined ? `${maxWatts} W` : undefined },
+              { label: 'Avg W/kg', value: avgWkg !== undefined ? `${avgWkg} W/kg` : undefined },
+              { label: 'Race FTP', value: raceFtp !== undefined ? `${raceFtp} W` : undefined },
+              { label: 'Avg / Max Cadence', value: cadenceText },
+              { label: 'Race Weight', value: formatWeight(raceWeightGrams, units) },
+              {
+                label: 'Calories',
+                value: calories != null ? `${Math.round(calories)} kcal` : undefined,
+              },
+              { label: 'Moving Time', value: formatDurationMs(movingTimeMs) },
+            ]}
+          />
+
+          {galleryPhotos.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+              {galleryPhotos.map((photo) => (
+                <a
+                  key={photo.url}
+                  href={photo.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group rounded-xl overflow-hidden border border-slate-800 bg-slate-950 block hover:border-accent/70 transition-colors"
+                >
+                  <img
+                    src={photo.url}
+                    alt={`${photo.label} for ${raceTitle}`}
+                    loading="lazy"
+                    className="w-full h-44 object-cover group-hover:opacity-95 transition-opacity"
+                  />
+                  <div className="px-3 py-1.5 text-[11px] text-slate-400 flex items-center justify-between gap-2">
+                    <span className="truncate">{photo.label}</span>
+                    <span className="text-accent-text shrink-0 group-hover:underline">
+                      Full size ↗
+                    </span>
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
     </main>
   );
 }

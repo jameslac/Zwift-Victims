@@ -1,6 +1,5 @@
-import { useState } from 'react';
-import type { FormEvent, ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import {
   buildZwiftActivityUrl,
   buildZwiftPowerEventUrl,
@@ -11,10 +10,11 @@ import {
   ordinal,
 } from '../lib/raceHistory';
 import type { ActivityType } from '../lib/raceHistory';
-import type { UnitSystem } from '../lib/units';
+
+export { AppHeader } from './AppShell';
 
 const ACTIVITY_TYPE_BADGE_TONE: Record<ActivityType, string> = {
-  race: 'bg-[#fc6719]/15 border-[#fc6719]/40 text-[#fc6719]',
+  race: 'bg-accent/15 border-accent/40 text-accent-text',
   ride: 'bg-sky-500/15 border-sky-500/40 text-sky-300',
   workout: 'bg-violet-500/15 border-violet-500/40 text-violet-300',
   free_ride: 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300',
@@ -157,95 +157,6 @@ export function PlacingBadge({
   return null;
 }
 
-export function AppHeader({
-  isOwnProfile,
-  units,
-  onUnitsChange,
-  onLogout,
-  backTo,
-  backLabel,
-}: {
-  isOwnProfile: boolean;
-  units: UnitSystem;
-  onUnitsChange: (u: UnitSystem) => void;
-  onLogout: () => void;
-  backTo?: string;
-  backLabel?: string;
-}) {
-  const navigate = useNavigate();
-  const [lookupId, setLookupId] = useState('');
-
-  function handleLookupSubmit(e: FormEvent) {
-    e.preventDefault();
-    const cleaned = lookupId.trim();
-    if (!/^\d+$/.test(cleaned)) return;
-    setLookupId('');
-    navigate(`/riders/${cleaned}`);
-  }
-
-  return (
-    <header className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <Link to="/" className="font-extrabold text-lg">
-          Zwift Victims
-        </Link>
-        {backTo && backLabel && (
-          <Link
-            to={backTo}
-            className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
-          >
-            {backLabel}
-          </Link>
-        )}
-        {!isOwnProfile && !backTo && (
-          <Link
-            to="/"
-            className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
-          >
-            My profile
-          </Link>
-        )}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <form onSubmit={handleLookupSubmit} className="flex items-center gap-1">
-          <input
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            placeholder="View rider ID…"
-            aria-label="View rider by Zwift ID"
-            value={lookupId}
-            onChange={(e) => setLookupId(e.target.value)}
-            className="w-32 rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm focus:outline-none focus:border-[#fc6719]"
-          />
-          <button
-            type="submit"
-            disabled={!/^\d+$/.test(lookupId.trim())}
-            className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-sm hover:bg-slate-800 disabled:opacity-40"
-          >
-            Go
-          </button>
-        </form>
-        <select
-          aria-label="Units"
-          value={units}
-          onChange={(e) => onUnitsChange(e.target.value as UnitSystem)}
-          className="rounded-lg bg-slate-900 border border-slate-700 px-2 py-1.5 text-sm"
-        >
-          <option value="metric">Metric (kg, cm)</option>
-          <option value="imperial">Imperial (lb, ft)</option>
-        </select>
-        <button
-          onClick={onLogout}
-          className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm hover:bg-slate-800"
-        >
-          Log out
-        </button>
-      </div>
-    </header>
-  );
-}
-
 function ZwiftIcon({ className = 'w-4 h-4' }: { className?: string }) {
   return (
     <svg
@@ -364,7 +275,6 @@ export function RaceExternalLinks({
   routeName,
   activityId,
   align = 'end',
-  showLabels = false,
 }: {
   zpZid?: string;
   zrEventId?: string;
@@ -374,12 +284,32 @@ export function RaceExternalLinks({
   align?: 'start' | 'end';
   showLabels?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleOutside(e: PointerEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('pointerdown', handleOutside);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [open]);
+
   const links: Array<{
     key: string;
     href: string;
     title: string;
-    label: string;
-    shortLabel: string;
+    subtitle: string;
     icon: ReactNode;
   }> = [];
 
@@ -388,10 +318,9 @@ export function RaceExternalLinks({
     links.push({
       key: 'zwiftpower',
       href: buildZwiftPowerEventUrl(cleanZid),
-      title: 'ZwiftPower Event',
-      label: 'Open Event on ZwiftPower',
-      shortLabel: 'ZwiftPower',
-      icon: <ZwiftPowerIcon className={showLabels ? 'w-3.5 h-3.5' : 'w-4 h-4'} />,
+      title: 'ZwiftPower Event Results',
+      subtitle: 'Official ZP standings & power splits',
+      icon: <ZwiftPowerIcon className="w-4 h-4" />,
     });
   }
 
@@ -402,9 +331,8 @@ export function RaceExternalLinks({
       key: 'zwiftracing',
       href: buildZwiftRacingEventUrl(cleanZrEventId, cleanSubgroup),
       title: 'ZwiftRacing.app Event',
-      label: 'Open Event on ZwiftRacing.app',
-      shortLabel: 'ZwiftRacing',
-      icon: <ZwiftRacingIcon className={showLabels ? 'w-3.5 h-3.5' : 'w-4 h-4'} />,
+      subtitle: 'vELO ratings, SOF & pen breakdown',
+      icon: <ZwiftRacingIcon className="w-4 h-4" />,
     });
   }
 
@@ -414,10 +342,9 @@ export function RaceExternalLinks({
     links.push({
       key: 'zwifterbikes',
       href: routeUrl,
-      title: `ZwifterBikes Route (${cleanRouteName})`,
-      label: 'Open Route on ZwifterBikes',
-      shortLabel: 'ZwifterBikes',
-      icon: <RouteIcon className={showLabels ? 'w-3.5 h-3.5' : 'w-4 h-4'} />,
+      title: 'ZwifterBikes Route Guide',
+      subtitle: `Best bike & wheel setup for ${cleanRouteName}`,
+      icon: <RouteIcon className="w-4 h-4" />,
     });
   }
 
@@ -427,54 +354,93 @@ export function RaceExternalLinks({
       {
         key: 'zwift',
         href: buildZwiftActivityUrl(cleanActivityId),
-        title: 'Zwift Activity',
-        label: 'Open Activity on Zwift',
-        shortLabel: 'Zwift',
-        icon: <ZwiftIcon className={showLabels ? 'w-3.5 h-3.5' : 'w-4 h-4'} />,
+        title: 'Zwift Activity Feed',
+        subtitle: 'Open activity & photos on Zwift.com',
+        icon: <ZwiftIcon className="w-4 h-4" />,
       },
       {
         key: 'zwifttools-bike',
         href: buildZwiftToolsBikeComparisonUrl(cleanActivityId),
         title: 'ZwiftTools Bike Comparison',
-        label: 'Open Bike Comparison on ZwiftTools',
-        shortLabel: 'Bike Compare',
-        icon: <BikeIcon className={showLabels ? 'w-3.5 h-3.5' : 'w-4 h-4'} />,
+        subtitle: 'Compare frame & wheel time savings',
+        icon: <BikeIcon className="w-4 h-4" />,
       },
       {
         key: 'zwifttools-replay',
         href: buildZwiftToolsRaceReplayUrl(cleanActivityId),
         title: 'ZwiftTools Race Replay',
-        label: 'Open Race Replay on ZwiftTools',
-        shortLabel: 'Race Replay',
-        icon: <ReplayIcon className={showLabels ? 'w-3.5 h-3.5' : 'w-4 h-4'} />,
+        subtitle: 'Interactive telemetry & race replay',
+        icon: <ReplayIcon className="w-4 h-4" />,
       },
     );
   }
 
   if (links.length === 0) return null;
 
-  const baseClass =
-    'inline-flex items-center justify-center rounded-lg border border-slate-700/80 bg-slate-900/80 text-slate-300 hover:border-[#fc6719]/60 hover:text-[#fc6719] hover:bg-slate-800 transition-colors';
-  const sizeClass = showLabels ? 'px-2.5 py-1 text-xs font-medium gap-1.5' : 'p-1.5';
-
   return (
-    <div
-      className={`flex flex-wrap items-center ${align === 'start' ? 'justify-start' : 'justify-end'} gap-2`}
-    >
-      {links.map((link) => (
-        <a
-          key={link.key}
-          href={link.href}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={link.title}
-          aria-label={link.label}
-          className={`${baseClass} ${sizeClass}`}
+    <div ref={containerRef} className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors ${
+          open
+            ? 'border-accent bg-accent/15 text-accent-text'
+            : 'border-slate-700 bg-slate-900 text-slate-200 hover:border-accent/60 hover:text-accent-text hover:bg-slate-800'
+        }`}
+      >
+        <span>External Links ({links.length})</span>
+        <svg
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
+          aria-hidden="true"
         >
-          {link.icon}
-          {showLabels && <span>{link.shortLabel}</span>}
-        </a>
-      ))}
+          <path
+            fillRule="evenodd"
+            d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          aria-label="External activity and event links"
+          className={`absolute z-30 mt-1.5 w-68 rounded-2xl border border-slate-700 bg-slate-900/98 backdrop-blur-xl p-1.5 shadow-2xl space-y-0.5 ${
+            align === 'start' ? 'left-0' : 'right-0'
+          }`}
+        >
+          {links.map((link) => (
+            <a
+              key={link.key}
+              role="menuitem"
+              href={link.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setOpen(false)}
+              className="flex items-start gap-2.5 rounded-xl px-2.5 py-2 text-left hover:bg-slate-800/90 transition-colors group"
+            >
+              <span className="mt-0.5 inline-flex items-center justify-center w-7 h-7 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 group-hover:border-accent/50 group-hover:text-accent-text shrink-0">
+                {link.icon}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center justify-between gap-1 text-xs font-bold text-slate-100 group-hover:text-accent-text">
+                  <span className="truncate">{link.title}</span>
+                  <span className="text-[11px] text-slate-400 group-hover:text-accent-text shrink-0">
+                    ↗
+                  </span>
+                </span>
+                <span className="block text-[11px] text-slate-400 truncate mt-0.5">
+                  {link.subtitle}
+                </span>
+              </span>
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -53,7 +53,7 @@ function getPowerZoneLabel(pctFtp: number): { zone: string; tone: string } {
   if (pctFtp < 76) return { zone: 'Z2 · Endurance', tone: 'bg-sky-400' };
   if (pctFtp < 91) return { zone: 'Z3 · Tempo', tone: 'bg-emerald-400' };
   if (pctFtp < 106) return { zone: 'Z4 · Threshold', tone: 'bg-amber-400' };
-  if (pctFtp < 121) return { zone: 'Z5 · VO2max', tone: 'bg-[#fc6719]' };
+  if (pctFtp < 121) return { zone: 'Z5 · VO2max', tone: 'bg-accent' };
   return { zone: 'Z6 · Anaerobic', tone: 'bg-red-500' };
 }
 
@@ -78,6 +78,9 @@ export default function ActivityDetailPage() {
 
   const [detailRaw, setDetailRaw] = useState<KeyedState<ZwiftActivityDetail> | null>(null);
   const [remoteProfileRaw, setRemoteProfileRaw] = useState<KeyedState<ZwiftProfile> | null>(null);
+  const [activityTab, setActivityTab] = useState<'overview' | 'physiology' | 'metadata'>(
+    'overview',
+  );
 
   useEffect(() => {
     if (!activityKey || targetRiderId === null || !activityId) return;
@@ -158,7 +161,7 @@ export default function ActivityDetailPage() {
           </p>
           <Link
             to="/login"
-            className="inline-block rounded-lg bg-[#fc6719] px-5 py-2.5 text-sm font-bold text-white"
+            className="inline-block rounded-lg bg-accent px-5 py-2.5 text-sm font-bold text-white"
           >
             Log in with Zwift
           </Link>
@@ -174,7 +177,7 @@ export default function ActivityDetailPage() {
           <p className="text-red-400 text-sm">Invalid rider or activity ID in URL.</p>
           <Link
             to="/"
-            className="inline-block rounded-lg bg-[#fc6719] px-4 py-2 text-sm font-bold text-white"
+            className="inline-block rounded-lg bg-accent px-4 py-2 text-sm font-bold text-white"
           >
             Back to profile
           </Link>
@@ -184,6 +187,7 @@ export default function ActivityDetailPage() {
   }
 
   const backPath = isOwnProfile ? '/' : `/riders/${targetRiderId}`;
+  const historyPath = isOwnProfile ? '/history' : `/riders/${targetRiderId}/history`;
   const activityProfileRec = (detail?.profile ?? baseActivity?.profile) as
     | Record<string, unknown>
     | undefined;
@@ -329,14 +333,15 @@ export default function ActivityDetailPage() {
   const photos = extractActivityPhotos(baseActivity, detail);
 
   return (
-    <main className="min-h-dvh max-w-6xl mx-auto p-4 sm:p-8 space-y-6">
+    <main className="min-h-dvh max-w-6xl mx-auto p-4 sm:p-8 pb-24 md:pb-12 space-y-6">
       <AppHeader
         isOwnProfile={isOwnProfile}
+        targetRiderId={targetRiderId ?? undefined}
         units={units}
         onUnitsChange={setUnits}
         onLogout={logout}
-        backTo={backPath}
-        backLabel={`← ${riderName}`}
+        backTo={historyPath}
+        backLabel="← History"
       />
 
       {detailState.status === 'error' && (
@@ -351,28 +356,27 @@ export default function ActivityDetailPage() {
         </div>
       )}
 
-      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
+      {/* Compact Activity Hero Header */}
+      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1 min-w-0 flex-1">
             <p className="text-xs text-slate-400">
               Activity Details ·{' '}
-              <Link to={backPath} className="text-[#fc6719] hover:underline font-medium">
+              <Link to={backPath} className="text-accent-text hover:underline font-medium">
                 {riderName}
               </Link>{' '}
               (ID {targetRiderId})
             </p>
-            <h1 className="text-2xl sm:text-3xl font-extrabold">{title}</h1>
+            <h1 className="text-xl sm:text-3xl font-extrabold leading-snug break-words">{title}</h1>
             <p className="text-xs text-slate-400">
               {formatDateTime(startDate)}
               {worldName ? ` · ${worldName}` : ''}
               {sportLabel ? ` · ${sportLabel}` : ''}
-              {rideOns != null && rideOns > 0 ? ` · ${rideOns} Ride Ons` : ''}
-              {commentsCount != null && commentsCount > 0 ? ` · ${commentsCount} comments` : ''}
               {` · activity ${activityId}`}
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center justify-end gap-1.5 shrink-0 ml-auto">
             <ActivityTypeBadge
               type={classified.activityType}
               label={classified.activityTypeLabel}
@@ -407,7 +411,7 @@ export default function ActivityDetailPage() {
             <Link
               to={`/riders/${targetRiderId}/races/${encodeURIComponent(linkedEventId)}`}
               state={passedRace ? { race: passedRace } : undefined}
-              className="inline-flex items-center rounded-lg border border-[#fc6719]/50 bg-[#fc6719]/10 px-3 py-1.5 text-xs font-semibold text-[#fc6719] hover:bg-[#fc6719]/20 transition-colors"
+              className="inline-flex items-center rounded-lg border border-accent/50 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent-text hover:bg-accent/20 transition-colors"
             >
               View Event Standings &amp; Ratings →
             </Link>
@@ -419,250 +423,299 @@ export default function ActivityDetailPage() {
             {description}
           </p>
         )}
-
-        {photos.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {photos.map((photo) => (
-              <a
-                key={photo.url}
-                href={photo.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group rounded-xl overflow-hidden border border-slate-800 bg-slate-950 block hover:border-[#fc6719]/70 transition-colors"
-              >
-                <img
-                  src={photo.url}
-                  alt={`${photo.label} for ${title}`}
-                  loading="lazy"
-                  className="w-full h-44 object-cover group-hover:opacity-95 transition-opacity"
-                />
-                <div className="px-3 py-1.5 text-[11px] text-slate-400 flex items-center justify-between gap-2">
-                  <span className="truncate">{photo.label}</span>
-                  <span className="text-[#fc6719] shrink-0 group-hover:underline">Full size ↗</span>
-                </div>
-              </a>
-            ))}
-          </div>
-        )}
-
-        {detailState.status === 'loading' && (
-          <p className="text-xs text-slate-400">Loading detailed Zwift Core telemetry…</p>
-        )}
-
-        <MetricGrid
-          items={[
-            { label: 'Moving Time', value: formatDurationMs(movingTimeMs) },
-            { label: 'Elapsed Time', value: formatDurationMs(elapsedMs) },
-            { label: 'Distance', value: formatDistance(distanceMeters, units) },
-            { label: 'Elevation', value: formatElevation(elevationMeters, units) },
-            {
-              label: 'Avg Power',
-              value: avgWatts != null ? `${Math.round(avgWatts)} W` : undefined,
-            },
-            {
-              label: 'Max Power',
-              value: maxWatts != null ? `${Math.round(maxWatts)} W` : undefined,
-            },
-            { label: 'Avg W/kg', value: avgWkg },
-            { label: 'Avg / Max Speed', value: speedText },
-            { label: 'Avg / Max HR', value: hrText },
-            { label: 'Avg / Max Cadence', value: cadenceText },
-            {
-              label: 'Calories',
-              value: calories != null ? `${Math.round(calories).toLocaleString()} kcal` : undefined,
-            },
-            {
-              label: 'Work',
-              value: workKj != null ? `${workKj.toLocaleString()} kJ` : undefined,
-            },
-          ]}
-        />
       </section>
 
-      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-4">
-        <div>
-          <h2 className="text-lg font-bold">Effort &amp; Physiology Breakdown</h2>
-          <p className="text-xs text-slate-400">
-            Session intensity, aerobic efficiency, and climbing metrics derived from Zwift Core
-            activity data.
-          </p>
-        </div>
+      {/* Sub-Tabbed Activity Detail Navigation */}
+      <div
+        role="tablist"
+        aria-label="Activity detail sections"
+        className="grid grid-cols-3 gap-1.5 rounded-2xl bg-slate-900 border border-slate-800 p-1.5"
+      >
+        {(
+          [
+            { id: 'overview', label: 'Summary & Photos', shortLabel: 'Summary' },
+            { id: 'physiology', label: 'Effort & Physiology', shortLabel: 'Physiology' },
+            { id: 'metadata', label: 'Context & Metadata', shortLabel: 'Metadata' },
+          ] as const
+        ).map((tab) => {
+          const active = activityTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setActivityTab(tab.id)}
+              className={`rounded-xl py-2.5 px-2 sm:px-3 text-xs sm:text-sm font-bold transition-all ${
+                active
+                  ? 'bg-accent text-white shadow'
+                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+              }`}
+            >
+              <span className="hidden sm:inline">{tab.label}</span>
+              <span className="sm:hidden">{tab.shortLabel}</span>
+            </button>
+          );
+        })}
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-bold">Power &amp; FTP Intensity</h3>
-              {ftpPct != null && (
-                <span className="text-xs font-semibold text-[#fc6719]">{ftpPct}% FTP</span>
+      {/* Sub-Tab 1: Summary & Photos */}
+      {activityTab === 'overview' && (
+        <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-5">
+          {detailState.status === 'loading' && (
+            <p className="text-xs text-slate-400">Loading detailed Zwift Core telemetry…</p>
+          )}
+
+          <MetricGrid
+            items={[
+              { label: 'Moving Time', value: formatDurationMs(movingTimeMs) },
+              { label: 'Elapsed Time', value: formatDurationMs(elapsedMs) },
+              { label: 'Distance', value: formatDistance(distanceMeters, units) },
+              { label: 'Elevation', value: formatElevation(elevationMeters, units) },
+              {
+                label: 'Avg Power',
+                value: avgWatts != null ? `${Math.round(avgWatts)} W` : undefined,
+              },
+              {
+                label: 'Max Power',
+                value: maxWatts != null ? `${Math.round(maxWatts)} W` : undefined,
+              },
+              { label: 'Avg W/kg', value: avgWkg },
+              { label: 'Avg / Max Speed', value: speedText },
+              { label: 'Avg / Max HR', value: hrText },
+              { label: 'Avg / Max Cadence', value: cadenceText },
+              {
+                label: 'Calories',
+                value:
+                  calories != null ? `${Math.round(calories).toLocaleString()} kcal` : undefined,
+              },
+              {
+                label: 'Work',
+                value: workKj != null ? `${workKj.toLocaleString()} kJ` : undefined,
+              },
+            ]}
+          />
+
+          {photos.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+              {photos.map((photo) => (
+                <a
+                  key={photo.url}
+                  href={photo.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group rounded-xl overflow-hidden border border-slate-800 bg-slate-950 block hover:border-accent/70 transition-colors"
+                >
+                  <img
+                    src={photo.url}
+                    alt={`${photo.label} for ${title}`}
+                    loading="lazy"
+                    className="w-full h-44 object-cover group-hover:opacity-95 transition-opacity"
+                  />
+                  <div className="px-3 py-1.5 text-[11px] text-slate-400 flex items-center justify-between gap-2">
+                    <span className="truncate">{photo.label}</span>
+                    <span className="text-accent-text shrink-0 group-hover:underline">
+                      Full size ↗
+                    </span>
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Sub-Tab 2: Effort & Physiology Breakdown */}
+      {activityTab === 'physiology' && (
+        <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-4">
+          <div>
+            <h2 className="text-lg font-bold">Effort &amp; Physiology Breakdown</h2>
+            <p className="text-xs text-slate-400">
+              Session intensity, aerobic efficiency, and climbing metrics derived from Zwift Core
+              activity data.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-bold">Power &amp; FTP Intensity</h3>
+                {ftpPct != null && (
+                  <span className="text-xs font-semibold text-accent-text">{ftpPct}% FTP</span>
+                )}
+              </div>
+              {powerZone && ftpPct != null && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs text-slate-300">
+                    <span>{powerZone.zone}</span>
+                    <span>
+                      {avgWatts != null ? `${Math.round(avgWatts)} W` : '—'} /{' '}
+                      {activityFtp != null ? `${Math.round(activityFtp)} W` : '—'}
+                    </span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                    <div
+                      className={`h-full rounded-full ${powerZone.tone}`}
+                      style={{ width: `${Math.min(100, ftpPct)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              <dl className="grid grid-cols-2 gap-2 text-xs pt-1">
+                <div>
+                  <dt className="text-slate-400">Avg Power</dt>
+                  <dd className="font-semibold">
+                    {avgWatts != null ? `${Math.round(avgWatts)} W` : '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Normalized Power</dt>
+                  <dd className="font-semibold">
+                    {normalizedPower != null ? `${Math.round(normalizedPower)} W` : '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Max Power</dt>
+                  <dd className="font-semibold">
+                    {maxWatts != null ? `${Math.round(maxWatts)} W` : '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Activity FTP</dt>
+                  <dd className="font-semibold">
+                    {activityFtp != null ? `${Math.round(activityFtp)} W` : '—'}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
+            <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-3">
+              <h3 className="text-sm font-bold">Heart Rate &amp; Efficiency</h3>
+              <dl className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <dt className="text-slate-400">Avg HR</dt>
+                  <dd className="font-semibold">
+                    {avgHr != null ? `${Math.round(avgHr)} bpm` : '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Max HR</dt>
+                  <dd className="font-semibold">
+                    {maxHr != null ? `${Math.round(maxHr)} bpm` : '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Peak % Max HR</dt>
+                  <dd className="font-semibold">
+                    {maxHrPct != null ? `${maxHrPct}% (${Math.round(profileMaxHr!)} bpm)` : '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Aerobic Efficiency</dt>
+                  <dd className="font-semibold">{hrEfficiency ?? '—'}</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-3">
+              <h3 className="text-sm font-bold">Pace &amp; Climbing</h3>
+              <dl className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <dt className="text-slate-400">Avg Speed</dt>
+                  <dd className="font-semibold">{formatSpeed(avgSpeedMps, units)}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Max Speed</dt>
+                  <dd className="font-semibold">{formatSpeed(maxSpeedMps, units)}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Climbing Density</dt>
+                  <dd className="font-semibold">{climbingDensity ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Avg VAM</dt>
+                  <dd className="font-semibold">
+                    {vamMetersPerHour != null ? `${vamMetersPerHour.toLocaleString()} m/h` : '—'}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Sub-Tab 3: Activity Metadata & Event Context */}
+      {activityTab === 'metadata' && (
+        <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-4">
+          <h2 className="text-lg font-bold">Activity Metadata &amp; Event Context</h2>
+
+          <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
+              <dt className="text-slate-400">World</dt>
+              <dd className="mt-0.5 font-semibold">{worldName ?? '—'}</dd>
+            </div>
+            <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
+              <dt className="text-slate-400">Sport</dt>
+              <dd className="mt-0.5 font-semibold">{sportLabel ?? '—'}</dd>
+            </div>
+            <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
+              <dt className="text-slate-400">Started</dt>
+              <dd className="mt-0.5 font-semibold">{formatDateTime(startDate)}</dd>
+            </div>
+            <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
+              <dt className="text-slate-400">Finished</dt>
+              <dd className="mt-0.5 font-semibold">{formatDateTime(endDate)}</dd>
+            </div>
+            <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
+              <dt className="text-slate-400">Privacy</dt>
+              <dd className="mt-0.5 font-semibold">
+                {privacy ?? (isPrivate ? 'Private' : 'Public')}
+              </dd>
+            </div>
+            <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
+              <dt className="text-slate-400">Ride Ons</dt>
+              <dd className="mt-0.5 font-semibold">{rideOns ?? 0}</dd>
+            </div>
+            <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
+              <dt className="text-slate-400">Comments</dt>
+              <dd className="mt-0.5 font-semibold">{commentsCount ?? 0}</dd>
+            </div>
+            <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
+              <dt className="text-slate-400">Rider Weight (Activity)</dt>
+              <dd className="mt-0.5 font-semibold">{formatWeight(weightGrams, units)}</dd>
+            </div>
+          </dl>
+
+          {detail?.eventInfo && (
+            <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="space-y-1">
+                <p className="font-bold text-slate-200">
+                  Linked Event:{' '}
+                  {decodeHtmlEntities(detail.eventInfo.name) || `Event ${linkedEventId}`}
+                </p>
+                <p className="text-slate-400">
+                  {detail.eventInfo.laps ? `${detail.eventInfo.laps} laps` : ''}
+                  {detail.eventInfo.subgroupTotalEntrantCount
+                    ? `${detail.eventInfo.laps ? ' · ' : ''}${detail.eventInfo.subgroupTotalEntrantCount} entrants`
+                    : ''}
+                  {detail.eventInfo.eventSubGroupId
+                    ? ` · subgroup ${detail.eventInfo.eventSubGroupId}`
+                    : ''}
+                </p>
+              </div>
+              {linkedEventId && (
+                <Link
+                  to={`/riders/${targetRiderId}/races/${encodeURIComponent(linkedEventId)}`}
+                  state={passedRace ? { race: passedRace } : undefined}
+                  className="font-semibold text-accent-text hover:underline"
+                >
+                  Inspect full event standings →
+                </Link>
               )}
             </div>
-            {powerZone && ftpPct != null && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs text-slate-300">
-                  <span>{powerZone.zone}</span>
-                  <span>
-                    {avgWatts != null ? `${Math.round(avgWatts)} W` : '—'} /{' '}
-                    {activityFtp != null ? `${Math.round(activityFtp)} W` : '—'}
-                  </span>
-                </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
-                  <div
-                    className={`h-full rounded-full ${powerZone.tone}`}
-                    style={{ width: `${Math.min(100, ftpPct)}%` }}
-                  />
-                </div>
-              </div>
-            )}
-            <dl className="grid grid-cols-2 gap-2 text-xs pt-1">
-              <div>
-                <dt className="text-slate-400">Avg Power</dt>
-                <dd className="font-semibold">
-                  {avgWatts != null ? `${Math.round(avgWatts)} W` : '—'}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-slate-400">Normalized Power</dt>
-                <dd className="font-semibold">
-                  {normalizedPower != null ? `${Math.round(normalizedPower)} W` : '—'}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-slate-400">Max Power</dt>
-                <dd className="font-semibold">
-                  {maxWatts != null ? `${Math.round(maxWatts)} W` : '—'}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-slate-400">Activity FTP</dt>
-                <dd className="font-semibold">
-                  {activityFtp != null ? `${Math.round(activityFtp)} W` : '—'}
-                </dd>
-              </div>
-            </dl>
-          </div>
-
-          <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-3">
-            <h3 className="text-sm font-bold">Heart Rate &amp; Efficiency</h3>
-            <dl className="grid grid-cols-2 gap-2 text-xs">
-              <div>
-                <dt className="text-slate-400">Avg HR</dt>
-                <dd className="font-semibold">
-                  {avgHr != null ? `${Math.round(avgHr)} bpm` : '—'}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-slate-400">Max HR</dt>
-                <dd className="font-semibold">
-                  {maxHr != null ? `${Math.round(maxHr)} bpm` : '—'}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-slate-400">Peak % Max HR</dt>
-                <dd className="font-semibold">
-                  {maxHrPct != null
-                    ? `${maxHrPct}% (${Math.round(profileMaxHr!)} bpm)`
-                    : '—'}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-slate-400">Aerobic Efficiency</dt>
-                <dd className="font-semibold">{hrEfficiency ?? '—'}</dd>
-              </div>
-            </dl>
-          </div>
-
-          <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-3">
-            <h3 className="text-sm font-bold">Pace &amp; Climbing</h3>
-            <dl className="grid grid-cols-2 gap-2 text-xs">
-              <div>
-                <dt className="text-slate-400">Avg Speed</dt>
-                <dd className="font-semibold">{formatSpeed(avgSpeedMps, units)}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-400">Max Speed</dt>
-                <dd className="font-semibold">{formatSpeed(maxSpeedMps, units)}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-400">Climbing Density</dt>
-                <dd className="font-semibold">{climbingDensity ?? '—'}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-400">Avg VAM</dt>
-                <dd className="font-semibold">
-                  {vamMetersPerHour != null ? `${vamMetersPerHour.toLocaleString()} m/h` : '—'}
-                </dd>
-              </div>
-            </dl>
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-4">
-        <h2 className="text-lg font-bold">Activity Metadata &amp; Event Context</h2>
-
-        <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
-            <dt className="text-slate-400">World</dt>
-            <dd className="mt-0.5 font-semibold">{worldName ?? '—'}</dd>
-          </div>
-          <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
-            <dt className="text-slate-400">Sport</dt>
-            <dd className="mt-0.5 font-semibold">{sportLabel ?? '—'}</dd>
-          </div>
-          <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
-            <dt className="text-slate-400">Started</dt>
-            <dd className="mt-0.5 font-semibold">{formatDateTime(startDate)}</dd>
-          </div>
-          <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
-            <dt className="text-slate-400">Finished</dt>
-            <dd className="mt-0.5 font-semibold">{formatDateTime(endDate)}</dd>
-          </div>
-          <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
-            <dt className="text-slate-400">Privacy</dt>
-            <dd className="mt-0.5 font-semibold">{privacy ?? (isPrivate ? 'Private' : 'Public')}</dd>
-          </div>
-          <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
-            <dt className="text-slate-400">Ride Ons</dt>
-            <dd className="mt-0.5 font-semibold">{rideOns ?? 0}</dd>
-          </div>
-          <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
-            <dt className="text-slate-400">Comments</dt>
-            <dd className="mt-0.5 font-semibold">{commentsCount ?? 0}</dd>
-          </div>
-          <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
-            <dt className="text-slate-400">Rider Weight (Activity)</dt>
-            <dd className="mt-0.5 font-semibold">{formatWeight(weightGrams, units)}</dd>
-          </div>
-        </dl>
-
-        {detail?.eventInfo && (
-          <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="space-y-1">
-              <p className="font-bold text-slate-200">
-                Linked Event: {decodeHtmlEntities(detail.eventInfo.name) || `Event ${linkedEventId}`}
-              </p>
-              <p className="text-slate-400">
-                {detail.eventInfo.laps ? `${detail.eventInfo.laps} laps` : ''}
-                {detail.eventInfo.subgroupTotalEntrantCount
-                  ? `${detail.eventInfo.laps ? ' · ' : ''}${detail.eventInfo.subgroupTotalEntrantCount} entrants`
-                  : ''}
-                {detail.eventInfo.eventSubGroupId
-                  ? ` · subgroup ${detail.eventInfo.eventSubGroupId}`
-                  : ''}
-              </p>
-            </div>
-            {linkedEventId && (
-              <Link
-                to={`/riders/${targetRiderId}/races/${encodeURIComponent(linkedEventId)}`}
-                state={passedRace ? { race: passedRace } : undefined}
-                className="font-semibold text-[#fc6719] hover:underline"
-              >
-                Inspect full event standings →
-              </Link>
-            )}
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+      )}
     </main>
   );
 }
