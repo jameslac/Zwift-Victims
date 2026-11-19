@@ -127,7 +127,7 @@ ZwiftRacing.app computes community **vELO ratings** (`v2` and legacy), **Compoun
 
 ### How We Fetch It Currently (`/api/zwiftracing/riders/{riderId}` & `/api/zwiftracing/events/{eventId}`)
 - Instead of requiring a developer API token upfront, `worker/index.ts` fetches the SSR HTML pages `https://zwiftracing.app/riders/{riderId}` and `https://zwiftracing.app/events/{eventId}` and [worker/seroval.ts](file:///Users/jamesandrelacour/Documents/GitHub/Zwift-Victims/worker/seroval.ts) parses the embedded `self.$R` seroval hydration stream (stripping Mongoose `$__` / `$isNew` / `_doc` metadata on event payloads).
-- **Window caveat:** `overview.history` on `/riders/{riderId}` covers roughly the last **~90 days** of scored races, whereas `/events/{eventId}` returns full event details, `pens[]` (with ZRS `rangeLabel`), `rules`, `route`, `courseProfile`, and per-pen `riders[]` (`position`, `expectedPosition`, `ratingBefore`, `rating`, `ratingDelta`, `eventRating`, `phenotype`, `velo`, `wkg5`–`wkg1200`, `didNotFinish`, `disqualified`).
+- **Window caveat:** `overview.history` on `/riders/{riderId}` covers roughly the last **~90 days** of scored races, whereas `/events/{eventId}` returns full event details, `pens[]` (with ZRS `rangeLabel`, GPX `velo.factorWeights`, and Legacy v1 `results.averageRating`), `rules`, `route`, `courseProfile`, and per-pen `riders[]` (`position`, top-level legacy/overall `expectedPosition` + `expectedPlaceRange`, `velo.elo.expectedPosition` [course-weighted v2], `velo.seed.expectedPosition` [power-seed], `velo.elo.eventRating` [rider's course-weighted vELO — NOT pen SOF], `ratingBefore`, `rating`, `ratingDelta`, `phenotype`, `velo`, `wkg5`–`wkg1200`, `didNotFinish`, `disqualified`). True vELO v2 pen SOF is averaged from `pen.riders[]`.
 - Reference docs for their hosted API: `https://www.zwiftracing.app/reference`.
 
 ### Observed Attribute Schema: `rider` (Rider Profile)
@@ -147,7 +147,7 @@ ZwiftRacing.app computes community **vELO ratings** (`v2` and legacy), **Compoun
   - `place`: `positionInCategory` (true category finish **including private riders**), `penTotal` (total category entrants), `didNotFinish`, `disqualified`.
   - `race`: `time` (sec), `gap` (sec), `source`, `weight`, `height`, `age`, `distance`, `wkgAvg`, `wkg5`, `wkg15`, `wkg30`, `wkg60`, `wkg120`, `wkg300`, `wkg1200`.
   - `sensor`: `powerType`, `steering`, `trainerDifficulty`, `heartRateMonitor`.
-  - `velo`: `intensity`, `seed`, `elo` (`before`, `after`, `eventRating` [SOF], `expectedPosition`, `adjustedChange`, `rawChange`, `factors`), `points` (`value`, `gc`, `sprint`, `climb`, `tt`).
+  - `velo`: `intensity`, `seed` (`before`, `after`, `eventRating`, `expectedPosition`, `confidence`, `factors`), `elo` (`before`, `after`, `eventRating` [rider's course-weighted vELO], `expectedPosition` [course-weighted vELO v2 estimate], `adjustedChange`, `rawChange`, `factors`), `points` (`value`, `gc`, `sprint`, `climb`, `tt`).
   - `legacy` (`rating`, `ratingBefore`, `ratingDelta`, `eventRating`), `pointsStatus`, `classement`.
 
 ---

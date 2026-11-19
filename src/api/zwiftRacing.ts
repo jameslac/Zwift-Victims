@@ -98,7 +98,15 @@ export interface ZwiftRacingRaceEntry {
   };
   velo?: {
     intensity?: number;
-    seed?: Record<string, unknown>;
+    seed?: {
+      before?: number;
+      after?: number;
+      eventRating?: number;
+      expectedPosition?: number;
+      confidence?: number;
+      factors?: Record<string, unknown>;
+      [key: string]: unknown;
+    };
     elo?: {
       before?: number;
       after?: number;
@@ -217,7 +225,15 @@ export interface ZwiftRacingEventRider {
   };
   velo?: {
     intensity?: number;
-    seed?: Record<string, unknown>;
+    seed?: {
+      before?: number;
+      after?: number;
+      eventRating?: number;
+      expectedPosition?: number;
+      confidence?: number;
+      factors?: Record<string, unknown>;
+      [key: string]: unknown;
+    };
     elo?: {
       before?: number;
       after?: number;

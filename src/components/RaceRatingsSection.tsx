@@ -1,5 +1,9 @@
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
-import type { ZwiftRacingEventRider, ZwiftRacingRaceEntry } from '../api/zwiftRacing';
+import type {
+  ZwiftRacingEventPen,
+  ZwiftRacingEventRider,
+  ZwiftRacingRaceEntry,
+} from '../api/zwiftRacing';
 
 type Tone = 'positive' | 'negative' | undefined;
 
@@ -109,6 +113,7 @@ function MovementCard({
 export default function RaceRatingsSection({
   zrEntry,
   zrEventRider,
+  zrEventPen,
   bestZpEntry,
   coreZrs,
   fallbackZrsScore,
@@ -116,8 +121,15 @@ export default function RaceRatingsSection({
 }: {
   zrEntry?: ZwiftRacingRaceEntry;
   zrEventRider?: ZwiftRacingEventRider;
+  zrEventPen?: ZwiftRacingEventPen;
   bestZpEntry?: ZwiftPowerRaceEntry;
-  coreZrs: { score?: number; previousScore?: number; delta?: number };
+  coreZrs: {
+    score?: number;
+    previousScore?: number;
+    delta?: number;
+    changeType?: string;
+    hasEventScore?: boolean;
+  };
   fallbackZrsScore?: number | null;
   bestVerifiedPlace?: number;
 }) {
@@ -141,6 +153,7 @@ export default function RaceRatingsSection({
   const zrsPrev = coreZrs.previousScore;
   const zrsDelta = coreZrs.delta;
   const hasZrs = zrsScore != null;
+  const zrsChanged = zrsDelta != null && Math.abs(zrsDelta) >= 0.05;
 
   // 3. ZwiftPower Rank (lower score = better rank; negative gain = improved)
   const zpSkillNum = parseFiniteNum(bestZpEntry?.skill);
@@ -164,18 +177,59 @@ export default function RaceRatingsSection({
   const eloFactorsMap = zrEntry?.velo?.elo?.factors ?? zrEventRider?.velo?.elo?.factors;
   const eloFactors = eloFactorsMap ? Object.entries(eloFactorsMap) : [];
 
-  // Context & Points
-  const sof = parseFiniteNum(zrEntry?.velo?.elo?.eventRating ?? zrEventRider?.velo?.elo?.eventRating);
-  const expectedPos = parseFiniteNum(
-    zrEntry?.velo?.elo?.expectedPosition ??
-      zrEventRider?.velo?.elo?.expectedPosition ??
-      zrEventRider?.expectedPosition,
+  // Context & Points: True Pen SOF vs Rider Course vELO
+  const penRatedVelos = (zrEventPen?.riders ?? [])
+    .map((r) => parseFiniteNum(r.velo?.elo?.eventRating ?? r.velo?.elo?.before ?? r.riderVelo?.race))
+    .filter((n): n is number => n !== undefined && n > 0);
+  const penAvgVelo =
+    penRatedVelos.length > 0
+      ? penRatedVelos.reduce((acc, n) => acc + n, 0) / penRatedVelos.length
+      : undefined;
+  const riderCourseVelo = parseFiniteNum(
+    zrEntry?.velo?.elo?.eventRating ?? zrEventRider?.velo?.elo?.eventRating,
+  );
+  const riderRefVelo =
+    riderCourseVelo ?? eloBefore ?? parseFiniteNum(zrEventRider?.riderVelo?.race);
+  const legacyPenAvg = parseFiniteNum(zrEventPen?.results?.averageRating);
+
+  // Course-weighted vELO v2 expectation vs Seed & Overall/Legacy expectations
+  const eventExpectedPos = parseFiniteNum(
+    zrEntry?.velo?.elo?.expectedPosition ?? zrEventRider?.velo?.elo?.expectedPosition,
+  );
+  const overallExpectedPos = parseFiniteNum(zrEventRider?.expectedPosition);
+  const expectedPos = eventExpectedPos ?? overallExpectedPos;
+  const seedExpectedPos = parseFiniteNum(
+    zrEntry?.velo?.seed?.expectedPosition ?? zrEventRider?.velo?.seed?.expectedPosition,
   );
   const expectedRange = zrEventRider?.expectedPlaceRange;
   const expectedBeat =
     bestVerifiedPlace != null && expectedPos != null
       ? Math.round(expectedPos) - bestVerifiedPlace
       : undefined;
+
+  const expectedSubParts: string[] = [];
+  if (expectedPos != null) {
+    const baseText =
+      eventExpectedPos != null
+        ? `Course-weighted vELO est. ${eventExpectedPos.toFixed(1)}`
+        : `Overall est. ${overallExpectedPos!.toFixed(1)}`;
+    expectedSubParts.push(
+      expectedRange?.low != null && expectedRange?.high != null
+        ? `${baseText} (range ${expectedRange.low}–${expectedRange.high})`
+        : baseText,
+    );
+  }
+  if (seedExpectedPos != null) {
+    expectedSubParts.push(`Seed est. ${seedExpectedPos.toFixed(1)}`);
+  }
+  if (
+    eventExpectedPos != null &&
+    overallExpectedPos != null &&
+    Math.round(eventExpectedPos) !== Math.round(overallExpectedPos)
+  ) {
+    expectedSubParts.push(`Overall/Legacy est. #${Math.round(overallExpectedPos)}`);
+  }
+
   const intensity = parseFiniteNum(zrEntry?.velo?.intensity ?? zrEventRider?.velo?.intensity);
 
   const zrPointsObj =
@@ -196,8 +250,9 @@ export default function RaceRatingsSection({
   const zpPtsNum = parseFiniteNum(bestZpEntry?.pts);
   const hasZpPts = zpPtsNum != null && zpPtsNum > 0;
 
+  const hasSofTile = penAvgVelo != null || legacyPenAvg != null || riderCourseVelo != null;
   const hasContext =
-    expectedPos != null || sof != null || intensity != null || hasZrPoints || hasZpPts;
+    expectedPos != null || hasSofTile || intensity != null || hasZrPoints || hasZpPts;
 
   return (
     <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-6">
@@ -255,18 +310,36 @@ export default function RaceRatingsSection({
               {hasZrs && (
                 <MovementCard
                   label="Zwift Racing Score"
-                  tone={deltaTone(zrsDelta)}
+                  tone={zrsChanged ? deltaTone(zrsDelta) : undefined}
                   badgeText={
-                    zrsDelta != null && Math.round(zrsDelta) !== 0
-                      ? `${zrsDelta > 0 ? '▲' : '▼'} ${formatSigned(Math.round(zrsDelta), 0)}`
-                      : undefined
+                    zrsChanged
+                      ? `${zrsDelta! > 0 ? '▲' : '▼'} ${
+                          Math.abs(zrsDelta!) < 1
+                            ? formatSigned(zrsDelta!, 1)
+                            : formatSigned(Math.round(zrsDelta!), 0)
+                        }`
+                      : zrsPrev != null && coreZrs.score != null
+                        ? 'No change'
+                        : undefined
                   }
                   mainText={
-                    zrsPrev != null && Math.round(zrsPrev) !== Math.round(zrsScore!)
-                      ? `${Math.round(zrsPrev)} → ${Math.round(zrsScore!)}`
+                    zrsPrev != null && coreZrs.score != null && zrsChanged
+                      ? `${Math.round(zrsPrev)} → ${Math.round(coreZrs.score)}`
                       : String(Math.round(zrsScore!))
                   }
-                  subText="Zwift pen score (0–1000, higher is better)"
+                  subText={
+                    zrsPrev != null && coreZrs.score != null
+                      ? !zrsChanged
+                        ? coreZrs.changeType
+                          ? `${coreZrs.changeType} · Unchanged in this event`
+                          : 'Unchanged in this event (0–1000)'
+                        : coreZrs.changeType
+                          ? `${coreZrs.changeType} · Zwift pen score (0–1000, higher is better)`
+                          : 'Zwift pen score (0–1000, higher is better)'
+                      : coreZrs.hasEventScore
+                        ? 'Event ZRS · per-race delta not returned by Zwift'
+                        : 'Current profile ZRS · per-race change only returned on ZRS-ranked events'
+                  }
                 />
               )}
 
@@ -411,29 +484,110 @@ export default function RaceRatingsSection({
                     <p className="text-base font-bold font-mono text-slate-100">
                       Est. #{Math.round(expectedPos)}
                     </p>
-                    <p className="text-[11px] text-slate-400">
-                      Exact {expectedPos.toFixed(1)}
-                      {expectedRange?.low != null && expectedRange?.high != null
-                        ? ` (expected range ${expectedRange.low}–${expectedRange.high})`
-                        : ''}
-                    </p>
+                    <p className="text-[11px] text-slate-400">{expectedSubParts.join(' · ')}</p>
                   </div>
                 )}
 
-                {sof != null && (
+                {penAvgVelo != null ? (
+                  (() => {
+                    const sofDiff = riderRefVelo != null ? riderRefVelo - penAvgVelo : undefined;
+                    let badgeText: string | undefined;
+                    let badgeCls = 'bg-slate-800 border-slate-700 text-slate-300';
+                    let subText = `Avg pen vELO across ${penRatedVelos.length} rated riders`;
+                    if (sofDiff != null) {
+                      if (sofDiff >= 15) {
+                        badgeText = `Stronger (${formatSigned(Math.round(sofDiff), 0)})`;
+                        badgeCls = 'bg-sky-500/20 border-sky-400/40 text-sky-300';
+                        subText = `Your race vELO (${Math.round(riderRefVelo!)}) was above pen avg (${penRatedVelos.length} riders)`;
+                      } else if (sofDiff <= -15) {
+                        badgeText = `Weaker (${formatSigned(Math.round(sofDiff), 0)})`;
+                        badgeCls = 'bg-amber-500/20 border-amber-400/40 text-amber-300';
+                        subText = `Your race vELO (${Math.round(riderRefVelo!)}) was below pen avg — tougher field (${penRatedVelos.length} riders)`;
+                      } else {
+                        badgeText = `Average (${sofDiff >= 0 ? '+' : ''}${Math.round(sofDiff)})`;
+                        subText = `Your race vELO (${Math.round(riderRefVelo!)}) was right around pen avg (${penRatedVelos.length} riders)`;
+                      }
+                    }
+                    return (
+                      <div
+                        title="True average ZwiftRacing vELO v2 rating across riders in this pen"
+                        className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 space-y-1"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">
+                            Strength of Field (SOF)
+                          </span>
+                          {badgeText && (
+                            <span
+                              className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badgeCls}`}
+                            >
+                              {badgeText}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-base font-bold font-mono text-slate-100">
+                          {Math.round(penAvgVelo)}
+                        </p>
+                        <p className="text-[11px] text-slate-400">{subText}</p>
+                      </div>
+                    );
+                  })()
+                ) : legacyPenAvg != null ? (
+                  (() => {
+                    const legacyDiff = legacyBefore != null ? legacyBefore - legacyPenAvg : undefined;
+                    let badgeText: string | undefined;
+                    let badgeCls = 'bg-slate-800 border-slate-700 text-slate-300';
+                    if (legacyDiff != null) {
+                      if (legacyDiff >= 40) {
+                        badgeText = `Stronger (${formatSigned(Math.round(legacyDiff), 0)})`;
+                        badgeCls = 'bg-sky-500/20 border-sky-400/40 text-sky-300';
+                      } else if (legacyDiff <= -40) {
+                        badgeText = `Weaker (${formatSigned(Math.round(legacyDiff), 0)})`;
+                        badgeCls = 'bg-amber-500/20 border-amber-400/40 text-amber-300';
+                      } else {
+                        badgeText = `Average (${legacyDiff >= 0 ? '+' : ''}${Math.round(legacyDiff)})`;
+                      }
+                    }
+                    return (
+                      <div
+                        title="Average ZwiftRacing Legacy v1 rating of competitors in this pen"
+                        className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 space-y-1"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">
+                            Strength of Field (SOF)
+                          </span>
+                          {badgeText && (
+                            <span
+                              className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badgeCls}`}
+                            >
+                              {badgeText}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-base font-bold font-mono text-slate-100">
+                          {Math.round(legacyPenAvg)}
+                        </p>
+                        <p className="text-[11px] text-slate-400">Avg pen rating (Legacy v1)</p>
+                      </div>
+                    );
+                  })()
+                ) : riderCourseVelo != null ? (
                   <div
-                    title="Average ZwiftRacing vELO rating of competitors in your pen"
+                    title="Your ZwiftRacing vELO v2 rating weighted by this route's terrain factors"
                     className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 space-y-1"
                   >
                     <span className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">
-                      Strength of Field (SOF)
+                      Event Rating (Course vELO)
                     </span>
                     <p className="text-base font-bold font-mono text-slate-100">
-                      {Math.round(sof)}
+                      {Math.round(riderCourseVelo)}
                     </p>
-                    <p className="text-[11px] text-slate-400">Avg pen vELO difficulty</p>
+                    <p className="text-[11px] text-slate-400">
+                      Your course-weighted vELO for this route
+                    </p>
                   </div>
-                )}
+                ) : null}
 
                 {intensity != null && (
                   <div

@@ -25,7 +25,6 @@ const COLUMN_DEFS = [
   { id: 'splits', label: '5s / 1m / 5m / 20m' },
   { id: 'hr', label: 'HR' },
   { id: 'speed', label: 'Speed' },
-  { id: 'cadence', label: 'Cadence' },
   { id: 'weight', label: 'Weight' },
   { id: 'status', label: 'Status' },
 ] as const;
@@ -33,7 +32,7 @@ const COLUMN_DEFS = [
 type ColumnId = (typeof COLUMN_DEFS)[number]['id'];
 type ColumnVisibility = Record<ColumnId, boolean>;
 
-const COLS_STORAGE_KEY = 'zv.raceDetail.standingsCols.v3';
+const COLS_STORAGE_KEY = 'zv.raceDetail.standingsCols.v4';
 const SPLITS_UNIT_STORAGE_KEY = 'zv.raceDetail.splitsUnit';
 
 const DEFAULT_COLUMNS: ColumnVisibility = {
@@ -51,7 +50,6 @@ const DEFAULT_COLUMNS: ColumnVisibility = {
   splits: true,
   hr: true,
   speed: true,
-  cadence: true,
   weight: true,
   status: true,
 };
@@ -104,13 +102,6 @@ function formatRowSpeed(
   }
   if (avgMps != null) return `${(avgMps * factor).toFixed(1)} ${suffix}`;
   return `— / ${(maxMps! * factor).toFixed(1)} ${suffix}`;
-}
-
-function formatRowCadence(avg: number | undefined, max: number | undefined): string {
-  if (avg != null && max != null) return `${Math.round(avg)} / ${Math.round(max)} rpm`;
-  if (avg != null) return `${Math.round(avg)} rpm`;
-  if (max != null) return `— / ${Math.round(max)} rpm`;
-  return '—';
 }
 
 function penSystemBadge(system: PenSystem): { label: string; title: string } {
@@ -404,7 +395,7 @@ export default function RaceDetailStandings({
                 {columns.expectedPosition && (
                   <th
                     className="py-2 pr-3 whitespace-nowrap"
-                    title="ZwiftRacing.app estimated finish position"
+                    title="ZwiftRacing.app course-weighted vELO v2 expected finish position"
                   >
                     Est. #
                   </th>
@@ -447,14 +438,6 @@ export default function RaceDetailStandings({
                     title="Avg / Max speed (Max speed available for active rider's matched activity)"
                   >
                     Speed
-                  </th>
-                )}
-                {columns.cadence && (
-                  <th
-                    className="py-2 pr-3 whitespace-nowrap"
-                    title="Avg / Max cadence in rpm (available for active rider's matched activity)"
-                  >
-                    Cadence
                   </th>
                 )}
                 {columns.weight && <th className="py-2 pr-3 whitespace-nowrap">Weight</th>}
@@ -509,10 +492,17 @@ export default function RaceDetailStandings({
                                 ? estRounded - row.rank
                                 : null;
                             const range = row.expectedPlaceRange;
-                            const titleText =
-                              range?.low != null && range?.high != null
-                                ? `Expected ${row.expectedPosition.toFixed(1)} (range ${range.low}–${range.high})`
-                                : `Expected ${row.expectedPosition.toFixed(1)}`;
+                            const parts = [`Course-weighted Est. ${row.expectedPosition.toFixed(1)}`];
+                            if (range?.low != null && range?.high != null) {
+                              parts.push(`(range ${range.low}–${range.high})`);
+                            }
+                            if (row.seedExpectedPosition != null) {
+                              parts.push(`Power-seed Est. ${row.seedExpectedPosition.toFixed(1)}`);
+                            }
+                            if (row.overallExpectedPosition != null) {
+                              parts.push(`Overall/Legacy Est. #${Math.round(row.overallExpectedPosition)}`);
+                            }
+                            const titleText = parts.join(' · ');
                             return (
                               <span title={titleText} className="text-slate-300">
                                 {estRounded}
@@ -687,12 +677,6 @@ export default function RaceDetailStandings({
                     {columns.speed && (
                       <td className="py-2 pr-3 whitespace-nowrap">
                         {formatRowSpeed(row.avgSpeedMps, row.maxSpeedMps, units)}
-                      </td>
-                    )}
-
-                    {columns.cadence && (
-                      <td className="py-2 pr-3 whitespace-nowrap">
-                        {formatRowCadence(row.avgCadence, row.maxCadence)}
                       </td>
                     )}
 

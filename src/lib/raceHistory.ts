@@ -107,29 +107,66 @@ export function formatZpRiderCategory(
   return open ?? women;
 }
 
+function finiteNum(v: unknown): number | undefined {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+  if (typeof v === 'string') {
+    const trimmed = v.trim();
+    if (!trimmed) return undefined;
+    const n = Number(trimmed);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  return undefined;
+}
+
 export function extractCoreZrs(entry: ZwiftRaceResultEntry | undefined): {
   score?: number;
   previousScore?: number;
   delta?: number;
+  changeType?: string;
+  hasEventScore: boolean;
 } {
-  if (!entry) return {};
-  const sh = entry.scoreHistory;
-  const newScore =
-    typeof sh?.newScore === 'number' && Number.isFinite(sh.newScore) ? sh.newScore : undefined;
-  const previousScore =
-    typeof sh?.previousScore === 'number' && Number.isFinite(sh.previousScore)
-      ? sh.previousScore
+  if (!entry) return { hasEventScore: false };
+  const profileRec = entry.profileData as Record<string, unknown> | undefined;
+  const activityRec = entry.activityData as Record<string, unknown> | undefined;
+  const metricsRec = entry.competitionMetrics as Record<string, unknown> | undefined;
+  const rawHistory =
+    entry.scoreHistory ??
+    profileRec?.scoreHistory ??
+    activityRec?.scoreHistory ??
+    metricsRec?.scoreHistory;
+  const sh = (
+    Array.isArray(rawHistory) ? rawHistory[rawHistory.length - 1] : rawHistory
+  ) as Record<string, unknown> | undefined;
+
+  const newScore = sh
+    ? finiteNum(sh.newScore ?? sh.scoreAfter ?? sh.after ?? sh.score)
+    : undefined;
+  const previousScore = sh
+    ? finiteNum(sh.previousScore ?? sh.prevScore ?? sh.scoreBefore ?? sh.before)
+    : undefined;
+  const explicitDelta = sh ? finiteNum(sh.delta ?? sh.scoreDelta ?? sh.change) : undefined;
+  const changeType =
+    sh && typeof sh.scoreChangeType === 'string' && sh.scoreChangeType.trim()
+      ? sh.scoreChangeType.trim()
       : undefined;
+
   const direct = [
     newScore,
-    entry.racingScore,
-    entry.competitionMetrics?.racingScore,
-    entry.profileData?.competitionMetrics?.racingScore,
-  ].find((v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0);
+    finiteNum(entry.racingScore),
+    finiteNum(entry.competitionMetrics?.racingScore),
+    finiteNum(entry.profileData?.competitionMetrics?.racingScore),
+  ].find((v): v is number => v !== undefined && v > 0);
+
   const score = direct ?? previousScore;
   const delta =
-    newScore != null && previousScore != null ? newScore - previousScore : undefined;
-  return { score, previousScore, delta };
+    newScore != null && previousScore != null ? newScore - previousScore : explicitDelta;
+  return {
+    score,
+    previousScore,
+    delta,
+    changeType,
+    hasEventScore: score != null,
+  };
 }
 
 export interface ActivityPhoto {

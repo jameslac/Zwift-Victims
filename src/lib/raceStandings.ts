@@ -1,5 +1,4 @@
 import type {
-  ZwiftActivity,
   ZwiftActivityDetail,
   ZwiftEventSubgroup,
   ZwiftProfile,
@@ -58,6 +57,8 @@ export interface UnifiedStandingRow {
   velo?: number;
   veloDelta?: number;
   expectedPosition?: number;
+  overallExpectedPosition?: number;
+  seedExpectedPosition?: number;
   expectedPlaceRange?: { low?: number; high?: number };
   phenotype?: string;
   weightGrams?: number;
@@ -70,8 +71,6 @@ export interface UnifiedStandingRow {
   maxHr?: number;
   avgSpeedMps?: number;
   maxSpeedMps?: number;
-  avgCadence?: number;
-  maxCadence?: number;
   splits: PowerCurveSplits;
   didNotFinish: boolean;
   disqualified: boolean;
@@ -324,7 +323,6 @@ export function mergePenStandings(opts: {
   targetProfile?: ZwiftProfile;
   loggedInProfile?: ZwiftProfile | null;
   eventDistanceMeters?: number;
-  targetActivity?: ZwiftActivity;
   targetActivityDetail?: ZwiftActivityDetail;
 }): UnifiedStandingRow[] {
   const {
@@ -339,7 +337,6 @@ export function mergePenStandings(opts: {
     targetProfile,
     loggedInProfile,
     eventDistanceMeters,
-    targetActivity,
     targetActivityDetail,
   } = opts;
 
@@ -514,26 +511,6 @@ export function mergePenStandings(opts: {
         ? positiveNum(targetActivityDetail?.maxSpeedInMetersPerSecond)
         : undefined;
 
-    const coreSensorRec = core?.sensorData as Record<string, unknown> | undefined;
-    const coreCadenceRec =
-      coreSensorRec?.cadenceData && typeof coreSensorRec.cadenceData === 'object'
-        ? (coreSensorRec.cadenceData as Record<string, unknown>)
-        : undefined;
-    const avgCadence =
-      positiveNum(coreSensorRec?.avgCadence) ??
-      positiveNum(coreCadenceRec?.avgCadence) ??
-      (riderId === targetRiderId
-        ? positiveNum(targetActivityDetail?.avgCadenceInRotationsPerMinute) ??
-          positiveNum(targetActivity?.avgCadence)
-        : undefined);
-    const maxCadence =
-      positiveNum(coreSensorRec?.maxCadence) ??
-      positiveNum(coreCadenceRec?.maxCadence) ??
-      (riderId === targetRiderId
-        ? positiveNum(targetActivityDetail?.maxCadenceInRotationsPerMinute) ??
-          positiveNum(targetActivity?.maxCadence)
-        : undefined);
-
     const coreZrs = extractCoreZrs(core);
     const profileZrsFallback =
       riderId === targetRiderId
@@ -559,6 +536,10 @@ export function mergePenStandings(opts: {
       zr?.velo?.elo?.rawChange ??
       (veloAfter != null && veloBefore != null ? veloAfter - veloBefore : undefined);
 
+    const eventExpectedPos = positiveNum(zr?.velo?.elo?.expectedPosition);
+    const overallExpectedPos = positiveNum(zr?.expectedPosition);
+    const seedExpectedPos = positiveNum(zr?.velo?.seed?.expectedPosition);
+
     const hiddenOnZp = zpViewLoaded && !zpView && (Boolean(core) || Boolean(zr) || Boolean(zpZwift));
 
     rows.push({
@@ -574,7 +555,14 @@ export function mergePenStandings(opts: {
       zrsDelta: coreZrs.delta,
       velo: veloAfter,
       veloDelta,
-      expectedPosition: zr?.expectedPosition ?? zr?.velo?.elo?.expectedPosition,
+      expectedPosition: eventExpectedPos ?? overallExpectedPos,
+      overallExpectedPosition:
+        eventExpectedPos != null &&
+        overallExpectedPos != null &&
+        Math.round(eventExpectedPos) !== Math.round(overallExpectedPos)
+          ? overallExpectedPos
+          : undefined,
+      seedExpectedPosition: seedExpectedPos,
       expectedPlaceRange: zr?.expectedPlaceRange,
       phenotype: formatPhenotype(zr?.phenotype?.label),
       weightGrams,
@@ -587,8 +575,6 @@ export function mergePenStandings(opts: {
       maxHr,
       avgSpeedMps,
       maxSpeedMps,
-      avgCadence,
-      maxCadence,
       splits: {
         s5: makeSplit(zpView?.w5, zpView?.wkg5, zr?.wkg5, undefined, weightKg),
         s15: makeSplit(
