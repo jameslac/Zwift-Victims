@@ -3,7 +3,13 @@ import { Link } from 'react-router-dom';
 import type { ZwiftProfile } from '../api/zwiftCore';
 import { useFavorites } from '../lib/FavoritesContext';
 import { ordinal } from '../lib/raceHistory';
-import type { PenOption, PenSystem, SplitPair, UnifiedStandingRow } from '../lib/raceStandings';
+import type {
+  ExpectedPositionMode,
+  PenOption,
+  PenSystem,
+  SplitPair,
+  UnifiedStandingRow,
+} from '../lib/raceStandings';
 import { formatDurationMs, formatWeight } from '../lib/units';
 import type { UnitSystem } from '../lib/units';
 
@@ -11,7 +17,7 @@ type RowFilter = 'all' | 'zp' | 'hidden' | 'tracked';
 type SplitsUnit = 'w' | 'wkg';
 
 const COLUMN_DEFS = [
-  { id: 'expectedPosition', label: 'Est. # (Route / Ovr)' },
+  { id: 'expectedPosition', label: 'Est. #' },
   { id: 'riderCategory', label: 'Rider Cat' },
   { id: 'zrs', label: 'ZRS' },
   { id: 'velo', label: 'vELO' },
@@ -135,6 +141,8 @@ export default function RaceDetailStandings({
   anyLoading,
   zpViewLoaded,
   onSelectPen,
+  expectedMode,
+  onToggleExpectedMode,
   units,
 }: {
   raceKey: string;
@@ -147,6 +155,8 @@ export default function RaceDetailStandings({
   anyLoading: boolean;
   zpViewLoaded: boolean;
   onSelectPen: (pen: PenOption) => void;
+  expectedMode: ExpectedPositionMode;
+  onToggleExpectedMode: () => void;
   units: UnitSystem;
 }) {
   const { isFavorite } = useFavorites();
@@ -393,14 +403,22 @@ export default function RaceDetailStandings({
               <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wide align-bottom">
                 <th className="py-2 pr-3 whitespace-nowrap">#</th>
                 {columns.expectedPosition && (
-                  <th
-                    className="py-2 pr-3 whitespace-nowrap"
-                    title="Route (course-weighted vELO v2) expected finish, with Overall/Legacy estimate below when different"
-                  >
-                    <span>Est. #</span>
-                    <span className="block text-[9px] font-normal normal-case tracking-normal text-slate-500">
-                      Route / Ovr
-                    </span>
+                  <th className="py-2 pr-3 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={onToggleExpectedMode}
+                      title={
+                        expectedMode === 'route'
+                          ? 'Showing Route (course-weighted) expected finish. Click to switch to Overall.'
+                          : 'Showing Overall expected finish. Click to switch to Route (course-weighted).'
+                      }
+                      className="text-left uppercase tracking-wide group cursor-pointer rounded focus:outline-none focus-visible:ring-1 focus-visible:ring-[#fc6719]"
+                    >
+                      <span className="group-hover:text-slate-200 transition-colors">Est. #</span>
+                      <span className="block text-[9px] font-normal normal-case tracking-normal text-[#fc6719] group-hover:underline">
+                        {expectedMode === 'route' ? 'Route ⇄' : 'Overall ⇄'}
+                      </span>
+                    </button>
                   </th>
                 )}
                 <th className="py-2 pr-3 whitespace-nowrap">Rider</th>
@@ -509,74 +527,67 @@ export default function RaceDetailStandings({
 
                     {columns.expectedPosition && (
                       <td className="py-2 pr-3 font-mono whitespace-nowrap">
-                        {row.expectedPosition != null ? (
-                          (() => {
-                            const estRounded = Math.round(row.expectedPosition);
-                            const beat =
-                              !row.didNotFinish && !row.disqualified && row.rank != null
-                                ? estRounded - row.rank
-                                : null;
-                            const ovrRounded =
-                              row.overallExpectedPosition != null
-                                ? Math.round(row.overallExpectedPosition)
-                                : null;
-                            const ovrBeat =
-                              ovrRounded != null &&
-                              !row.didNotFinish &&
-                              !row.disqualified &&
-                              row.rank != null
-                                ? ovrRounded - row.rank
-                                : null;
-                            const range = row.expectedPlaceRange;
-                            const parts = [
-                              `Route (course-weighted) Est. ${row.expectedPosition.toFixed(1)}`,
-                            ];
-                            if (range?.low != null && range?.high != null) {
-                              parts.push(`(range ${range.low}–${range.high})`);
-                            }
-                            if (row.seedExpectedPosition != null) {
-                              parts.push(`Power-seed Est. ${row.seedExpectedPosition.toFixed(1)}`);
-                            }
-                            if (row.overallExpectedPosition != null) {
-                              parts.push(
-                                `Overall/Legacy Est. #${Math.round(row.overallExpectedPosition)}`,
-                              );
-                            }
-                            const titleText = parts.join(' · ');
-                            return (
-                              <div title={titleText} className="leading-tight">
-                                <div className="text-slate-300">
-                                  {estRounded}
-                                  {beat !== null && beat !== 0 && (
-                                    <span
-                                      className={`ml-1 text-[10px] ${
-                                        beat > 0 ? 'text-emerald-400' : 'text-red-400'
-                                      }`}
-                                    >
-                                      {beat > 0 ? `+${beat}` : beat}
-                                    </span>
-                                  )}
-                                </div>
-                                {ovrRounded != null && (
-                                  <div className="text-[10px] text-slate-400 mt-0.5">
-                                    ovr {ovrRounded}
-                                    {ovrBeat !== null && ovrBeat !== 0 && (
-                                      <span
-                                        className={`ml-1 ${
-                                          ovrBeat > 0 ? 'text-emerald-400/80' : 'text-red-400/80'
-                                        }`}
-                                      >
-                                        {ovrBeat > 0 ? `+${ovrBeat}` : ovrBeat}
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
+                        {(() => {
+                          const activeExpected =
+                            expectedMode === 'route'
+                              ? (row.routeExpectedPosition ??
+                                row.overallExpectedPosition ??
+                                row.expectedPosition)
+                              : (row.overallExpectedPosition ??
+                                row.routeExpectedPosition ??
+                                row.expectedPosition);
+                          if (activeExpected == null) {
+                            return <span className="text-slate-500">—</span>;
+                          }
+                          const estRounded = Math.round(activeExpected);
+                          const beat =
+                            !row.didNotFinish && !row.disqualified && row.rank != null
+                              ? estRounded - row.rank
+                              : null;
+                          const range = row.expectedPlaceRange;
+                          const parts: string[] = [];
+                          if (row.routeExpectedPosition != null) {
+                            parts.push(
+                              `Route (course-weighted) Est. ${row.routeExpectedPosition.toFixed(1)}`,
                             );
-                          })()
-                        ) : (
-                          <span className="text-slate-500">—</span>
-                        )}
+                          }
+                          if (row.overallExpectedPosition != null) {
+                            parts.push(
+                              `Overall Est. ${row.overallExpectedPosition.toFixed(1)}`,
+                            );
+                          }
+                          if (range?.low != null && range?.high != null) {
+                            parts.push(`(range ${range.low}–${range.high})`);
+                          }
+                          if (row.seedExpectedPosition != null) {
+                            parts.push(`Power-seed Est. ${row.seedExpectedPosition.toFixed(1)}`);
+                          }
+                          parts.push(
+                            expectedMode === 'route'
+                              ? 'Click to switch to Overall'
+                              : 'Click to switch to Route',
+                          );
+                          const titleText = parts.join(' · ');
+                          return (
+                            <button
+                              type="button"
+                              onClick={onToggleExpectedMode}
+                              title={titleText}
+                              className="inline-flex items-baseline text-left cursor-pointer rounded text-slate-300 hover:text-white focus:outline-none focus-visible:ring-1 focus-visible:ring-[#fc6719]"
+                            >
+                              <span>{estRounded}</span>
+                              {beat !== null && beat !== 0 && (
+                                <span
+                                  className={`ml-1 text-[10px] ${
+                                    beat > 0 ? 'text-emerald-400' : 'text-red-400'
+                                  }`}
+                                >
+                                  {beat > 0 ? `+${beat}` : beat}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })()}
                       </td>
                     )}
 

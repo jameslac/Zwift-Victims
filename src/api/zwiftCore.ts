@@ -328,6 +328,14 @@ function mergeProfiles(primary: ZwiftProfile, secondary: ZwiftProfile): ZwiftPro
   return merged;
 }
 
+const profileCache = new Map<number, ZwiftProfile>();
+const profileInFlight = new Map<number, Promise<ZwiftProfile>>();
+
+/** Returns a previously loaded Zwift profile from the in-memory session cache, if present. */
+export function getCachedProfileById(riderId: number): ZwiftProfile | undefined {
+  return profileCache.get(riderId);
+}
+
 export async function fetchMyProfile(accessToken: string): Promise<ZwiftProfile> {
   const me = await fetchAuthorizedJson<ZwiftProfile>(
     accessToken,
@@ -338,22 +346,47 @@ export async function fetchMyProfile(accessToken: string): Promise<ZwiftProfile>
   const missingZrs = metrics?.racingScore == null;
   const missingCategory = metrics?.category == null && metrics?.categoryWomen == null;
 
+  let finalProfile = me;
+
   // Zwift's /profiles/me omits/nulls competitionMetrics, whereas /profiles/{id} populates them.
   if (typeof me.id === 'number' && (missingZrs || missingCategory)) {
     try {
       const publicProfile = await fetchProfileById(accessToken, me.id);
-      return mergeProfiles(me, publicProfile);
+      finalProfile = mergeProfiles(me, publicProfile);
     } catch (err) {
       if (err instanceof AuthError) throw err;
-      return me;
     }
   }
 
-  return me;
+  if (typeof finalProfile.id === 'number') {
+    profileCache.set(finalProfile.id, finalProfile);
+  }
+  return finalProfile;
 }
 
-export const fetchProfileById = (accessToken: string, riderId: number): Promise<ZwiftProfile> =>
-  fetchAuthorizedJson<ZwiftProfile>(accessToken, `/api/zwift/api/profiles/${riderId}`, 'profile');
+export function fetchProfileById(accessToken: string, riderId: number): Promise<ZwiftProfile> {
+  const cached = profileCache.get(riderId);
+  if (cached) return Promise.resolve(cached);
+
+  const pending = profileInFlight.get(riderId);
+  if (pending) return pending;
+
+  const request = fetchAuthorizedJson<ZwiftProfile>(
+    accessToken,
+    `/api/zwift/api/profiles/${riderId}`,
+    'profile',
+  )
+    .then((loaded) => {
+      profileCache.set(riderId, loaded);
+      return loaded;
+    })
+    .finally(() => {
+      profileInFlight.delete(riderId);
+    });
+
+  profileInFlight.set(riderId, request);
+  return request;
+}
 
 export const fetchPowerProfile = (accessToken: string): Promise<ZwiftPowerProfile> =>
   fetchAuthorizedJson<ZwiftPowerProfile>(

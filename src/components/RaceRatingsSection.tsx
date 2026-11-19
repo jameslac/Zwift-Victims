@@ -4,6 +4,7 @@ import type {
   ZwiftRacingEventRider,
   ZwiftRacingRaceEntry,
 } from '../api/zwiftRacing';
+import type { ExpectedPositionMode } from '../lib/raceStandings';
 
 type Tone = 'positive' | 'negative' | undefined;
 
@@ -118,6 +119,8 @@ export default function RaceRatingsSection({
   coreZrs,
   fallbackZrsScore,
   bestVerifiedPlace,
+  expectedMode = 'route',
+  onToggleExpectedMode,
 }: {
   zrEntry?: ZwiftRacingRaceEntry;
   zrEventRider?: ZwiftRacingEventRider;
@@ -132,6 +135,8 @@ export default function RaceRatingsSection({
   };
   fallbackZrsScore?: number | null;
   bestVerifiedPlace?: number;
+  expectedMode?: ExpectedPositionMode;
+  onToggleExpectedMode?: () => void;
 }) {
   // 1. ZwiftRacing vELO
   const eloBefore = parseFiniteNum(zrEntry?.velo?.elo?.before ?? zrEventRider?.velo?.elo?.before);
@@ -202,43 +207,71 @@ export default function RaceRatingsSection({
   );
   const legacyPenAvg = parseFiniteNum(zrEventPen?.results?.averageRating);
 
-  // Course-weighted vELO v2 expectation vs Seed & Overall/Legacy expectations
-  const eventExpectedPos = parseFiniteNum(
+  // Course-weighted vELO v2 expectation vs Overall/Seed expectations
+  const routeExpectedPos = parseFiniteNum(
     zrEntry?.velo?.elo?.expectedPosition ?? zrEventRider?.velo?.elo?.expectedPosition,
   );
-  const overallExpectedPos = parseFiniteNum(zrEventRider?.expectedPosition);
-  const expectedPos = eventExpectedPos ?? overallExpectedPos;
+  const overallExpectedPos = parseFiniteNum(
+    zrEventRider?.expectedPosition ?? zrEntry?.velo?.seed?.expectedPosition,
+  );
   const seedExpectedPos = parseFiniteNum(
     zrEntry?.velo?.seed?.expectedPosition ?? zrEventRider?.velo?.seed?.expectedPosition,
   );
   const expectedRange = zrEventRider?.expectedPlaceRange;
+  const activeExpectedPos =
+    expectedMode === 'route'
+      ? (routeExpectedPos ?? overallExpectedPos)
+      : (overallExpectedPos ?? routeExpectedPos);
+  const activeModeLabel =
+    expectedMode === 'route'
+      ? routeExpectedPos != null
+        ? 'Route'
+        : 'Overall'
+      : overallExpectedPos != null
+        ? 'Overall'
+        : 'Route';
   const expectedBeat =
-    bestVerifiedPlace != null && expectedPos != null
-      ? Math.round(expectedPos) - bestVerifiedPlace
+    bestVerifiedPlace != null && activeExpectedPos != null
+      ? Math.round(activeExpectedPos) - bestVerifiedPlace
       : undefined;
 
-  const expectedSubParts: string[] = [];
-  if (expectedPos != null) {
-    const baseText =
-      eventExpectedPos != null
-        ? `Course-weighted vELO est. ${eventExpectedPos.toFixed(1)}`
-        : `Overall est. ${overallExpectedPos!.toFixed(1)}`;
-    expectedSubParts.push(
-      expectedRange?.low != null && expectedRange?.high != null
-        ? `${baseText} (range ${expectedRange.low}–${expectedRange.high})`
-        : baseText,
-    );
+  const hasBothExpected = routeExpectedPos != null && overallExpectedPos != null;
+  const canToggleExpected = Boolean(onToggleExpectedMode && hasBothExpected);
+
+  const expectedTooltipParts: string[] = [];
+  if (routeExpectedPos != null) {
+    expectedTooltipParts.push(`Route (course-weighted) est. ${routeExpectedPos.toFixed(1)}`);
+  }
+  if (overallExpectedPos != null) {
+    expectedTooltipParts.push(`Overall est. ${overallExpectedPos.toFixed(1)}`);
+  }
+  if (expectedRange?.low != null && expectedRange?.high != null) {
+    expectedTooltipParts.push(`range ${expectedRange.low}–${expectedRange.high}`);
   }
   if (seedExpectedPos != null) {
-    expectedSubParts.push(`Seed est. ${seedExpectedPos.toFixed(1)}`);
+    expectedTooltipParts.push(`Seed est. ${seedExpectedPos.toFixed(1)}`);
   }
-  if (
-    eventExpectedPos != null &&
-    overallExpectedPos != null &&
-    Math.round(eventExpectedPos) !== Math.round(overallExpectedPos)
-  ) {
-    expectedSubParts.push(`Overall/Legacy est. #${Math.round(overallExpectedPos)}`);
+  if (canToggleExpected) {
+    expectedTooltipParts.push(
+      `Click to switch to ${activeModeLabel === 'Route' ? 'Overall' : 'Route'}`,
+    );
   }
+  const expectedTooltip = expectedTooltipParts.join(' · ');
+
+  const expectedSubText =
+    activeExpectedPos != null
+      ? canToggleExpected
+        ? `${activeModeLabel} est. ${activeExpectedPos.toFixed(1)} · Click for ${
+            activeModeLabel === 'Route'
+              ? `Overall #${Math.round(overallExpectedPos!)}`
+              : `Route #${Math.round(routeExpectedPos!)}`
+          }`
+        : `${activeModeLabel} est. ${activeExpectedPos.toFixed(1)}${
+            expectedRange?.low != null && expectedRange?.high != null
+              ? ` (range ${expectedRange.low}–${expectedRange.high})`
+              : ''
+          }`
+      : '';
 
   const intensity = parseFiniteNum(zrEntry?.velo?.intensity ?? zrEventRider?.velo?.intensity);
 
@@ -262,7 +295,7 @@ export default function RaceRatingsSection({
 
   const hasSofTile = penSof != null || legacyPenAvg != null || riderCourseVelo != null;
   const hasContext =
-    expectedPos != null || hasSofTile || intensity != null || hasZrPoints || hasZpPts;
+    activeExpectedPos != null || hasSofTile || intensity != null || hasZrPoints || hasZpPts;
 
   return (
     <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-6">
@@ -483,32 +516,61 @@ export default function RaceRatingsSection({
                 Race Difficulty &amp; Event Points
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {expectedPos != null && (
-                  <div
-                    className={`rounded-xl border p-3.5 space-y-1 ${cardToneClasses(deltaTone(expectedBeat))}`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">
-                        Expected vs. Actual Finish
-                      </span>
-                      {expectedBeat != null && (
-                        <span
-                          className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badgeToneClasses(deltaTone(expectedBeat))}`}
-                        >
-                          {expectedBeat > 0
-                            ? `Beat by ${expectedBeat}`
-                            : expectedBeat < 0
-                              ? `Missed by ${Math.abs(expectedBeat)}`
-                              : 'On target'}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-base font-bold font-mono text-slate-100">
-                      Est. #{Math.round(expectedPos)}
-                    </p>
-                    <p className="text-[11px] text-slate-400">{expectedSubParts.join(' · ')}</p>
-                  </div>
-                )}
+                {activeExpectedPos != null &&
+                  (() => {
+                    const cardClass = `rounded-xl border p-3.5 space-y-1 text-left w-full ${cardToneClasses(deltaTone(expectedBeat))} ${
+                      canToggleExpected
+                        ? 'cursor-pointer transition hover:border-[#fc6719]/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#fc6719]'
+                        : ''
+                    }`;
+                    const content = (
+                      <>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-slate-400 font-semibold">
+                            <span>Expected vs. Actual</span>
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-medium normal-case tracking-normal ${
+                                canToggleExpected
+                                  ? 'bg-slate-800/80 border border-slate-700 text-[#fc6719]'
+                                  : 'bg-slate-800/60 text-slate-300'
+                              }`}
+                            >
+                              {canToggleExpected ? `${activeModeLabel} ⇄` : activeModeLabel}
+                            </span>
+                          </span>
+                          {expectedBeat != null && (
+                            <span
+                              className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badgeToneClasses(deltaTone(expectedBeat))}`}
+                            >
+                              {expectedBeat > 0
+                                ? `Beat by ${expectedBeat}`
+                                : expectedBeat < 0
+                                  ? `Missed by ${Math.abs(expectedBeat)}`
+                                  : 'On target'}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-base font-bold font-mono text-slate-100">
+                          Est. #{Math.round(activeExpectedPos)}
+                        </p>
+                        <p className="text-[11px] text-slate-400">{expectedSubText}</p>
+                      </>
+                    );
+                    return canToggleExpected ? (
+                      <button
+                        type="button"
+                        onClick={onToggleExpectedMode}
+                        title={expectedTooltip}
+                        className={cardClass}
+                      >
+                        {content}
+                      </button>
+                    ) : (
+                      <div title={expectedTooltip} className={cardClass}>
+                        {content}
+                      </div>
+                    );
+                  })()}
 
                 {penSof != null ? (
                   (() => {

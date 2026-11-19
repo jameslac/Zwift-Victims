@@ -89,8 +89,8 @@ const ZP_DIV_TO_CATEGORY: Record<number, string> = {
 };
 
 export function zwiftPowerDivToCategory(div: unknown): string | undefined {
-  const num = typeof div === 'number' ? div : Number(div);
-  if (!Number.isFinite(num) || num <= 0) return undefined;
+  const num = zpNum(div);
+  if (num == null || num <= 0) return undefined;
   return ZP_DIV_TO_CATEGORY[num];
 }
 
