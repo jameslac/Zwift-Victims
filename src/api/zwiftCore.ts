@@ -140,6 +140,35 @@ export interface ZwiftRaceResultEntry {
 export interface ZwiftActivityDetail {
   id?: number;
   id_str?: string;
+  profileId?: number;
+  worldId?: number;
+  routeId?: number;
+  name?: string;
+  description?: string;
+  sport?: string;
+  startDate?: string;
+  endDate?: string;
+  lastSaveDate?: string;
+  duration?: string;
+  distanceInMeters?: number;
+  totalElevation?: number;
+  avgWatts?: number;
+  normalizedPower?: number;
+  calories?: number;
+  movingTimeInMs?: number;
+  avgCadence?: number;
+  maxCadence?: number;
+  privateActivity?: boolean;
+  privacy?: string;
+  fitnessPrivacy?: string;
+  clubId?: string;
+  eventSubgroupId?: number;
+  activityRideOnCount?: number;
+  activityCommentCount?: number;
+  fitFileBucket?: string;
+  fitFileKey?: string;
+  notableMomentType?: string | null;
+  profile?: Record<string, unknown>;
   primaryImageUrl?: string;
   avgHeartRate?: number;
   maxHeartRate?: number;
@@ -369,6 +398,17 @@ export const fetchActivityDetail = (
   fetchAuthorizedJson<ZwiftActivityDetail>(
     accessToken,
     `/api/zwift/api/activities/${encodeURIComponent(activityIdStr)}?fetchSnapshots=true&fetchEvent=true`,
+    'activity detail',
+  );
+
+export const fetchRiderActivityDetail = (
+  accessToken: string,
+  riderId: number,
+  activityIdStr: string,
+): Promise<ZwiftActivityDetail> =>
+  fetchAuthorizedJson<ZwiftActivityDetail>(
+    accessToken,
+    `/api/zwift/api/profiles/${riderId}/activities/${encodeURIComponent(activityIdStr)}`,
     'activity detail',
   );
 

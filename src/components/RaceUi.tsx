@@ -10,7 +10,31 @@ import {
   buildZwifterBikesRouteUrl,
   ordinal,
 } from '../lib/raceHistory';
+import type { ActivityType } from '../lib/raceHistory';
 import type { UnitSystem } from '../lib/units';
+
+const ACTIVITY_TYPE_BADGE_TONE: Record<ActivityType, string> = {
+  race: 'bg-[#fc6719]/15 border-[#fc6719]/40 text-[#fc6719]',
+  ride: 'bg-sky-500/15 border-sky-500/40 text-sky-300',
+  workout: 'bg-violet-500/15 border-violet-500/40 text-violet-300',
+  free_ride: 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300',
+};
+
+export function ActivityTypeBadge({
+  type = 'race',
+  label = 'Race',
+}: {
+  type?: ActivityType;
+  label?: string;
+}) {
+  return (
+    <span
+      className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${ACTIVITY_TYPE_BADGE_TONE[type]}`}
+    >
+      {label}
+    </span>
+  );
+}
 
 export function Stat({
   label,

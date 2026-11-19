@@ -37,7 +37,7 @@ All browser calls hit same-origin `/api/*` endpoints exposed by [worker/index.ts
 | `GET /api/zwift/api/profiles/{riderId}/followees` | — | `us-or-rly101.zwift.com` | *Allowlisted in Worker (no UI helper yet)* | Riders followed by `{riderId}`. |
 | `GET /api/zwift/api/profiles/{riderId}/followers` | — | `us-or-rly101.zwift.com` | *Allowlisted in Worker (no UI helper yet)* | Riders following `{riderId}`. |
 | `GET /api/zwift/api/profiles/{riderId}/activities` | `start`, `limit` | `us-or-rly101.zwift.com` | `fetchRiderActivities` (`zwiftCore.ts`) | Returns activity feed (`ZwiftActivity[]`). |
-| `GET /api/zwift/api/profiles/{riderId}/activities/{activityId}` | — | `us-or-rly101.zwift.com` | *Allowlisted in Worker* | Alternate rider-scoped activity detail path. |
+| `GET /api/zwift/api/profiles/{riderId}/activities/{activityId}` | — | `us-or-rly101.zwift.com` | `fetchRiderActivityDetail` (`zwiftCore.ts`) | Alternate rider-scoped activity detail path (used as fallback on `ActivityDetailPage`). |
 | `GET /api/zwift/api/activities/{activityIdStr}` | `fetchSnapshots`, `fetchEvent` | `us-or-rly101.zwift.com` | `fetchActivityDetail` (`zwiftCore.ts`) | Calls with `?fetchSnapshots=true&fetchEvent=true`; always pass `id_str` (64-bit safe). |
 | `GET /api/zwift/api/race-results/entries` | `event_subgroup_id` | `us-or-rly101.zwift.com` | `fetchRaceResults` (`zwiftCore.ts`) | Unfiltered finisher entries for a category subgroup. |
 | `GET /api/zwift/api/public/events/{eventId}` | — | `us-or-rly101.zwift.com` | `fetchPublicEvent` (`zwiftCore.ts`) | Event details and `eventSubgroups` mapping. |

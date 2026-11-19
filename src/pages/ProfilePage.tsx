@@ -2,7 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import PowerBestsSection from '../components/PowerBestsSection';
-import { AppHeader, MetricGrid, PlacingBadge, RaceExternalLinks, Stat } from '../components/RaceUi';
+import {
+  ActivityTypeBadge,
+  AppHeader,
+  MetricGrid,
+  PlacingBadge,
+  RaceExternalLinks,
+  Stat,
+} from '../components/RaceUi';
 import ZwiftRacingProfileSection from '../components/ZwiftRacingProfileSection';
 import ZwiftVictimsSection from '../components/ZwiftVictimsSection';
 import { useFavorites } from '../lib/FavoritesContext';
@@ -24,9 +31,9 @@ import { extractPowerProfileMetrics } from '../lib/powerBests';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
 import type { ZwiftRacingRiderResponse } from '../api/zwiftRacing';
 import {
-  buildZwiftActivityUrl,
   formatGapSeconds,
   formatUnixSeconds,
+  formatZwiftWorld,
   isPodium,
   ordinal,
   summarize,
@@ -96,15 +103,8 @@ function XpProgressBar({ profile }: { profile: ZwiftProfile }) {
     </div>
   );
 }
-const ACTIVITY_TYPE_BADGE_TONE: Record<ActivityType, string> = {
-  race: 'bg-[#fc6719]/15 border-[#fc6719]/40 text-[#fc6719]',
-  ride: 'bg-sky-500/15 border-sky-500/40 text-sky-300',
-  workout: 'bg-violet-500/15 border-violet-500/40 text-violet-300',
-  free_ride: 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300',
-};
-
 type ActivityTypeFilter = 'all' | ActivityType;
-type QuickTagFilter = 'podiums' | 'tt' | 'linked' | null;
+type QuickTagFilter = 'podiums' | 'tt' | null;
 
 function isTimeTrialActivity(race: MergedRace): boolean {
   const label = race.activityTypeLabel ?? '';
@@ -213,8 +213,10 @@ function MergedRaceCard({
   const sof = zr?.velo?.elo?.eventRating;
   const detailPath = race.eventId
     ? `/riders/${profileId}/races/${encodeURIComponent(race.eventId)}`
-    : null;
-  const zwiftActivityUrl = !detailPath && race.activityId ? buildZwiftActivityUrl(race.activityId) : null;
+    : race.activityId
+      ? `/riders/${profileId}/activities/${encodeURIComponent(race.activityId)}`
+      : null;
+  const worldName = formatZwiftWorld(activity?.worldId);
 
   const mainBody = (
     <>
@@ -228,17 +230,14 @@ function MergedRaceCard({
             {category ? ` · Cat ${category}` : ''}
             {zr?.event?.subType ? ` · ${zr.event.subType}` : ''}
             {zr?.event?.routeName ? ` · ${zr.event.routeName}` : ''}
+            {!zr?.event?.routeName && worldName ? ` · ${worldName}` : ''}
             {zp?.tname ? ` · Team ${zp.tname}` : ''}
             {race.eventId ? ` · event ${race.eventId}` : ''}
             {!race.eventId && race.activityId ? ` · activity ${race.activityId}` : ''}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <span
-            className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${ACTIVITY_TYPE_BADGE_TONE[activityType]}`}
-          >
-            {activityTypeLabel}
-          </span>
+          <ActivityTypeBadge type={activityType} label={activityTypeLabel} />
           <PlacingBadge
             truePlace={race.truePlace}
             fieldSize={race.fieldSize}
@@ -399,25 +398,18 @@ function MergedRaceCard({
 
       <footer className="border-t border-slate-800/80 pt-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          {detailPath ? (
+          {detailPath && (
             <Link
               to={detailPath}
               state={{ race }}
               className="text-xs font-semibold text-[#fc6719] hover:underline"
             >
-              {activityType === 'race' ? 'View race details →' : 'View event details →'}
+              {race.eventId
+                ? activityType === 'race'
+                  ? 'View race details →'
+                  : 'View event details →'
+                : 'View activity details →'}
             </Link>
-          ) : (
-            zwiftActivityUrl && (
-              <a
-                href={zwiftActivityUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs font-semibold text-[#fc6719] hover:underline"
-              >
-                Open on Zwift.com ↗
-              </a>
-            )
           )}
         </div>
         <RaceExternalLinks
@@ -474,14 +466,12 @@ function MergedTab({
     };
     let podiums = 0;
     let tt = 0;
-    let linked = 0;
 
     for (const item of mergedActivities) {
       const t: ActivityType = item.activityType ?? 'race';
       byType[t] += 1;
       if (isPodiumActivity(item)) podiums += 1;
       if (isTimeTrialActivity(item)) tt += 1;
-      if (item.activityId) linked += 1;
     }
 
     return {
@@ -489,7 +479,6 @@ function MergedTab({
       ...byType,
       podiums,
       tt,
-      linked,
     };
   }, [mergedActivities]);
 
@@ -500,7 +489,6 @@ function MergedTab({
         if (typeFilter !== 'all' && (item.activityType ?? 'race') !== typeFilter) return false;
         if (quickTag === 'podiums' && !isPodiumActivity(item)) return false;
         if (quickTag === 'tt' && !isTimeTrialActivity(item)) return false;
-        if (quickTag === 'linked' && !item.activityId) return false;
         if (trimmedQuery && !matchesSearchQuery(item, trimmedQuery)) return false;
         return true;
       }),
@@ -547,7 +535,6 @@ function MergedTab({
   const quickChips: Array<{ id: Exclude<QuickTagFilter, null>; label: string; count: number }> = [
     { id: 'podiums', label: 'Podiums', count: counts.podiums },
     { id: 'tt', label: 'TT / TTT', count: counts.tt },
-    { id: 'linked', label: 'Zwift Activity Linked', count: counts.linked },
   ];
 
   return (

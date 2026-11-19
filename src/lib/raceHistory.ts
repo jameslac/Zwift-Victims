@@ -523,6 +523,42 @@ export function isRaceEntry(zp?: ZwiftPowerRaceEntry, zr?: ZwiftRacingRaceEntry)
   return true;
 }
 
+const ZWIFT_WORLD_NAMES: Record<number, string> = {
+  1: 'Watopia',
+  2: 'Richmond',
+  3: 'London',
+  4: 'New York',
+  5: 'Innsbruck',
+  6: 'Bologna',
+  7: 'Yorkshire',
+  8: 'Crit City',
+  9: 'Makuri Islands',
+  10: 'France',
+  11: 'Paris',
+  12: 'Gravel Mountain',
+  13: 'Scotland',
+};
+
+export function formatZwiftWorld(worldId: number | undefined): string | undefined {
+  if (typeof worldId !== 'number' || !Number.isFinite(worldId) || worldId <= 0) return undefined;
+  return ZWIFT_WORLD_NAMES[worldId] ?? `World ${worldId}`;
+}
+
+export function parseDurationStringMs(duration: string | undefined): number | undefined {
+  if (typeof duration !== 'string') return undefined;
+  const trimmed = duration.trim();
+  if (!trimmed) return undefined;
+  const parts = trimmed.split(':').map((p) => Number(p));
+  if (parts.some((n) => !Number.isFinite(n) || n < 0)) return undefined;
+  if (parts.length === 3) {
+    return ((parts[0] * 60 + parts[1]) * 60 + parts[2]) * 1000;
+  }
+  if (parts.length === 2) {
+    return (parts[0] * 60 + parts[1]) * 1000;
+  }
+  return undefined;
+}
+
 const STANDALONE_WORKOUT_RE =
   /\b(workout|ftp\s*test|ramp\s*test|zone\s*benchmark|erg\s*mode|sst\b|sweet\s*spot|vo2\s*max|over[- ]?unders?|build\s*me\s*up|ftp\s*builder|za\s*workout|zwift\s*academy\s*workout)\b/i;
 const STANDALONE_RACE_RE =
@@ -537,7 +573,7 @@ const STANDALONE_RIDE_RE =
 export function classifyActivity(
   zp?: ZwiftPowerRaceEntry,
   zr?: ZwiftRacingRaceEntry,
-  activity?: ZwiftActivity,
+  activity?: ZwiftActivity | ZwiftActivityDetail,
 ): { activityType: ActivityType; activityTypeLabel: string } {
   if (zp || zr) {
     if (
@@ -562,8 +598,12 @@ export function classifyActivity(
     return { activityType: 'ride', activityTypeLabel: 'Group Ride' };
   }
 
+  const activityRecord = activity as Record<string, unknown> | undefined;
+  const hasWorkoutMeta = Boolean(
+    activityRecord?.workout || activityRecord?.workoutId || activityRecord?.workoutName,
+  );
   const name = activity?.name ?? '';
-  if (STANDALONE_WORKOUT_RE.test(name)) {
+  if (hasWorkoutMeta || STANDALONE_WORKOUT_RE.test(name)) {
     return { activityType: 'workout', activityTypeLabel: 'Workout' };
   }
   if (STANDALONE_RACE_RE.test(name)) {
