@@ -1,6 +1,8 @@
 export type ColorSchemeId =
   | 'emerald'
   | 'gold'
+  | 'jaguars'
+  | 'neon_purple'
   | 'cyberpunk'
   | 'laser'
   | 'volt'
@@ -37,6 +39,24 @@ export const COLOR_SCHEMES: readonly ColorSchemeOption[] = [
     secondaryHex: '#f59e0b',
     surfaceHex: '#050505',
     cardHex: '#100e09',
+  },
+  {
+    id: 'jaguars',
+    name: 'Jacksonville Jaguars',
+    tagline: 'Duval teal & championship gold on jaguar obsidian black',
+    accentHex: '#007a8c',
+    secondaryHex: '#d7a22a',
+    surfaceHex: '#05090b',
+    cardHex: '#0b1418',
+  },
+  {
+    id: 'neon_purple',
+    name: 'Purple & Neon',
+    tagline: 'Deep ultraviolet carbon with electric purple & neon acid lime',
+    accentHex: '#9333ea',
+    secondaryHex: '#39ff14',
+    surfaceHex: '#07040e',
+    cardHex: '#110a22',
   },
   {
     id: 'cyberpunk',

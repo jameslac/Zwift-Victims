@@ -489,13 +489,13 @@ export default function RaceDetailStandings({
         </p>
       ) : (
         <>
-          <div className="overflow-x-auto">
+          <div className="max-h-[70dvh] overflow-auto rounded-xl border border-slate-800/80">
           <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wide align-bottom">
-                <th className="py-2 pr-3 whitespace-nowrap">#</th>
+            <thead className="sticky top-0 z-20 bg-slate-900 shadow-[0_1px_0_var(--color-slate-800)]">
+              <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wide align-bottom bg-slate-900">
+                <th className="sticky top-0 z-20 bg-slate-900 py-2.5 pl-2.5 pr-3 whitespace-nowrap">#</th>
                 {columns.expectedPosition && (
-                  <th className="py-2 pr-3 whitespace-nowrap">
+                  <th className="sticky top-0 z-20 bg-slate-900 py-2.5 pr-3 whitespace-nowrap">
                     <button
                       type="button"
                       onClick={onToggleExpectedMode}
@@ -513,19 +513,22 @@ export default function RaceDetailStandings({
                     </button>
                   </th>
                 )}
-                <th className="sticky left-0 z-10 bg-slate-900 py-2 pl-2 pr-3 whitespace-nowrap border-r border-slate-800/80">
+                <th className="sticky top-0 left-0 z-30 bg-slate-900 py-2.5 pl-2.5 pr-3 whitespace-nowrap border-r border-slate-800/80">
                   Rider
                 </th>
                 {columns.riderCategory && (
                   <th
-                    className="py-2 pl-3 pr-3 whitespace-nowrap"
+                    className="sticky top-0 z-20 bg-slate-900 py-2.5 pl-3 pr-3 whitespace-nowrap"
                     title="Rider's actual Zwift category (not event pen)"
                   >
                     Rider Cat
                   </th>
                 )}
                 {columns.zrs && (
-                  <th className="py-2 pr-3 whitespace-nowrap" title="Zwift Racing Score">
+                  <th
+                    className="sticky top-0 z-20 bg-slate-900 py-2.5 pr-3 whitespace-nowrap"
+                    title="Zwift Racing Score"
+                  >
                     <span>ZRS</span>
                     <span className="block text-[9px] font-normal normal-case tracking-normal text-slate-500">
                       Score ±Δ
@@ -533,22 +536,53 @@ export default function RaceDetailStandings({
                   </th>
                 )}
                 {columns.velo && (
-                  <th className="py-2 pr-3 whitespace-nowrap" title="ZwiftRacing.app vELO">
+                  <th
+                    className="sticky top-0 z-20 bg-slate-900 py-2.5 pr-3 whitespace-nowrap"
+                    title="ZwiftRacing.app vELO"
+                  >
                     <span>vELO</span>
                     <span className="block text-[9px] font-normal normal-case tracking-normal text-slate-500">
                       Rating ±Δ
                     </span>
                   </th>
                 )}
-                {columns.phenotype && <th className="py-2 pr-3 whitespace-nowrap">Phenotype</th>}
-                {columns.team && <th className="py-2 pr-3 whitespace-nowrap">Team</th>}
-                {columns.time && <th className="py-2 pr-3 whitespace-nowrap">Time</th>}
-                {columns.gap && <th className="py-2 pr-3 whitespace-nowrap">Gap</th>}
-                {columns.avgW && <th className="py-2 pr-3 whitespace-nowrap">Avg W</th>}
-                {columns.np && <th className="py-2 pr-3 whitespace-nowrap">NP</th>}
-                {columns.avgWkg && <th className="py-2 pr-3 whitespace-nowrap">W/kg</th>}
+                {columns.phenotype && (
+                  <th className="sticky top-0 z-20 bg-slate-900 py-2.5 pr-3 whitespace-nowrap">
+                    Phenotype
+                  </th>
+                )}
+                {columns.team && (
+                  <th className="sticky top-0 z-20 bg-slate-900 py-2.5 pr-3 whitespace-nowrap">
+                    Team
+                  </th>
+                )}
+                {columns.time && (
+                  <th className="sticky top-0 z-20 bg-slate-900 py-2.5 pr-3 whitespace-nowrap">
+                    Time
+                  </th>
+                )}
+                {columns.gap && (
+                  <th className="sticky top-0 z-20 bg-slate-900 py-2.5 pr-3 whitespace-nowrap">
+                    Gap
+                  </th>
+                )}
+                {columns.avgW && (
+                  <th className="sticky top-0 z-20 bg-slate-900 py-2.5 pr-3 whitespace-nowrap">
+                    Avg W
+                  </th>
+                )}
+                {columns.np && (
+                  <th className="sticky top-0 z-20 bg-slate-900 py-2.5 pr-3 whitespace-nowrap">
+                    NP
+                  </th>
+                )}
+                {columns.avgWkg && (
+                  <th className="sticky top-0 z-20 bg-slate-900 py-2.5 pr-3 whitespace-nowrap">
+                    W/kg
+                  </th>
+                )}
                 {columns.splits && (
-                  <th className="py-2 pr-3 whitespace-nowrap">
+                  <th className="sticky top-0 z-20 bg-slate-900 py-2.5 pr-3 whitespace-nowrap">
                     <span>Splits ({splitsUnit === 'w' ? 'W' : 'W/kg'})</span>
                     <span className="block text-[9px] font-normal normal-case tracking-normal text-slate-500">
                       5s / 1m / 5m / 20m
@@ -557,7 +591,7 @@ export default function RaceDetailStandings({
                 )}
                 {columns.hr && (
                   <th
-                    className="py-2 pr-3 whitespace-nowrap"
+                    className="sticky top-0 z-20 bg-slate-900 py-2.5 pr-3 whitespace-nowrap"
                     title="Average / Max heart rate in bpm"
                   >
                     <span>HR</span>
@@ -568,7 +602,7 @@ export default function RaceDetailStandings({
                 )}
                 {columns.speed && (
                   <th
-                    className="py-2 pr-3 whitespace-nowrap"
+                    className="sticky top-0 z-20 bg-slate-900 py-2.5 pr-3 whitespace-nowrap"
                     title="Average / Max speed (Max speed available for active rider's matched activity)"
                   >
                     <span>Speed</span>
@@ -577,8 +611,16 @@ export default function RaceDetailStandings({
                     </span>
                   </th>
                 )}
-                {columns.weight && <th className="py-2 pr-3 whitespace-nowrap">Weight</th>}
-                {columns.status && <th className="py-2 whitespace-nowrap">Status</th>}
+                {columns.weight && (
+                  <th className="sticky top-0 z-20 bg-slate-900 py-2.5 pr-3 whitespace-nowrap">
+                    Weight
+                  </th>
+                )}
+                {columns.status && (
+                  <th className="sticky top-0 z-20 bg-slate-900 py-2.5 pr-2.5 whitespace-nowrap">
+                    Status
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/70">
@@ -623,7 +665,9 @@ export default function RaceDetailStandings({
 
                 return (
                   <tr key={row.key} className={rowBg}>
-                    <td className="py-2 pr-3 font-semibold whitespace-nowrap">{rankDisplay}</td>
+                    <td className="py-2 pl-2.5 pr-3 font-semibold whitespace-nowrap">
+                      {rankDisplay}
+                    </td>
 
                     {columns.expectedPosition && (
                       <td className="py-2 pr-3 font-mono whitespace-nowrap">
@@ -692,7 +736,7 @@ export default function RaceDetailStandings({
                     )}
 
                     <td
-                      className={`sticky left-0 z-10 ${stickyCellBg} py-2 pl-2 pr-3 whitespace-nowrap border-r border-slate-800/80 max-w-[11rem] sm:max-w-[16rem]`}
+                      className={`sticky left-0 z-10 ${stickyCellBg} py-2 pl-2.5 pr-3 whitespace-nowrap border-r border-slate-800/80 max-w-[11rem] sm:max-w-[16rem]`}
                     >
                       <div className="flex items-center gap-1.5 min-w-0">
                         {row.riderId > 0 ? (

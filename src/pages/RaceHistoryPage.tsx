@@ -255,8 +255,8 @@ function MergedRaceCard({
 
   return (
     <article
-      className={`rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-3 ${
-        detailPath ? 'hover:border-accent/70 transition-colors' : ''
+      className={`rounded-2xl bg-slate-950/95 border-2 border-slate-600/80 border-l-4 border-l-accent shadow-lg shadow-black/50 p-4 sm:p-5 space-y-3.5 ${
+        detailPath ? 'hover:border-accent/80 transition-colors' : ''
       }`}
     >
       {detailPath ? (
@@ -520,7 +520,7 @@ function MergedTab({
           )}
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-5">
           {filteredActivities.map((race) => (
             <MergedRaceCard
               key={race.key}
