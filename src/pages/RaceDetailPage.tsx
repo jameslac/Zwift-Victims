@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import {
+  AuthError,
   fetchActivityDetail,
   fetchProfileById,
   fetchPublicEvent,
   fetchRaceResults,
   fetchRiderActivities,
+  getCachedProfileById,
 } from '../api/zwiftCore';
 import type {
   ZwiftActivity,
@@ -42,7 +44,7 @@ import {
 } from '../lib/raceHistory';
 import type { AsyncState, MergedRace } from '../lib/raceHistory';
 import { buildPenOptions, makeSplit, mergePenStandings } from '../lib/raceStandings';
-import type { PenOption, PowerCurveSplits } from '../lib/raceStandings';
+import type { ExpectedPositionMode, PenOption, PowerCurveSplits } from '../lib/raceStandings';
 import {
   formatDistance,
   formatDurationMs,
@@ -54,6 +56,15 @@ import { useUnits } from '../lib/UnitsContext';
 type KeyedState<T> = { key: string; state: AsyncState<T> };
 
 const LOADING_STATE: AsyncState<never> = { status: 'loading' };
+const EXPECTED_MODE_STORAGE_KEY = 'zv.raceDetail.expectedMode';
+
+function loadExpectedMode(): ExpectedPositionMode {
+  try {
+    return localStorage.getItem(EXPECTED_MODE_STORAGE_KEY) === 'route' ? 'route' : 'overall';
+  } catch {
+    return 'overall';
+  }
+}
 
 function readKeyed<T>(raw: KeyedState<T> | null, expectedKey: string): AsyncState<T> {
   return raw && raw.key === expectedKey ? raw.state : LOADING_STATE;
@@ -117,6 +128,22 @@ export default function RaceDetailPage() {
   );
   const [activityDetailRaw, setActivityDetailRaw] =
     useState<KeyedState<ZwiftActivityDetail> | null>(null);
+  const [expectedMode, setExpectedMode] = useState<ExpectedPositionMode>(loadExpectedMode);
+  const [penProfilesMap, setPenProfilesMap] = useState<Map<number, ZwiftProfile>>(() => new Map());
+  const [visibleCandidateKey, setVisibleCandidateKey] = useState<string>('');
+  const failedProfileIdsRef = useRef<Set<number>>(new Set());
+
+  const toggleExpectedMode = useCallback(() => {
+    setExpectedMode((prev) => {
+      const next: ExpectedPositionMode = prev === 'route' ? 'overall' : 'route';
+      try {
+        localStorage.setItem(EXPECTED_MODE_STORAGE_KEY, next);
+      } catch {
+        // Ignore storage errors
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (!raceKey || targetRiderId === null || !eventId) return;
@@ -516,6 +543,23 @@ export default function RaceDetailPage() {
     return pensList[0];
   }, [zrEvent, selectedSubgroupId, selectedCategory, riderCategory]);
 
+  const effectiveRiderProfiles = useMemo(() => {
+    const merged = new Map<number, ZwiftProfile>(penProfilesMap);
+    const addIfCached = (idVal: unknown) => {
+      const id = Number(idVal);
+      if (!Number.isFinite(id) || id <= 0 || merged.has(id)) return;
+      const cached = getCachedProfileById(id);
+      if (cached) merged.set(id, cached);
+    };
+    for (const c of coreList) addIfCached(c.profileId);
+    for (const pen of zrEvent?.pens ?? []) {
+      for (const r of pen.riders ?? []) addIfCached(r.riderId);
+    }
+    for (const z of zpViewList) addIfCached(z.zwid);
+    for (const z of zpZwiftList) addIfCached(z.zwid);
+    return merged;
+  }, [penProfilesMap, coreList, zrEvent, zpViewList, zpZwiftList]);
+
   const combinedRows = useMemo(
     () =>
       mergePenStandings({
@@ -529,6 +573,7 @@ export default function RaceDetailPage() {
         targetRiderId: targetRiderId ?? 0,
         targetProfile,
         loggedInProfile: profile,
+        riderProfiles: effectiveRiderProfiles,
         eventDistanceMeters,
         targetActivityDetail: activityDetail,
       }),
@@ -543,10 +588,81 @@ export default function RaceDetailPage() {
       targetRiderId,
       targetProfile,
       profile,
+      effectiveRiderProfiles,
       eventDistanceMeters,
       activityDetail,
     ],
   );
+
+  // Wait for ZwiftPower results to settle, then look up Zwift Core profiles only for visible-page riders still missing a category.
+  useEffect(() => {
+    if (
+      !raceKey ||
+      zpViewState.status === 'loading' ||
+      zpZwiftState.status === 'loading' ||
+      !visibleCandidateKey
+    ) {
+      return;
+    }
+    const toFetch = visibleCandidateKey
+      .split(',')
+      .map(Number)
+      .filter(
+        (id) =>
+          Number.isFinite(id) &&
+          id > 0 &&
+          !getCachedProfileById(id) &&
+          !failedProfileIdsRef.current.has(id),
+      );
+    if (toFetch.length === 0) return;
+
+    let cancelled = false;
+
+    (async () => {
+      let token: string;
+      try {
+        token = await getAccessToken();
+      } catch {
+        return;
+      }
+      if (cancelled) return;
+
+      let nextIdx = 0;
+      const concurrency = Math.min(6, toFetch.length);
+
+      async function worker() {
+        while (!cancelled) {
+          const idx = nextIdx++;
+          if (idx >= toFetch.length) return;
+          const id = toFetch[idx];
+          if (getCachedProfileById(id) || failedProfileIdsRef.current.has(id)) continue;
+          try {
+            const loaded = await fetchProfileById(token, id);
+            if (!cancelled) {
+              setPenProfilesMap((prev) => {
+                if (prev.get(id) === loaded) return prev;
+                const next = new Map(prev);
+                next.set(id, loaded);
+                return next;
+              });
+            }
+          } catch (err) {
+            if (err instanceof AuthError) {
+              cancelled = true;
+              return;
+            }
+            failedProfileIdsRef.current.add(id);
+          }
+        }
+      }
+
+      await Promise.all(Array.from({ length: concurrency }, () => worker()));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [raceKey, zpViewState.status, zpZwiftState.status, visibleCandidateKey, getAccessToken]);
 
   const targetFallbackSplits = useMemo<PowerCurveSplits>(() => {
     const zp = bestZpEntry;
@@ -940,6 +1056,8 @@ export default function RaceDetailPage() {
         coreZrs={coreZrs}
         fallbackZrsScore={targetProfile?.competitionMetrics?.racingScore}
         bestVerifiedPlace={bestVerifiedPlace}
+        expectedMode={expectedMode}
+        onToggleExpectedMode={toggleExpectedMode}
       />
 
       {/* Tier 2: Combined Event Standings */}
@@ -954,6 +1072,9 @@ export default function RaceDetailPage() {
         anyLoading={standingsAnyLoading}
         zpViewLoaded={zpViewState.status === 'loaded'}
         onSelectPen={handleSelectPen}
+        expectedMode={expectedMode}
+        onToggleExpectedMode={toggleExpectedMode}
+        onVisibleCandidateKeyChange={setVisibleCandidateKey}
         units={units}
       />
     </main>

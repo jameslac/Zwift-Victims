@@ -1,5 +1,6 @@
 import type {
   ZwiftActivityDetail,
+  ZwiftCompetitionMetrics,
   ZwiftEventSubgroup,
   ZwiftProfile,
   ZwiftPublicEvent,
@@ -16,6 +17,7 @@ import {
 } from './raceHistory';
 
 export type PenSystem = 'zrs' | 'category_enforcement' | 'category';
+export type ExpectedPositionMode = 'route' | 'overall';
 
 export interface PenOption {
   key: string;
@@ -52,11 +54,13 @@ export interface UnifiedStandingRow {
   zpPlace?: number;
   zpOverallPlace?: number;
   riderCategory?: string;
+  categorySource?: 'zp' | 'core' | 'profile';
   zrsScore?: number;
   zrsDelta?: number;
   velo?: number;
   veloDelta?: number;
   expectedPosition?: number;
+  routeExpectedPosition?: number;
   overallExpectedPosition?: number;
   seedExpectedPosition?: number;
   expectedPlaceRange?: { low?: number; high?: number };
@@ -300,12 +304,14 @@ export function makeSplit(
   return { w, wkg };
 }
 
-function profileActualCategory(profile: ZwiftProfile | null | undefined): string | undefined {
-  if (!profile) return undefined;
-  const metrics = profile.competitionMetrics;
-  const open = metrics?.category?.trim() || undefined;
-  const women = metrics?.categoryWomen?.trim() || undefined;
-  if (profile.male === false && women) {
+function profileActualCategory(
+  metrics: ZwiftCompetitionMetrics | null | undefined,
+  isFemale: boolean,
+): string | undefined {
+  if (!metrics) return undefined;
+  const open = metrics.category?.trim() || undefined;
+  const women = metrics.categoryWomen?.trim() || undefined;
+  if (isFemale && women) {
     return open && open !== women ? `${women} (W) / ${open}` : `${women} (W)`;
   }
   return open ?? women;
@@ -322,6 +328,7 @@ export function mergePenStandings(opts: {
   targetRiderId: number;
   targetProfile?: ZwiftProfile;
   loggedInProfile?: ZwiftProfile | null;
+  riderProfiles?: ReadonlyMap<number, ZwiftProfile>;
   eventDistanceMeters?: number;
   targetActivityDetail?: ZwiftActivityDetail;
 }): UnifiedStandingRow[] {
@@ -336,6 +343,7 @@ export function mergePenStandings(opts: {
     targetRiderId,
     targetProfile,
     loggedInProfile,
+    riderProfiles,
     eventDistanceMeters,
     targetActivityDetail,
   } = opts;
@@ -511,23 +519,40 @@ export function mergePenStandings(opts: {
         ? positiveNum(targetActivityDetail?.maxSpeedInMetersPerSecond)
         : undefined;
 
-    const coreZrs = extractCoreZrs(core);
-    const profileZrsFallback =
-      riderId === targetRiderId
-        ? (targetProfile?.competitionMetrics?.racingScore ?? undefined)
-        : riderId === loggedInProfile?.id
-          ? (loggedInProfile?.competitionMetrics?.racingScore ?? undefined)
-          : undefined;
-    const zrsScore = coreZrs.score ?? profileZrsFallback ?? undefined;
+    const resolvedProfile =
+      (riderId > 0 ? riderProfiles?.get(riderId) : undefined) ??
+      (riderId === targetRiderId ? targetProfile : undefined) ??
+      (riderId === loggedInProfile?.id ? (loggedInProfile ?? undefined) : undefined);
 
-    const profileCatFallback =
-      riderId === targetRiderId
-        ? profileActualCategory(targetProfile)
-        : riderId === loggedInProfile?.id
-          ? profileActualCategory(loggedInProfile)
+    const isFemale =
+      resolvedProfile?.male === false ||
+      zpView?.male === 0 ||
+      zpZwift?.male === 0 ||
+      zr?.male === false ||
+      /^f(emale)?$/i.test(core?.profileData?.gender ?? '');
+
+    const coreZrs = extractCoreZrs(core);
+    const zrsScore =
+      coreZrs.score ?? (resolvedProfile?.competitionMetrics?.racingScore ?? undefined);
+
+    const zpCat = formatZpRiderCategory(
+      zpView?.div ?? zpZwift?.div,
+      zpView?.divw ?? zpZwift?.divw,
+      zpView?.male ?? zpZwift?.male ?? (isFemale ? 0 : undefined),
+    );
+    const coreCat = profileActualCategory(
+      core?.competitionMetrics ?? core?.profileData?.competitionMetrics,
+      isFemale,
+    );
+    const profileCat = profileActualCategory(resolvedProfile?.competitionMetrics, isFemale);
+    const riderCategory = zpCat ?? coreCat ?? profileCat;
+    const categorySource: UnifiedStandingRow['categorySource'] = zpCat
+      ? 'zp'
+      : coreCat
+        ? 'core'
+        : profileCat
+          ? 'profile'
           : undefined;
-    const riderCategory =
-      formatZpRiderCategory(zpView?.div, zpView?.divw, zpView?.male) ?? profileCatFallback;
 
     const veloAfter = zr?.velo?.elo?.after ?? zr?.riderVelo?.race;
     const veloBefore = zr?.velo?.elo?.before;
@@ -551,17 +576,14 @@ export function mergePenStandings(opts: {
       zpPlace,
       zpOverallPlace,
       riderCategory,
+      categorySource,
       zrsScore,
       zrsDelta: coreZrs.delta,
       velo: veloAfter,
       veloDelta,
       expectedPosition: eventExpectedPos ?? overallExpectedPos,
-      overallExpectedPosition:
-        eventExpectedPos != null &&
-        overallExpectedPos != null &&
-        Math.round(eventExpectedPos) !== Math.round(overallExpectedPos)
-          ? overallExpectedPos
-          : undefined,
+      routeExpectedPosition: eventExpectedPos,
+      overallExpectedPosition: overallExpectedPos,
       seedExpectedPosition: seedExpectedPos,
       expectedPlaceRange: zr?.expectedPlaceRange,
       phenotype: formatPhenotype(zr?.phenotype?.label),

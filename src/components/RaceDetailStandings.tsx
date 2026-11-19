@@ -1,9 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { ZwiftProfile } from '../api/zwiftCore';
 import { useFavorites } from '../lib/FavoritesContext';
 import { ordinal } from '../lib/raceHistory';
-import type { PenOption, PenSystem, SplitPair, UnifiedStandingRow } from '../lib/raceStandings';
+import type {
+  ExpectedPositionMode,
+  PenOption,
+  PenSystem,
+  SplitPair,
+  UnifiedStandingRow,
+} from '../lib/raceStandings';
 import { formatDurationMs, formatWeight } from '../lib/units';
 import type { UnitSystem } from '../lib/units';
 
@@ -11,7 +17,7 @@ type RowFilter = 'all' | 'zp' | 'hidden' | 'tracked';
 type SplitsUnit = 'w' | 'wkg';
 
 const COLUMN_DEFS = [
-  { id: 'expectedPosition', label: 'Est. # (Route / Ovr)' },
+  { id: 'expectedPosition', label: 'Est. #' },
   { id: 'riderCategory', label: 'Rider Cat' },
   { id: 'zrs', label: 'ZRS' },
   { id: 'velo', label: 'vELO' },
@@ -34,6 +40,9 @@ type ColumnVisibility = Record<ColumnId, boolean>;
 
 const STANDINGS_COLS_PREF = 'zv.raceDetail.standingsCols.v6';
 const SPLITS_UNIT_STORAGE_KEY = 'zv.raceDetail.splitsUnit';
+const PAGE_SIZE_STORAGE_KEY = 'zv.raceDetail.pageSize';
+const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
+type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
 
 const DEFAULT_COLUMNS: ColumnVisibility = {
   expectedPosition: true,
@@ -75,6 +84,41 @@ function loadSplitsUnit(): SplitsUnit {
   } catch {
     return 'w';
   }
+}
+
+function loadPageSize(): PageSize {
+  try {
+    const raw = Number(localStorage.getItem(PAGE_SIZE_STORAGE_KEY));
+    return (PAGE_SIZE_OPTIONS as readonly number[]).includes(raw) ? (raw as PageSize) : 25;
+  } catch {
+    return 25;
+  }
+}
+
+function getVisiblePageNumbers(currentPage: number, totalPages: number): Array<number | 'ellipsis'> {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
+  const pages = new Set<number>([1, totalPages, currentPage]);
+  if (currentPage > 1) pages.add(currentPage - 1);
+  if (currentPage < totalPages) pages.add(currentPage + 1);
+  if (currentPage <= 3) {
+    pages.add(2);
+    pages.add(3);
+  }
+  if (currentPage >= totalPages - 2) {
+    pages.add(totalPages - 2);
+    pages.add(totalPages - 1);
+  }
+  const sorted = Array.from(pages)
+    .filter((p) => p >= 1 && p <= totalPages)
+    .sort((a, b) => a - b);
+  const result: Array<number | 'ellipsis'> = [];
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i] - sorted[i - 1] > 1) result.push('ellipsis');
+    result.push(sorted[i]);
+  }
+  return result;
 }
 
 function formatSplit(split: SplitPair, unit: SplitsUnit): string {
@@ -135,6 +179,9 @@ export default function RaceDetailStandings({
   anyLoading,
   zpViewLoaded,
   onSelectPen,
+  expectedMode,
+  onToggleExpectedMode,
+  onVisibleCandidateKeyChange,
   units,
 }: {
   raceKey: string;
@@ -147,6 +194,9 @@ export default function RaceDetailStandings({
   anyLoading: boolean;
   zpViewLoaded: boolean;
   onSelectPen: (pen: PenOption) => void;
+  expectedMode: ExpectedPositionMode;
+  onToggleExpectedMode: () => void;
+  onVisibleCandidateKeyChange?: (candidateKey: string) => void;
   units: UnitSystem;
 }) {
   const { isFavorite } = useFavorites();
@@ -154,6 +204,13 @@ export default function RaceDetailStandings({
   const [splitsUnit, setSplitsUnit] = useState<SplitsUnit>(loadSplitsUnit);
   const [columns, setColumns] = useState<ColumnVisibility>(loadColumns);
   const [showColumnPicker, setShowColumnPicker] = useState(false);
+  const [pageSize, setPageSize] = useState<PageSize>(loadPageSize);
+
+  const scopeKey = `${raceKey}:${activePen?.key ?? ''}:${rowFilter}:${pageSize}`;
+  const [pageState, setPageState] = useState<{ scopeKey: string; page: number }>({
+    scopeKey,
+    page: 1,
+  });
 
   const loggedInId = loggedInProfile?.id;
   const favoritedInPen = useMemo(
@@ -191,6 +248,50 @@ export default function RaceDetailStandings({
         return combinedRows;
     }
   }, [combinedRows, rowFilter, targetRiderId, loggedInId, isFavorite]);
+
+  const totalPages = Math.max(1, Math.ceil(visibleRows.length / pageSize));
+  const rawPage = pageState.scopeKey === scopeKey ? pageState.page : 1;
+  const currentPage = Math.min(Math.max(1, rawPage), totalPages);
+  const startIdx = (currentPage - 1) * pageSize;
+  const pagedRows = useMemo(
+    () => visibleRows.slice(startIdx, startIdx + pageSize),
+    [visibleRows, startIdx, pageSize],
+  );
+
+  const targetRowIndex = useMemo(
+    () => visibleRows.findIndex((r) => r.riderId === targetRiderId),
+    [visibleRows, targetRiderId],
+  );
+  const targetRiderPage =
+    targetRowIndex >= 0 ? Math.floor(targetRowIndex / pageSize) + 1 : null;
+
+  const visibleCandidateKey = useMemo(() => {
+    const ids: number[] = [];
+    for (const row of pagedRows) {
+      if (row.riderId > 0 && row.categorySource !== 'zp' && row.categorySource !== 'core') {
+        ids.push(row.riderId);
+      }
+    }
+    return ids.join(',');
+  }, [pagedRows]);
+
+  useEffect(() => {
+    onVisibleCandidateKeyChange?.(visibleCandidateKey);
+  }, [visibleCandidateKey, onVisibleCandidateKeyChange]);
+
+  function setPage(nextPage: number) {
+    const clamped = Math.min(Math.max(1, nextPage), totalPages);
+    setPageState({ scopeKey, page: clamped });
+  }
+
+  function handlePageSize(nextSize: PageSize) {
+    setPageSize(nextSize);
+    try {
+      localStorage.setItem(PAGE_SIZE_STORAGE_KEY, String(nextSize));
+    } catch {
+      // Ignore storage errors
+    }
+  }
 
   function toggleColumn(id: ColumnId) {
     setColumns((prev) => {
@@ -387,20 +488,29 @@ export default function RaceDetailStandings({
             : 'No finishers matched this pen across the available APIs.'}
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+          <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wide align-bottom">
                 <th className="py-2 pr-3 whitespace-nowrap">#</th>
                 {columns.expectedPosition && (
-                  <th
-                    className="py-2 pr-3 whitespace-nowrap"
-                    title="Route (course-weighted vELO v2) expected finish, with Overall/Legacy estimate below when different"
-                  >
-                    <span>Est. #</span>
-                    <span className="block text-[9px] font-normal normal-case tracking-normal text-slate-500">
-                      Route / Ovr
-                    </span>
+                  <th className="py-2 pr-3 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={onToggleExpectedMode}
+                      title={
+                        expectedMode === 'route'
+                          ? 'Showing Route (course-weighted) expected finish. Click to switch to Overall.'
+                          : 'Showing Overall expected finish. Click to switch to Route (course-weighted).'
+                      }
+                      className="text-left uppercase tracking-wide group cursor-pointer rounded focus:outline-none focus-visible:ring-1 focus-visible:ring-[#fc6719]"
+                    >
+                      <span className="group-hover:text-slate-200 transition-colors">Est. #</span>
+                      <span className="block text-[9px] font-normal normal-case tracking-normal text-[#fc6719] group-hover:underline">
+                        {expectedMode === 'route' ? 'Route ⇄' : 'Overall ⇄'}
+                      </span>
+                    </button>
                   </th>
                 )}
                 <th className="py-2 pr-3 whitespace-nowrap">Rider</th>
@@ -470,7 +580,7 @@ export default function RaceDetailStandings({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/70">
-              {visibleRows.map((row) => {
+              {pagedRows.map((row) => {
                 const isTarget = row.riderId === targetRiderId;
                 const isYou = loggedInId != null && row.riderId === loggedInId;
                 const isFav = row.riderId > 0 && isFavorite(row.riderId);
@@ -509,74 +619,67 @@ export default function RaceDetailStandings({
 
                     {columns.expectedPosition && (
                       <td className="py-2 pr-3 font-mono whitespace-nowrap">
-                        {row.expectedPosition != null ? (
-                          (() => {
-                            const estRounded = Math.round(row.expectedPosition);
-                            const beat =
-                              !row.didNotFinish && !row.disqualified && row.rank != null
-                                ? estRounded - row.rank
-                                : null;
-                            const ovrRounded =
-                              row.overallExpectedPosition != null
-                                ? Math.round(row.overallExpectedPosition)
-                                : null;
-                            const ovrBeat =
-                              ovrRounded != null &&
-                              !row.didNotFinish &&
-                              !row.disqualified &&
-                              row.rank != null
-                                ? ovrRounded - row.rank
-                                : null;
-                            const range = row.expectedPlaceRange;
-                            const parts = [
-                              `Route (course-weighted) Est. ${row.expectedPosition.toFixed(1)}`,
-                            ];
-                            if (range?.low != null && range?.high != null) {
-                              parts.push(`(range ${range.low}–${range.high})`);
-                            }
-                            if (row.seedExpectedPosition != null) {
-                              parts.push(`Power-seed Est. ${row.seedExpectedPosition.toFixed(1)}`);
-                            }
-                            if (row.overallExpectedPosition != null) {
-                              parts.push(
-                                `Overall/Legacy Est. #${Math.round(row.overallExpectedPosition)}`,
-                              );
-                            }
-                            const titleText = parts.join(' · ');
-                            return (
-                              <div title={titleText} className="leading-tight">
-                                <div className="text-slate-300">
-                                  {estRounded}
-                                  {beat !== null && beat !== 0 && (
-                                    <span
-                                      className={`ml-1 text-[10px] ${
-                                        beat > 0 ? 'text-emerald-400' : 'text-red-400'
-                                      }`}
-                                    >
-                                      {beat > 0 ? `+${beat}` : beat}
-                                    </span>
-                                  )}
-                                </div>
-                                {ovrRounded != null && (
-                                  <div className="text-[10px] text-slate-400 mt-0.5">
-                                    ovr {ovrRounded}
-                                    {ovrBeat !== null && ovrBeat !== 0 && (
-                                      <span
-                                        className={`ml-1 ${
-                                          ovrBeat > 0 ? 'text-emerald-400/80' : 'text-red-400/80'
-                                        }`}
-                                      >
-                                        {ovrBeat > 0 ? `+${ovrBeat}` : ovrBeat}
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
+                        {(() => {
+                          const activeExpected =
+                            expectedMode === 'route'
+                              ? (row.routeExpectedPosition ??
+                                row.overallExpectedPosition ??
+                                row.expectedPosition)
+                              : (row.overallExpectedPosition ??
+                                row.routeExpectedPosition ??
+                                row.expectedPosition);
+                          if (activeExpected == null) {
+                            return <span className="text-slate-500">—</span>;
+                          }
+                          const estRounded = Math.round(activeExpected);
+                          const beat =
+                            !row.didNotFinish && !row.disqualified && row.rank != null
+                              ? estRounded - row.rank
+                              : null;
+                          const range = row.expectedPlaceRange;
+                          const parts: string[] = [];
+                          if (row.routeExpectedPosition != null) {
+                            parts.push(
+                              `Route (course-weighted) Est. ${row.routeExpectedPosition.toFixed(1)}`,
                             );
-                          })()
-                        ) : (
-                          <span className="text-slate-500">—</span>
-                        )}
+                          }
+                          if (row.overallExpectedPosition != null) {
+                            parts.push(
+                              `Overall Est. ${row.overallExpectedPosition.toFixed(1)}`,
+                            );
+                          }
+                          if (range?.low != null && range?.high != null) {
+                            parts.push(`(range ${range.low}–${range.high})`);
+                          }
+                          if (row.seedExpectedPosition != null) {
+                            parts.push(`Power-seed Est. ${row.seedExpectedPosition.toFixed(1)}`);
+                          }
+                          parts.push(
+                            expectedMode === 'route'
+                              ? 'Click to switch to Overall'
+                              : 'Click to switch to Route',
+                          );
+                          const titleText = parts.join(' · ');
+                          return (
+                            <button
+                              type="button"
+                              onClick={onToggleExpectedMode}
+                              title={titleText}
+                              className="inline-flex items-baseline text-left cursor-pointer rounded text-slate-300 hover:text-white focus:outline-none focus-visible:ring-1 focus-visible:ring-[#fc6719]"
+                            >
+                              <span>{estRounded}</span>
+                              {beat !== null && beat !== 0 && (
+                                <span
+                                  className={`ml-1 text-[10px] ${
+                                    beat > 0 ? 'text-emerald-400' : 'text-red-400'
+                                  }`}
+                                >
+                                  {beat > 0 ? `+${beat}` : beat}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })()}
                       </td>
                     )}
 
@@ -786,9 +889,101 @@ export default function RaceDetailStandings({
                   </tr>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
+              </tbody>
+            </table>
+          </div>
+
+          {visibleRows.length > PAGE_SIZE_OPTIONS[0] && (
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800/80 text-xs text-slate-400">
+              <div className="flex flex-wrap items-center gap-2">
+                <span>
+                  Showing <strong className="text-slate-200">{startIdx + 1}</strong>–
+                  <strong className="text-slate-200">
+                    {Math.min(startIdx + pageSize, visibleRows.length)}
+                  </strong>{' '}
+                  of <strong className="text-slate-200">{visibleRows.length}</strong>
+                </span>
+                {targetRiderPage != null && targetRiderPage !== currentPage && (
+                  <button
+                    type="button"
+                    onClick={() => setPage(targetRiderPage)}
+                    className="rounded-full border border-[#fc6719]/50 bg-[#fc6719]/15 px-2.5 py-0.5 text-[11px] font-semibold text-[#fc6719] hover:bg-[#fc6719]/25 transition"
+                  >
+                    Jump to rider (Page {targetRiderPage})
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-1">
+                  <span>Rows:</span>
+                  <div
+                    role="group"
+                    aria-label="Rows per page"
+                    className="inline-flex rounded-lg border border-slate-700 p-0.5 bg-slate-950"
+                  >
+                    {PAGE_SIZE_OPTIONS.map((size) => (
+                      <button
+                        key={size}
+                        type="button"
+                        onClick={() => handlePageSize(size)}
+                        className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition ${
+                          pageSize === size
+                            ? 'bg-[#fc6719] text-white'
+                            : 'text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {totalPages > 1 && (
+                  <nav aria-label="Standings pages" className="inline-flex items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={currentPage <= 1}
+                      onClick={() => setPage(currentPage - 1)}
+                      className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Prev
+                    </button>
+                    {getVisiblePageNumbers(currentPage, totalPages).map((item, idx) =>
+                      item === 'ellipsis' ? (
+                        <span key={`ellipsis-${idx}`} className="px-1 text-slate-500">
+                          …
+                        </span>
+                      ) : (
+                        <button
+                          key={item}
+                          type="button"
+                          aria-current={item === currentPage ? 'page' : undefined}
+                          onClick={() => setPage(item)}
+                          className={`min-w-[26px] rounded-md border px-2 py-1 text-[11px] font-medium transition ${
+                            item === currentPage
+                              ? 'bg-[#fc6719] border-[#fc6719] text-white'
+                              : 'border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800'
+                          }`}
+                        >
+                          {item}
+                        </button>
+                      ),
+                    )}
+                    <button
+                      type="button"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setPage(currentPage + 1)}
+                      className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                  </nav>
+                )}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </section>
   );
