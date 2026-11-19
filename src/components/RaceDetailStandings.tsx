@@ -32,7 +32,7 @@ const COLUMN_DEFS = [
 type ColumnId = (typeof COLUMN_DEFS)[number]['id'];
 type ColumnVisibility = Record<ColumnId, boolean>;
 
-const COLS_STORAGE_KEY = 'zv.raceDetail.standingsCols.v5';
+const COLS_STORAGE_KEY = 'zv.raceDetail.standingsCols.v6';
 const SPLITS_UNIT_STORAGE_KEY = 'zv.raceDetail.splitsUnit';
 
 const DEFAULT_COLUMNS: ColumnVisibility = {
@@ -49,7 +49,7 @@ const DEFAULT_COLUMNS: ColumnVisibility = {
   avgWkg: true,
   splits: true,
   hr: true,
-  speed: true,
+  speed: false,
   weight: true,
   status: false,
 };
