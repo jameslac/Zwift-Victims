@@ -7,6 +7,8 @@ export interface ZwiftRacingRider {
   age?: string;
   height?: number;
   weight?: number;
+  zpCategory?: string;
+  zpFTP?: number;
   visibility?: string;
   banned?: boolean;
   optOut?: boolean;
@@ -20,6 +22,10 @@ export interface ZwiftRacingRider {
   } | null;
   velo?: {
     race?: number;
+    timeTrial?: number;
+    handicap?: number;
+    max30?: number;
+    max90?: number;
     factors?: Record<string, number>;
     skill?: Record<string, number>;
     [key: string]: unknown;
@@ -30,7 +36,27 @@ export interface ZwiftRacingRider {
     [key: string]: unknown;
   };
   points?: Record<string, unknown>;
-  power?: Record<string, number>;
+  power?: {
+    CP?: number;
+    AWC?: number;
+    compoundScore?: number;
+    powerRating?: number;
+    w5?: number;
+    w15?: number;
+    w30?: number;
+    w60?: number;
+    w120?: number;
+    w300?: number;
+    w1200?: number;
+    wkg5?: number;
+    wkg15?: number;
+    wkg30?: number;
+    wkg60?: number;
+    wkg120?: number;
+    wkg300?: number;
+    wkg1200?: number;
+    [key: string]: unknown;
+  };
   race?: {
     finishes?: number;
     wins?: number;
@@ -41,7 +67,11 @@ export interface ZwiftRacingRider {
   phenotype?: {
     version?: number;
     label?: string;
+    value?: number;
+    bias?: number;
     confidence?: number;
+    scores?: Record<string, number>;
+    windowDays?: number;
     [key: string]: unknown;
   };
   [key: string]: unknown;
@@ -131,23 +161,58 @@ export interface ZwiftRacingRaceEntry {
   [key: string]: unknown;
 }
 
+export interface ZwiftRacingCategoryRank {
+  category?: number;
+  place?: number;
+  total?: number;
+  [key: string]: unknown;
+}
+
+export interface ZwiftRacingRankingEntry {
+  ranking?: number | null;
+  open?: ZwiftRacingCategoryRank | null;
+  women?: ZwiftRacingCategoryRank | null;
+  delta7d?: number | null;
+  [key: string]: unknown;
+}
+
+export interface ZwiftRacingRankings {
+  gc?: ZwiftRacingRankingEntry;
+  sprint?: ZwiftRacingRankingEntry;
+  climb?: ZwiftRacingRankingEntry;
+  tt?: ZwiftRacingRankingEntry;
+  [key: string]: unknown;
+}
+
+export interface ZwiftRacingLegacyHistoryEntry {
+  event?: {
+    eventId?: string;
+    time?: number;
+    title?: string;
+    [key: string]: unknown;
+  };
+  rating?: number;
+  archived?: boolean;
+  [key: string]: unknown;
+}
+
 export interface ZwiftRacingOverview {
   riderId?: number;
   days?: number;
   latest?: ZwiftRacingRaceEntry[];
   history?: ZwiftRacingRaceEntry[];
   scoring?: Array<Record<string, unknown>>;
-  rankings?: Record<string, unknown>;
-  gcOverallPlace?: number | null;
+  rankings?: ZwiftRacingRankings;
+  gcOverallPlace?: { rank?: number; total?: number } | number | null;
   legacyRatings?: {
-    live?: number;
-    max30?: number;
-    max90?: number;
-    max30Expires?: number;
-    max90Expires?: number;
+    live?: number | null;
+    max30?: number | null;
+    max90?: number | null;
+    max30Expires?: number | null;
+    max90Expires?: number | null;
     [key: string]: unknown;
   };
-  legacyHistory?: Array<Record<string, unknown>>;
+  legacyHistory?: ZwiftRacingLegacyHistoryEntry[];
   [key: string]: unknown;
 }
 
