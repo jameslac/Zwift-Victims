@@ -731,6 +731,7 @@ export default function RaceDetailPage() {
   }
 
   const backPath = isOwnProfile ? '/' : `/riders/${targetRiderId}`;
+  const historyPath = isOwnProfile ? '/history' : `/riders/${targetRiderId}/history`;
   const rawRiderName = targetProfile
     ? [targetProfile.firstName, targetProfile.lastName].filter(Boolean).join(' ') ||
       `Rider ${targetRiderId}`
@@ -885,14 +886,15 @@ export default function RaceDetailPage() {
     : undefined;
 
   return (
-    <main className="min-h-dvh max-w-6xl mx-auto p-4 sm:p-8 space-y-6">
+    <main className="min-h-dvh max-w-6xl mx-auto p-4 sm:p-8 pb-24 md:pb-12 space-y-6">
       <AppHeader
         isOwnProfile={isOwnProfile}
+        targetRiderId={targetRiderId ?? undefined}
         units={units}
         onUnitsChange={setUnits}
         onLogout={logout}
-        backTo={backPath}
-        backLabel={`← ${riderName}`}
+        backTo={historyPath}
+        backLabel="← History"
       />
 
       {/* Hero Header */}
@@ -901,7 +903,7 @@ export default function RaceDetailPage() {
           <div className="space-y-1">
             <p className="text-xs text-slate-400">
               Race Details ·{' '}
-              <Link to={backPath} className="text-[#fc6719] hover:underline font-medium">
+              <Link to={backPath} className="text-accent-text hover:underline font-medium">
                 {riderName}
               </Link>{' '}
               (ID {targetRiderId})

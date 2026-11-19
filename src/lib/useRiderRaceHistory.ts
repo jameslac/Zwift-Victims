@@ -34,6 +34,56 @@ const EMPTY_ACTIVITIES: ZwiftActivity[] = [];
 const EMPTY_ZP: ZwiftPowerRaceEntry[] = [];
 const EMPTY_ZR: ZwiftRacingRaceEntry[] = [];
 
+const zpCache = new Map<number, ZwiftPowerRaceEntry[]>();
+const zpInFlight = new Map<number, Promise<ZwiftPowerRaceEntry[]>>();
+
+const zrCache = new Map<number, ZwiftRacingRiderResponse>();
+const zrInFlight = new Map<number, Promise<ZwiftRacingRiderResponse>>();
+
+interface CachedActivitiesEntry {
+  activities: ZwiftActivity[];
+  nextStart: number;
+  hasMore: boolean;
+}
+const activitiesCache = new Map<number, CachedActivitiesEntry>();
+const activitiesInFlight = new Map<number, Promise<CachedActivitiesEntry>>();
+
+function loadZpCached(riderId: number): Promise<ZwiftPowerRaceEntry[]> {
+  const cached = zpCache.get(riderId);
+  if (cached) return Promise.resolve(cached);
+  const existing = zpInFlight.get(riderId);
+  if (existing) return existing;
+
+  const req = fetchZwiftPowerRaces(riderId)
+    .then((data) => {
+      zpCache.set(riderId, data);
+      return data;
+    })
+    .finally(() => {
+      zpInFlight.delete(riderId);
+    });
+  zpInFlight.set(riderId, req);
+  return req;
+}
+
+function loadZrCached(riderId: number): Promise<ZwiftRacingRiderResponse> {
+  const cached = zrCache.get(riderId);
+  if (cached) return Promise.resolve(cached);
+  const existing = zrInFlight.get(riderId);
+  if (existing) return existing;
+
+  const req = fetchZwiftRacingRider(riderId)
+    .then((data) => {
+      zrCache.set(riderId, data);
+      return data;
+    })
+    .finally(() => {
+      zrInFlight.delete(riderId);
+    });
+  zrInFlight.set(riderId, req);
+  return req;
+}
+
 function mergeActivityPages(existing: ZwiftActivity[], incoming: ZwiftActivity[]): ZwiftActivity[] {
   const seen = new Set<string>();
   const combined: ZwiftActivity[] = [];
@@ -44,6 +94,42 @@ function mergeActivityPages(existing: ZwiftActivity[], incoming: ZwiftActivity[]
     combined.push(act);
   }
   return combined;
+}
+
+function loadActivitiesCached(
+  riderId: number,
+  getAccessToken: () => Promise<string>,
+): Promise<CachedActivitiesEntry> {
+  const cached = activitiesCache.get(riderId);
+  if (cached) return Promise.resolve(cached);
+  const existing = activitiesInFlight.get(riderId);
+  if (existing) return existing;
+
+  const req = getAccessToken()
+    .then((token) =>
+      Promise.all([
+        fetchRiderActivities(token, riderId, { start: 0, limit: PAGE_SIZE }),
+        fetchRiderActivities(token, riderId, { start: PAGE_SIZE, limit: PAGE_SIZE }).catch(
+          () => [] as ZwiftActivity[],
+        ),
+      ]),
+    )
+    .then(([page1, page2]) => {
+      const combined = mergeActivityPages(page1, page2);
+      const entry: CachedActivitiesEntry = {
+        activities: combined,
+        nextStart: PAGE_SIZE * 2,
+        hasMore: page1.length >= PAGE_SIZE && page2.length >= PAGE_SIZE,
+      };
+      activitiesCache.set(riderId, entry);
+      return entry;
+    })
+    .finally(() => {
+      activitiesInFlight.delete(riderId);
+    });
+
+  activitiesInFlight.set(riderId, req);
+  return req;
 }
 
 export interface UseRiderRaceHistoryOptions {
@@ -69,29 +155,41 @@ export function useRiderRaceHistory(
 } {
   const { includeActivities = false } = options;
   const { getAccessToken } = useAuth();
-  const [zpEntry, setZpEntry] = useState<ScopedState<ZwiftPowerRaceEntry[]>>({
-    riderId,
-    state: LOADING_ZP,
+  const [zpEntry, setZpEntry] = useState<ScopedState<ZwiftPowerRaceEntry[]>>(() => {
+    const cached = zpCache.get(riderId);
+    return {
+      riderId,
+      state: cached ? { status: 'loaded', data: cached } : LOADING_ZP,
+    };
   });
-  const [zrEntry, setZrEntry] = useState<ScopedState<ZwiftRacingRiderResponse>>({
-    riderId,
-    state: LOADING_ZR,
+  const [zrEntry, setZrEntry] = useState<ScopedState<ZwiftRacingRiderResponse>>(() => {
+    const cached = zrCache.get(riderId);
+    return {
+      riderId,
+      state: cached ? { status: 'loaded', data: cached } : LOADING_ZR,
+    };
   });
-  const [activitiesEntry, setActivitiesEntry] = useState<ScopedState<ZwiftActivity[]>>({
-    riderId,
-    state: LOADING_ACTIVITIES,
+  const [activitiesEntry, setActivitiesEntry] = useState<ScopedState<ZwiftActivity[]>>(() => {
+    const cached = activitiesCache.get(riderId);
+    return {
+      riderId,
+      state: cached ? { status: 'loaded', data: cached.activities } : LOADING_ACTIVITIES,
+    };
   });
-  const [pagination, setPagination] = useState<ActivitiesPaginationState>({
-    riderId,
-    nextStart: 0,
-    hasMore: false,
-    loadingMore: false,
+  const [pagination, setPagination] = useState<ActivitiesPaginationState>(() => {
+    const cached = activitiesCache.get(riderId);
+    return {
+      riderId,
+      nextStart: cached?.nextStart ?? 0,
+      hasMore: cached?.hasMore ?? false,
+      loadingMore: false,
+    };
   });
 
   useEffect(() => {
     let cancelled = false;
 
-    fetchZwiftPowerRaces(riderId)
+    loadZpCached(riderId)
       .then((data) => {
         if (!cancelled) setZpEntry({ riderId, state: { status: 'loaded', data } });
       })
@@ -107,7 +205,7 @@ export function useRiderRaceHistory(
         }
       });
 
-    fetchZwiftRacingRider(riderId)
+    loadZrCached(riderId)
       .then((data) => {
         if (!cancelled) setZrEntry({ riderId, state: { status: 'loaded', data } });
       })
@@ -124,23 +222,14 @@ export function useRiderRaceHistory(
       });
 
     if (includeActivities) {
-      getAccessToken()
-        .then((token) =>
-          Promise.all([
-            fetchRiderActivities(token, riderId, { start: 0, limit: PAGE_SIZE }),
-            fetchRiderActivities(token, riderId, { start: PAGE_SIZE, limit: PAGE_SIZE }).catch(
-              () => [] as ZwiftActivity[],
-            ),
-          ]),
-        )
-        .then(([page1, page2]) => {
+      loadActivitiesCached(riderId, getAccessToken)
+        .then((entry) => {
           if (cancelled) return;
-          const combined = mergeActivityPages(page1, page2);
-          setActivitiesEntry({ riderId, state: { status: 'loaded', data: combined } });
+          setActivitiesEntry({ riderId, state: { status: 'loaded', data: entry.activities } });
           setPagination({
             riderId,
-            nextStart: PAGE_SIZE * 2,
-            hasMore: page1.length >= PAGE_SIZE && page2.length >= PAGE_SIZE,
+            nextStart: entry.nextStart,
+            hasMore: entry.hasMore,
             loadingMore: false,
           });
         })
@@ -168,14 +257,34 @@ export function useRiderRaceHistory(
     };
   }, [riderId, includeActivities, getAccessToken]);
 
-  const zpState = zpEntry.riderId === riderId ? zpEntry.state : LOADING_ZP;
-  const zrState = zrEntry.riderId === riderId ? zrEntry.state : LOADING_ZR;
-  const activitiesState =
-    activitiesEntry.riderId === riderId ? activitiesEntry.state : LOADING_ACTIVITIES;
+  const zpState = useMemo<AsyncState<ZwiftPowerRaceEntry[]>>(() => {
+    if (zpEntry.riderId === riderId) return zpEntry.state;
+    const cached = zpCache.get(riderId);
+    return cached ? { status: 'loaded', data: cached } : LOADING_ZP;
+  }, [zpEntry, riderId]);
+
+  const zrState = useMemo<AsyncState<ZwiftRacingRiderResponse>>(() => {
+    if (zrEntry.riderId === riderId) return zrEntry.state;
+    const cached = zrCache.get(riderId);
+    return cached ? { status: 'loaded', data: cached } : LOADING_ZR;
+  }, [zrEntry, riderId]);
+
+  const activitiesState = useMemo<AsyncState<ZwiftActivity[]>>(() => {
+    if (activitiesEntry.riderId === riderId) return activitiesEntry.state;
+    const cached = activitiesCache.get(riderId);
+    return cached ? { status: 'loaded', data: cached.activities } : LOADING_ACTIVITIES;
+  }, [activitiesEntry, riderId]);
+
+  const cachedActs = activitiesCache.get(riderId);
   const scopedPagination =
     pagination.riderId === riderId
       ? pagination
-      : { riderId, nextStart: 0, hasMore: false, loadingMore: false };
+      : {
+          riderId,
+          nextStart: cachedActs?.nextStart ?? 0,
+          hasMore: cachedActs?.hasMore ?? false,
+          loadingMore: false,
+        };
 
   const loadMoreActivities = useCallback(() => {
     if (!includeActivities || scopedPagination.loadingMore || !scopedPagination.hasMore) return;
@@ -188,9 +297,16 @@ export function useRiderRaceHistory(
       .then((page) => {
         setActivitiesEntry((prev) => {
           if (prev.riderId !== riderId || prev.state.status !== 'loaded') return prev;
+          const merged = mergeActivityPages(prev.state.data, page);
+          const nextEntry: CachedActivitiesEntry = {
+            activities: merged,
+            nextStart: startOffset + PAGE_SIZE,
+            hasMore: page.length >= PAGE_SIZE,
+          };
+          activitiesCache.set(riderId, nextEntry);
           return {
             riderId,
-            state: { status: 'loaded', data: mergeActivityPages(prev.state.data, page) },
+            state: { status: 'loaded', data: merged },
           };
         });
         setPagination((prev) =>
@@ -219,7 +335,8 @@ export function useRiderRaceHistory(
   ]);
 
   const activities =
-    includeActivities && activitiesState.status === 'loaded'
+    (includeActivities || activitiesState.status === 'loaded') &&
+    activitiesState.status === 'loaded'
       ? activitiesState.data
       : EMPTY_ACTIVITIES;
 

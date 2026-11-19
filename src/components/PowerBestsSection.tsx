@@ -321,7 +321,7 @@ export default function PowerBestsSection({
               type="button"
               onClick={() => setUnit('watts')}
               className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
-                unit === 'watts' ? 'bg-[#fc6719] text-white' : 'text-slate-300 hover:text-white'
+                unit === 'watts' ? 'bg-accent text-white' : 'text-slate-300 hover:text-white'
               }`}
             >
               Watts (W)
@@ -330,7 +330,7 @@ export default function PowerBestsSection({
               type="button"
               onClick={() => setUnit('wkg')}
               className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
-                unit === 'wkg' ? 'bg-[#fc6719] text-white' : 'text-slate-300 hover:text-white'
+                unit === 'wkg' ? 'bg-accent text-white' : 'text-slate-300 hover:text-white'
               }`}
             >
               W/kg
@@ -341,7 +341,7 @@ export default function PowerBestsSection({
             <button
               type="button"
               onClick={() => setShareOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:border-[#fc6719]/60 hover:text-[#fc6719] transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:border-accent/60 hover:text-accent-text transition-colors"
             >
               <svg
                 viewBox="0 0 20 20"
@@ -418,7 +418,7 @@ export default function PowerBestsSection({
               onClick={() => setMarkersMenuOpen((prev) => !prev)}
               className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors ${
                 markersMenuOpen
-                  ? 'border-[#fc6719]/60 bg-[#fc6719]/15 text-[#fc6719]'
+                  ? 'border-accent/60 bg-accent/15 text-accent-text'
                   : 'border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800'
               }`}
             >
@@ -483,7 +483,7 @@ export default function PowerBestsSection({
                         onClick={() => toggleMarkedDuration(row.seconds)}
                         className={`rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors ${
                           checked
-                            ? 'border-[#fc6719]/60 bg-[#fc6719]/20 text-slate-100'
+                            ? 'border-accent/60 bg-accent/20 text-slate-100'
                             : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-600 hover:text-slate-200'
                         }`}
                       >
@@ -676,7 +676,7 @@ export default function PowerBestsSection({
                     onClick={() => setSelectedSeconds(row.seconds)}
                     className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
                       isActive
-                        ? 'bg-[#fc6719] text-white'
+                        ? 'bg-accent text-white'
                         : 'bg-slate-900 border border-slate-800 text-slate-300 hover:border-slate-600'
                     }`}
                   >

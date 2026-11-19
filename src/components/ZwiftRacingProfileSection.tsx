@@ -273,8 +273,8 @@ function VeloProgressionChart({
         >
           <defs>
             <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#fc6719" stopOpacity="0.24" />
-              <stop offset="100%" stopColor="#fc6719" stopOpacity="0" />
+              <stop offset="0%" stopColor="var(--zv-accent)" stopOpacity="0.24" />
+              <stop offset="100%" stopColor="var(--zv-accent)" stopOpacity="0" />
             </linearGradient>
           </defs>
 
@@ -414,7 +414,7 @@ function VeloProgressionChart({
             <path
               d={pathD}
               fill="none"
-              stroke="#fc6719"
+              stroke="var(--zv-accent)"
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -426,7 +426,7 @@ function VeloProgressionChart({
             const isActive = idx === activeIndex;
             const deltaVal = pt.delta ?? 0;
             const dotColor = pt.isLive
-              ? '#fc6719'
+              ? 'var(--zv-accent)'
               : deltaVal > 0.05
                 ? '#34d399'
                 : deltaVal < -0.05
@@ -473,7 +473,7 @@ function VeloProgressionChart({
               <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
                 <span>{activePoint.isLive ? 'Current rating' : formatShortDate(activePoint.time)}</span>
                 {activePoint.isLive ? (
-                  <span className="rounded-full bg-[#fc6719]/20 border border-[#fc6719]/40 px-2 py-0.5 text-[10px] font-semibold text-[#fc6719]">
+                  <span className="rounded-full bg-accent/20 border border-accent/40 px-2 py-0.5 text-[10px] font-semibold text-accent-text">
                     Live
                   </span>
                 ) : activePoint.didNotFinish ? (
@@ -642,7 +642,7 @@ function PhenotypeRadarCard({
             Phenotype
           </h3>
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="rounded-full bg-[#fc6719]/20 border border-[#fc6719]/40 px-2.5 py-0.5 text-xs font-bold text-[#fc6719]">
+            <span className="rounded-full bg-accent/20 border border-accent/40 px-2.5 py-0.5 text-xs font-bold text-accent-text">
               {phenotype.label}
             </span>
             {phenotype.value !== undefined && (
@@ -735,9 +735,9 @@ function PhenotypeRadarCard({
             {/* Rider phenotype shape */}
             <polygon
               points={polygonPoints}
-              fill="#fc6719"
+              fill="var(--zv-accent)"
               fillOpacity="0.24"
-              stroke="#fc6719"
+              stroke="var(--zv-accent)"
               strokeWidth="2.25"
               strokeLinejoin="round"
             />
@@ -766,7 +766,7 @@ function PhenotypeRadarCard({
                       cx={vertex.x}
                       cy={vertex.y}
                       r="8"
-                      fill="#fc6719"
+                      fill="var(--zv-accent)"
                       fillOpacity="0.28"
                     />
                   )}
@@ -774,7 +774,7 @@ function PhenotypeRadarCard({
                     cx={vertex.x}
                     cy={vertex.y}
                     r={isSelected ? 4.5 : 3.25}
-                    fill={isSelected ? '#fb923c' : '#fc6719'}
+                    fill={isSelected ? 'var(--zv-accent-text)' : 'var(--zv-accent)'}
                     stroke="#020617"
                     strokeWidth="1.5"
                   />
@@ -1221,7 +1221,7 @@ export default function ZwiftRacingProfileSection({
               href={buildZwiftRacingRiderUrl(profileId)}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-950 px-2.5 py-0.5 text-xs font-medium text-slate-300 hover:border-[#fc6719]/60 hover:text-[#fc6719] transition-colors"
+              className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-950 px-2.5 py-0.5 text-xs font-medium text-slate-300 hover:border-accent/60 hover:text-accent-text transition-colors"
             >
               <span>zwiftracing.app</span>
               <span aria-hidden="true">↗</span>
@@ -1251,7 +1251,7 @@ export default function ZwiftRacingProfileSection({
             onClick={() => setScaleMode('velo2')}
             className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
               effectiveScale === 'velo2'
-                ? 'bg-[#fc6719] text-white'
+                ? 'bg-accent text-white'
                 : 'text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed'
             }`}
           >
@@ -1263,7 +1263,7 @@ export default function ZwiftRacingProfileSection({
             onClick={() => setScaleMode('legacy')}
             className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
               effectiveScale === 'legacy'
-                ? 'bg-[#fc6719] text-white'
+                ? 'bg-accent text-white'
                 : 'text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed'
             }`}
           >

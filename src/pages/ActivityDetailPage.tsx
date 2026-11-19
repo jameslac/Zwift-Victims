@@ -184,6 +184,7 @@ export default function ActivityDetailPage() {
   }
 
   const backPath = isOwnProfile ? '/' : `/riders/${targetRiderId}`;
+  const historyPath = isOwnProfile ? '/history' : `/riders/${targetRiderId}/history`;
   const activityProfileRec = (detail?.profile ?? baseActivity?.profile) as
     | Record<string, unknown>
     | undefined;
@@ -329,14 +330,15 @@ export default function ActivityDetailPage() {
   const photos = extractActivityPhotos(baseActivity, detail);
 
   return (
-    <main className="min-h-dvh max-w-6xl mx-auto p-4 sm:p-8 space-y-6">
+    <main className="min-h-dvh max-w-6xl mx-auto p-4 sm:p-8 pb-24 md:pb-12 space-y-6">
       <AppHeader
         isOwnProfile={isOwnProfile}
+        targetRiderId={targetRiderId ?? undefined}
         units={units}
         onUnitsChange={setUnits}
         onLogout={logout}
-        backTo={backPath}
-        backLabel={`← ${riderName}`}
+        backTo={historyPath}
+        backLabel="← History"
       />
 
       {detailState.status === 'error' && (
@@ -356,7 +358,7 @@ export default function ActivityDetailPage() {
           <div className="space-y-1">
             <p className="text-xs text-slate-400">
               Activity Details ·{' '}
-              <Link to={backPath} className="text-[#fc6719] hover:underline font-medium">
+              <Link to={backPath} className="text-accent-text hover:underline font-medium">
                 {riderName}
               </Link>{' '}
               (ID {targetRiderId})

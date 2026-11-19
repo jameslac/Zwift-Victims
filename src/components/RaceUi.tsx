@@ -1,6 +1,4 @@
-import { useState } from 'react';
-import type { FormEvent, ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import type { ReactNode } from 'react';
 import {
   buildZwiftActivityUrl,
   buildZwiftPowerEventUrl,
@@ -11,10 +9,11 @@ import {
   ordinal,
 } from '../lib/raceHistory';
 import type { ActivityType } from '../lib/raceHistory';
-import type { UnitSystem } from '../lib/units';
+
+export { AppHeader } from './AppShell';
 
 const ACTIVITY_TYPE_BADGE_TONE: Record<ActivityType, string> = {
-  race: 'bg-[#fc6719]/15 border-[#fc6719]/40 text-[#fc6719]',
+  race: 'bg-accent/15 border-accent/40 text-accent-text',
   ride: 'bg-sky-500/15 border-sky-500/40 text-sky-300',
   workout: 'bg-violet-500/15 border-violet-500/40 text-violet-300',
   free_ride: 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300',
@@ -155,95 +154,6 @@ export function PlacingBadge({
     );
   }
   return null;
-}
-
-export function AppHeader({
-  isOwnProfile,
-  units,
-  onUnitsChange,
-  onLogout,
-  backTo,
-  backLabel,
-}: {
-  isOwnProfile: boolean;
-  units: UnitSystem;
-  onUnitsChange: (u: UnitSystem) => void;
-  onLogout: () => void;
-  backTo?: string;
-  backLabel?: string;
-}) {
-  const navigate = useNavigate();
-  const [lookupId, setLookupId] = useState('');
-
-  function handleLookupSubmit(e: FormEvent) {
-    e.preventDefault();
-    const cleaned = lookupId.trim();
-    if (!/^\d+$/.test(cleaned)) return;
-    setLookupId('');
-    navigate(`/riders/${cleaned}`);
-  }
-
-  return (
-    <header className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <Link to="/" className="font-extrabold text-lg">
-          Zwift Victims
-        </Link>
-        {backTo && backLabel && (
-          <Link
-            to={backTo}
-            className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
-          >
-            {backLabel}
-          </Link>
-        )}
-        {!isOwnProfile && !backTo && (
-          <Link
-            to="/"
-            className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
-          >
-            My profile
-          </Link>
-        )}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <form onSubmit={handleLookupSubmit} className="flex items-center gap-1">
-          <input
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            placeholder="View rider ID…"
-            aria-label="View rider by Zwift ID"
-            value={lookupId}
-            onChange={(e) => setLookupId(e.target.value)}
-            className="w-32 rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm focus:outline-none focus:border-[#fc6719]"
-          />
-          <button
-            type="submit"
-            disabled={!/^\d+$/.test(lookupId.trim())}
-            className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-sm hover:bg-slate-800 disabled:opacity-40"
-          >
-            Go
-          </button>
-        </form>
-        <select
-          aria-label="Units"
-          value={units}
-          onChange={(e) => onUnitsChange(e.target.value as UnitSystem)}
-          className="rounded-lg bg-slate-900 border border-slate-700 px-2 py-1.5 text-sm"
-        >
-          <option value="metric">Metric (kg, cm)</option>
-          <option value="imperial">Imperial (lb, ft)</option>
-        </select>
-        <button
-          onClick={onLogout}
-          className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm hover:bg-slate-800"
-        >
-          Log out
-        </button>
-      </div>
-    </header>
-  );
 }
 
 function ZwiftIcon({ className = 'w-4 h-4' }: { className?: string }) {
@@ -454,7 +364,7 @@ export function RaceExternalLinks({
   if (links.length === 0) return null;
 
   const baseClass =
-    'inline-flex items-center justify-center rounded-lg border border-slate-700/80 bg-slate-900/80 text-slate-300 hover:border-[#fc6719]/60 hover:text-[#fc6719] hover:bg-slate-800 transition-colors';
+    'inline-flex items-center justify-center rounded-lg border border-slate-700/80 bg-slate-900/80 text-slate-300 hover:border-accent/60 hover:text-accent-text hover:bg-slate-800 transition-colors';
   const sizeClass = showLabels ? 'px-2.5 py-1 text-xs font-medium gap-1.5' : 'p-1.5';
 
   return (

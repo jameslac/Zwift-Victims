@@ -78,9 +78,9 @@ Zwift-Victims/
 │   └── index.ts              # Cloudflare Worker handling /api/* routes + SPA static asset fallback
 ├── src/                      # Frontend PWA source code
 │   ├── api/                  # Modular API clients (separated by upstream provider)
-│   ├── domain/               # Pure business logic (e.g., Head-to-Head Win/Loss engine, exclusions)
-│   ├── components/           # Shared UI components
-│   ├── pages/                # Feature views (Login, Head-to-Head, Race Inspector, Garage/Equipment)
+│   ├── components/           # Shared UI shell (AppShell) & feature sections
+│   ├── lib/                  # Domain logic, hooks, and theme/layout/favorites contexts
+│   ├── pages/                # Route views (ProfilePage, RaceHistoryPage, VictimsPage, RaceDetailPage, ActivityDetailPage, LoginPage)
 │   ├── App.tsx
 │   └── main.tsx
 ├── wrangler.jsonc            # Unified Cloudflare Worker + Static Assets configuration

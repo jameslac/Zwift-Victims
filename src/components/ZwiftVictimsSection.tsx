@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import type { FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
 import type { ZwiftRacingRiderResponse } from '../api/zwiftRacing';
 import type { FavoriteRider } from '../lib/FavoritesContext';
@@ -22,6 +23,24 @@ function recordBadgeTone(wins: number, losses: number): string {
   return 'bg-slate-800/80 border-slate-600 text-slate-200';
 }
 
+function categoryBadgeTone(cat: string | undefined): string {
+  const normalized = cat?.trim().toUpperCase().replace(/\+$/, '');
+  switch (normalized) {
+    case 'A':
+      return 'bg-red-500/15 border-red-500/40 text-red-300';
+    case 'B':
+      return 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300';
+    case 'C':
+      return 'bg-sky-500/15 border-sky-500/40 text-sky-300';
+    case 'D':
+      return 'bg-amber-500/15 border-amber-500/40 text-amber-300';
+    case 'E':
+      return 'bg-violet-500/15 border-violet-500/40 text-violet-300';
+    default:
+      return 'bg-slate-800 border-slate-700 text-slate-200';
+  }
+}
+
 function placeTone(outcome: HeadToHeadOutcome, side: 'profile' | 'friend'): string {
   if (side === 'profile') {
     if (outcome === 'win') return 'text-emerald-300 font-bold';
@@ -34,6 +53,7 @@ function placeTone(outcome: HeadToHeadOutcome, side: 'profile' | 'friend'): stri
 }
 
 function VictimRow({
+  profileId,
   friend,
   includeTeamEvents,
   profileRaces,
@@ -41,6 +61,7 @@ function VictimRow({
   profileZrState,
   onRemove,
 }: {
+  profileId: number;
   friend: FavoriteRider;
   includeTeamEvents: boolean;
   profileRaces: MergedRace[];
@@ -85,104 +106,130 @@ function VictimRow({
   );
 
   return (
-    <article className="rounded-xl bg-slate-950/70 border border-slate-800 overflow-hidden">
-      <div className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          {friend.imageSrc ? (
-            <img
-              src={friend.imageSrc}
-              alt={friend.name}
-              className="w-10 h-10 rounded-full object-cover border border-slate-700 shrink-0"
-            />
-          ) : (
-            <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-sm font-bold text-slate-200 shrink-0">
-              {(friend.name[0] ?? 'Z').toUpperCase()}
-            </div>
-          )}
+    <article className="rounded-2xl bg-slate-950/75 border border-slate-800 hover:border-slate-700/90 transition-colors overflow-hidden">
+      <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+        {/* Top Row on Mobile / Left Identity Block on Desktop */}
+        <div className="flex items-start sm:items-center justify-between gap-3 min-w-0 flex-1">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            {friend.imageSrc ? (
+              <img
+                src={friend.imageSrc}
+                alt={friend.name}
+                className="w-11 h-11 rounded-full object-cover border border-slate-700 shrink-0"
+              />
+            ) : (
+              <div className="w-11 h-11 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-base font-bold text-slate-200 shrink-0">
+                {(friend.name[0] ?? 'Z').toUpperCase()}
+              </div>
+            )}
 
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="min-w-0 flex-1">
               <Link
                 to={`/riders/${friend.id}`}
-                className="font-bold text-sm sm:text-base text-slate-100 hover:text-[#fc6719] hover:underline transition-colors truncate"
+                className="block font-extrabold text-base text-slate-100 hover:text-accent-text hover:underline transition-colors leading-snug break-words"
               >
                 {friend.name}
               </Link>
-              {friend.category && (
-                <span className="rounded-full bg-slate-800 border border-slate-700 px-2 py-0.5 text-[11px] font-semibold text-slate-300 shrink-0">
-                  Cat {friend.category}
-                </span>
-              )}
+              <p className="text-xs text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span>ID #{friend.id}</span>
+                {summary && (
+                  <span>
+                    · {summary.races.length} shared {summary.races.length === 1 ? 'race' : 'races'}
+                    {winPct !== null ? ` · ${winPct}% win` : ''}
+                  </span>
+                )}
+              </p>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2">
-              <span>ID {friend.id}</span>
-              {summary && (
-                <span>
-                  · {summary.races.length} shared {summary.races.length === 1 ? 'race' : 'races'}
-                  {winPct !== null ? ` · ${winPct}% win` : ''}
-                </span>
-              )}
-            </p>
           </div>
+
+          {/* Category Pill pinned cleanly to the right side */}
+          {friend.category && (
+            <span
+              className={`rounded-full border px-2.5 py-0.5 text-xs font-extrabold tracking-wide shrink-0 ml-auto ${categoryBadgeTone(
+                friend.category,
+              )}`}
+              title={`Competition Category ${friend.category}`}
+            >
+              Cat {friend.category}
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          {isLoading && (
-            <span className="rounded-full bg-slate-800/70 border border-slate-700 px-2.5 py-1 text-xs text-slate-400">
-              Loading…
-            </span>
-          )}
-          {!isLoading && errorMessage && (
-            <span className="rounded-full bg-red-500/15 border border-red-500/40 px-2.5 py-1 text-xs font-semibold text-red-300">
-              Unavailable
-            </span>
-          )}
-          {!isLoading && !errorMessage && summary && (
-            <span
-              className={`rounded-full border px-3 py-1 text-xs sm:text-sm font-extrabold tabular-nums ${recordBadgeTone(summary.wins, summary.losses)}`}
-              title="Overall Head-to-Head Win / Loss record"
-            >
-              {summary.wins}W – {summary.losses}L
-              {summary.ties > 0 ? ` – ${summary.ties}T` : ''}
-            </span>
-          )}
+        {/* Bottom Action & Win/Loss Bar on Mobile / Right Cluster on Desktop */}
+        <div className="flex items-center justify-between sm:justify-end gap-2 pt-2.5 border-t border-slate-800/80 sm:border-t-0 sm:pt-0 shrink-0">
+          <div className="flex items-center gap-2">
+            {isLoading && (
+              <span className="rounded-full bg-slate-800/70 border border-slate-700 px-3 py-1 text-xs text-slate-400">
+                Loading…
+              </span>
+            )}
+            {!isLoading && errorMessage && (
+              <span className="rounded-full bg-red-500/15 border border-red-500/40 px-3 py-1 text-xs font-semibold text-red-300">
+                Unavailable
+              </span>
+            )}
+            {!isLoading && !errorMessage && summary && (
+              <span
+                className={`rounded-full border px-3 py-1 text-xs sm:text-sm font-extrabold tabular-nums ${recordBadgeTone(
+                  summary.wins,
+                  summary.losses,
+                )}`}
+                title="Overall Head-to-Head Win / Loss record"
+              >
+                {summary.wins}W – {summary.losses}L
+                {summary.ties > 0 ? ` – ${summary.ties}T` : ''}
+              </span>
+            )}
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setExpanded((prev) => !prev)}
-            aria-expanded={expanded}
-            aria-label={`${expanded ? 'Hide' : 'Show'} race history against ${friend.name}`}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
-          >
-            <span>{expanded ? 'Hide' : 'Races'}</span>
-            <svg
-              className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`}
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              aria-hidden="true"
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setExpanded((prev) => !prev)}
+              aria-expanded={expanded}
+              aria-label={`${expanded ? 'Hide' : 'Show'} race history against ${friend.name}`}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-bold text-slate-200 hover:bg-slate-800 hover:border-accent/60 hover:text-accent-text transition-colors"
             >
-              <path
-                fillRule="evenodd"
-                d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                clipRule="evenodd"
-              />
-            </svg>
-          </button>
+              <span>{expanded ? 'Hide Races' : 'Races'}</span>
+              <svg
+                className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`}
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => onRemove(friend.id)}
-            title={`Remove ${friend.name} from favorites`}
-            aria-label={`Remove ${friend.name} from favorites`}
-            className="rounded-lg border border-slate-700 px-2 py-1.5 text-xs text-amber-400 hover:bg-slate-800 hover:border-amber-400/50 transition-colors"
-          >
-            ★
-          </button>
+            <button
+              type="button"
+              onClick={() => onRemove(friend.id)}
+              title={`Remove ${friend.name} from favorites`}
+              aria-label={`Remove ${friend.name} from favorites`}
+              className="rounded-xl border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs text-amber-400 hover:bg-slate-800 hover:border-amber-400/50 transition-colors"
+            >
+              ★
+            </button>
+          </div>
         </div>
       </div>
 
+      {/* Win-rate progress strip when shared races exist */}
+      {!isLoading && !errorMessage && summary && decided > 0 && (
+        <div className="h-1 w-full bg-red-500/25 flex overflow-hidden">
+          <div
+            className="h-full bg-emerald-400 transition-all"
+            style={{ width: `${winPct ?? 0}%` }}
+          />
+        </div>
+      )}
+
       {expanded && (
-        <div className="border-t border-slate-800 bg-slate-900/50 px-3.5 py-3 sm:px-4 sm:py-3.5 space-y-2.5">
+        <div className="border-t border-slate-800 bg-slate-900/50 px-4 py-3.5 space-y-3">
           {errorMessage ? (
             <p role="alert" className="text-xs text-red-400">
               {errorMessage}
@@ -202,13 +249,55 @@ function VictimRow({
                 </p>
               )}
 
-              <div className="overflow-x-auto">
+              {/* Mobile Stacked Shared Race Cards (< sm) */}
+              <div className="space-y-2 sm:hidden">
+                {summary.races.map((race) => {
+                  const raceUrl = `/riders/${profileId}/races/${encodeURIComponent(race.eventId)}`;
+                  return (
+                    <div
+                      key={race.eventId}
+                      className="rounded-xl bg-slate-950/80 border border-slate-800 p-3 space-y-2"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <Link
+                          to={raceUrl}
+                          className="text-xs font-bold text-slate-100 hover:text-accent-text hover:underline leading-snug"
+                        >
+                          {race.title}
+                        </Link>
+                        <span className="text-[11px] text-slate-400 whitespace-nowrap shrink-0">
+                          {formatShortDate(race.date)}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-800/70">
+                        <div className="flex items-center justify-between rounded-lg bg-slate-900/80 px-2.5 py-1.5">
+                          <span className="text-slate-400">You</span>
+                          <span className={placeTone(race.outcome, 'profile')}>
+                            {race.profileStatus}
+                            {!race.profileUsedTruePlace && race.profilePlace != null ? '*' : ''}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between rounded-lg bg-slate-900/80 px-2.5 py-1.5">
+                          <span className="text-slate-400 truncate mr-1">{friendShortName}</span>
+                          <span className={placeTone(race.outcome, 'friend')}>
+                            {race.friendStatus}
+                            {!race.friendUsedTruePlace && race.friendPlace != null ? '*' : ''}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop Table (sm+) */}
+              <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full table-fixed text-xs sm:text-sm">
                   <colgroup>
-                    <col className="w-[5.75rem] sm:w-28" />
+                    <col className="w-28" />
                     <col />
-                    <col className="w-16 sm:w-24" />
-                    <col className="w-20 sm:w-28" />
+                    <col className="w-24" />
+                    <col className="w-28" />
                   </colgroup>
                   <thead>
                     <tr className="border-b border-slate-800 text-[11px] uppercase tracking-wide text-slate-400">
@@ -222,23 +311,33 @@ function VictimRow({
                   </thead>
                   <tbody className="divide-y divide-slate-800/70">
                     {summary.races.map((race) => (
-                      <tr key={race.eventId}>
+                      <tr key={race.eventId} className="hover:bg-slate-950/40">
                         <td className="py-2 pr-2 text-slate-400 whitespace-nowrap align-middle">
                           {formatShortDate(race.date)}
                         </td>
                         <td className="py-2 px-2 align-middle">
-                          <div className="truncate text-slate-200 font-medium" title={race.title}>
+                          <Link
+                            to={`/riders/${profileId}/races/${encodeURIComponent(race.eventId)}`}
+                            className="block truncate text-slate-200 font-medium hover:text-accent-text hover:underline"
+                            title={race.title}
+                          >
                             {race.title}
-                          </div>
+                          </Link>
                         </td>
                         <td
-                          className={`py-2 px-2 text-right whitespace-nowrap align-middle ${placeTone(race.outcome, 'profile')}`}
+                          className={`py-2 px-2 text-right whitespace-nowrap align-middle ${placeTone(
+                            race.outcome,
+                            'profile',
+                          )}`}
                         >
                           {race.profileStatus}
                           {!race.profileUsedTruePlace && race.profilePlace != null ? '*' : ''}
                         </td>
                         <td
-                          className={`py-2 pl-2 text-right whitespace-nowrap align-middle ${placeTone(race.outcome, 'friend')}`}
+                          className={`py-2 pl-2 text-right whitespace-nowrap align-middle ${placeTone(
+                            race.outcome,
+                            'friend',
+                          )}`}
                         >
                           {race.friendStatus}
                           {!race.friendUsedTruePlace && race.friendPlace != null ? '*' : ''}
@@ -278,48 +377,92 @@ export default function ZwiftVictimsSection({
   profileZpState: AsyncState<ZwiftPowerRaceEntry[]>;
   profileZrState: AsyncState<ZwiftRacingRiderResponse>;
 }) {
+  const navigate = useNavigate();
   const [includeTeamEvents, setIncludeTeamEvents] = useState(false);
+  const [rivalIdInput, setRivalIdInput] = useState('');
 
   const otherFavorites = useMemo(
     () => favorites.filter((f) => f.id !== profileId),
     [favorites, profileId],
   );
 
+  function handleInspectRival(e: FormEvent) {
+    e.preventDefault();
+    const cleaned = rivalIdInput.trim();
+    if (!/^\d+$/.test(cleaned)) return;
+    setRivalIdInput('');
+    navigate(`/riders/${cleaned}`);
+  }
+
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold">Zwift Victims</h2>
+    <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg sm:text-xl font-extrabold text-slate-100">Zwift Victims</h2>
             {otherFavorites.length > 0 && (
-              <span className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-xs font-semibold text-slate-300">
+              <span className="rounded-full bg-accent/15 border border-accent/40 px-2.5 py-0.5 text-xs font-bold text-accent-text">
                 {otherFavorites.length} {otherFavorites.length === 1 ? 'rival' : 'rivals'}
               </span>
             )}
           </div>
           <p className="text-xs text-slate-400">
-            Same-category head-to-head win/loss records against your favorited riders.
+            Pairwise same-category Head-to-Head Win/Loss records against your favorited rivals.
           </p>
         </div>
 
-        <label className="inline-flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={includeTeamEvents}
-            onChange={(e) => setIncludeTeamEvents(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-700 bg-slate-950 accent-[#fc6719]"
-          />
-          <span>Include team events</span>
-        </label>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="inline-flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-1.5 text-xs font-medium text-slate-300 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={includeTeamEvents}
+              onChange={(e) => setIncludeTeamEvents(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-700 bg-slate-950 accent-[var(--zv-accent)]"
+            />
+            <span>Include team events</span>
+          </label>
+        </div>
       </div>
 
+      {/* Quick Rival Lookup Bar */}
+      <form
+        onSubmit={handleInspectRival}
+        className="rounded-xl bg-slate-950/70 border border-slate-800 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+      >
+        <div className="text-xs text-slate-300">
+          <span className="font-bold text-slate-100">Add or inspect a rival:</span>{' '}
+          <span className="text-slate-400">
+            Look up any friend by Zwift ID and tap ☆ Add to Victims on their profile.
+          </span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={rivalIdInput}
+            onChange={(e) => setRivalIdInput(e.target.value)}
+            placeholder="Zwift Rider ID…"
+            aria-label="Look up rival by Zwift ID"
+            className="flex-1 sm:w-40 rounded-xl bg-slate-900 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-accent"
+          />
+          <button
+            type="submit"
+            disabled={!/^\d+$/.test(rivalIdInput.trim())}
+            className="rounded-xl bg-accent px-3.5 py-1.5 text-xs font-bold text-white disabled:opacity-40"
+          >
+            Inspect Rider →
+          </button>
+        </div>
+      </form>
+
       {otherFavorites.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/40 p-5 text-center space-y-1.5">
-          <p className="text-sm font-medium text-slate-300">No favorited riders yet</p>
-          <p className="text-xs text-slate-400">
-            Search for a friend by Zwift ID at the top of the page and click{' '}
-            <span className="text-amber-300 font-semibold">☆ Favorite</span> on their profile to
-            track your head-to-head win/loss record here.
+        <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950/40 p-6 text-center space-y-2">
+          <p className="text-sm font-bold text-slate-200">No favorited rivals yet</p>
+          <p className="text-xs text-slate-400 max-w-md mx-auto">
+            Enter a friend&apos;s Zwift ID above (or click any rider in a race leaderboard) and tap{' '}
+            <span className="text-amber-300 font-semibold">☆ Add to Victims</span> to track your
+            pairwise head-to-head win/loss record here.
           </p>
         </div>
       ) : (
@@ -327,6 +470,7 @@ export default function ZwiftVictimsSection({
           {otherFavorites.map((friend) => (
             <VictimRow
               key={friend.id}
+              profileId={profileId}
               friend={friend}
               includeTeamEvents={includeTeamEvents}
               profileRaces={profileRaces}

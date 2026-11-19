@@ -19,6 +19,17 @@ new upstream endpoints, Cloudflare Worker relay routes, or payload attributes ar
 modified, update [docs/API_REFERENCE.md](docs/API_REFERENCE.md) in the same PR so future tickets
 know what already exists.
 
+## UI Navigation & Page vs. Section Placement
+We organize the app into distinct top-level pages rather than a single long scrolling page:
+- **Profile (`/` & `/riders/:riderId` → `src/pages/ProfilePage.tsx`)**: All things about the rider (Identity hero, XP/level, power & physiological thresholds, competitive standing, career totals, ZwiftRacing competitive profile, and Power Curve & interval bests).
+- **Race History (`/history` & `/riders/:riderId/history` → `src/pages/RaceHistoryPage.tsx`)**: Activity & race history feed, quick filters/search, and click-in links to Race Detail (`/races/:eventId`) and Activity Detail (`/activities/:activityId`).
+- **Victims (`/victims` → `src/pages/VictimsPage.tsx`)**: Favorited rivals and pairwise Head-to-Head Win/Loss records (`src/components/ZwiftVictimsSection.tsx`).
+
+**Rule when building a new section or feature:**
+1. **Determine Page vs. Section Placement First**: Always explicitly decide whether a new feature warrants its own dedicated page/route under `src/pages/` (and top/bottom navigation entry in `src/components/AppShell.tsx`) or should be grouped inside an existing page (`Profile`, `Race History`, `Victims`, `Race Detail`, or `Activity Detail`). Document that placement decision in the PR summary/assumptions (or ask in PR questions if ambiguous).
+2. **Modular File Organization (Minimize Merge Conflicts)**: Keep each page in its own route file under `src/pages/` and each feature section in its own isolated component under `src/components/` so parallel tickets working on different pages or sections do not collide in a monolithic file.
+3. **Mobile-First & Theme-Aware Styling**: Ensure every new section is responsive on narrow mobile screens (avoid crushing rider/race names on single flex rows with action buttons; position category pills/badges cleanly on the right) and uses theme accent tokens (`bg-accent`, `text-accent-text`, `border-accent`, `var(--zv-accent)`) rather than hardcoded `#fc6719`.
+
 ## Existing checks
 - `ci.yml`: ESLint, typecheck + build, validators (lockfile sync, npm audit, config parse, gitleaks).
 - `ai-review.yml`: Centralized AI PR reviewer (`jameslac/github-workflows/.github/workflows/ai-review.yml@main`; auto-syncs the PR description to the latest diff and posts holistic + inline review comments).
