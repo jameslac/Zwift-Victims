@@ -280,6 +280,14 @@ export interface ZwiftRacingEventPen {
     averageRating?: number;
     [key: string]: unknown;
   };
+  points?: {
+    total?: number;
+    average?: number;
+    sof?: number;
+    winningTime?: number;
+    avgSpeed?: number;
+    [key: string]: unknown;
+  };
   velo?: Record<string, unknown>;
   riders?: ZwiftRacingEventRider[];
   [key: string]: unknown;

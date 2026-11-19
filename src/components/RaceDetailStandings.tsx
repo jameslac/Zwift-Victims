@@ -579,14 +579,16 @@ export default function RaceDetailStandings({
                         {row.zrsScore != null ? (
                           <span>
                             {Math.round(row.zrsScore)}
-                            {row.zrsDelta != null && row.zrsDelta !== 0 && (
+                            {row.zrsDelta != null && Math.abs(row.zrsDelta) >= 0.05 && (
                               <span
                                 className={`ml-1 text-[10px] ${
                                   row.zrsDelta > 0 ? 'text-emerald-400' : 'text-red-400'
                                 }`}
                               >
                                 {row.zrsDelta > 0 ? '+' : ''}
-                                {row.zrsDelta.toFixed(0)}
+                                {Math.abs(row.zrsDelta) < 1
+                                  ? row.zrsDelta.toFixed(1)
+                                  : Math.round(row.zrsDelta)}
                               </span>
                             )}
                           </span>
