@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { FavoritesProvider } from './lib/FavoritesContext';
 import { UnitsProvider } from './lib/UnitsContext';
+import ActivityDetailPage from './pages/ActivityDetailPage';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RaceDetailPage from './pages/RaceDetailPage';
@@ -17,6 +18,8 @@ export default function App() {
               <Route path="/riders/:riderId" element={<HomePage />} />
               <Route path="/races/:eventId" element={<RaceDetailPage />} />
               <Route path="/riders/:riderId/races/:eventId" element={<RaceDetailPage />} />
+              <Route path="/activities/:activityId" element={<ActivityDetailPage />} />
+              <Route path="/riders/:riderId/activities/:activityId" element={<ActivityDetailPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

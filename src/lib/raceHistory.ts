@@ -333,14 +333,24 @@ export function matchActivityForRace(
 }
 
 /**
- * One race, merged across sources. ZwiftPower is the primary race list;
- * ZwiftRacing.app enriches by matching ZwiftPower `zid` to ZwiftRacing `event.eventId`.
+ * Activity category across ZwiftPower, ZwiftRacing, and Zwift Core activity feed.
+ */
+export type ActivityType = 'race' | 'ride' | 'workout' | 'free_ride';
+
+/**
+ * One race or activity, merged across ZwiftPower, ZwiftRacing.app, and Zwift Core.
  */
 export interface MergedRace {
   key: string;
   eventId: string;
   /** 64-bit safe Zwift activity ID (`id_str`) when matched from the rider's activities. */
   activityId?: string;
+  /** Matched or standalone Zwift Core activity payload when available. */
+  activity?: ZwiftActivity;
+  /** Normalized activity category for filtering & badges. */
+  activityType?: ActivityType;
+  /** Human-readable activity type badge label (e.g. "Race", "Time Trial", "Group Ride", "Workout", "Free Ride"). */
+  activityTypeLabel?: string;
   /** unix seconds */
   date: number | undefined;
   title: string;
@@ -418,12 +428,14 @@ function zpNumericVal(v: unknown): number | undefined {
   return Number.isFinite(num) ? num : undefined;
 }
 
-function assignActivityIds(races: MergedRace[], activities: ZwiftActivity[]): void {
-  if (races.length === 0 || activities.length === 0) return;
+function assignActivityIds(races: MergedRace[], activities: ZwiftActivity[]): Set<string> {
+  const usedActivityIds = new Set<string>();
+  if (races.length === 0 || activities.length === 0) return usedActivityIds;
 
   interface CandidateMatch {
     raceIndex: number;
     activityId: string;
+    activity: ZwiftActivity;
     score: number;
   }
 
@@ -480,22 +492,25 @@ function assignActivityIds(races: MergedRace[], activities: ZwiftActivity[]): vo
         (hasSubgroup ? 0 : 100_000_000) +
         diffMs;
 
-      candidates.push({ raceIndex, activityId, score });
+      candidates.push({ raceIndex, activityId, activity, score });
     }
   }
 
   candidates.sort((a, b) => a.score - b.score);
 
   const matchedRaces = new Set<number>();
-  const usedActivityIds = new Set<string>();
   for (const candidate of candidates) {
     if (matchedRaces.has(candidate.raceIndex) || usedActivityIds.has(candidate.activityId)) {
       continue;
     }
     matchedRaces.add(candidate.raceIndex);
     usedActivityIds.add(candidate.activityId);
-    races[candidate.raceIndex].activityId = candidate.activityId;
+    const target = races[candidate.raceIndex];
+    target.activityId = candidate.activityId;
+    target.activity = candidate.activity;
   }
+
+  return usedActivityIds;
 }
 
 export function isRaceEntry(zp?: ZwiftPowerRaceEntry, zr?: ZwiftRacingRaceEntry): boolean {
@@ -508,7 +523,129 @@ export function isRaceEntry(zp?: ZwiftPowerRaceEntry, zr?: ZwiftRacingRaceEntry)
   return true;
 }
 
-export function mergeRaces(
+const ZWIFT_WORLD_NAMES: Record<number, string> = {
+  1: 'Watopia',
+  2: 'Richmond',
+  3: 'London',
+  4: 'New York',
+  5: 'Innsbruck',
+  6: 'Bologna',
+  7: 'Yorkshire',
+  8: 'Crit City',
+  9: 'Makuri Islands',
+  10: 'France',
+  11: 'Paris',
+  12: 'Gravel Mountain',
+  13: 'Scotland',
+};
+
+export function formatZwiftWorld(worldId: number | undefined): string | undefined {
+  if (typeof worldId !== 'number' || !Number.isFinite(worldId) || worldId <= 0) return undefined;
+  return ZWIFT_WORLD_NAMES[worldId] ?? `World ${worldId}`;
+}
+
+export function parseDurationStringMs(duration: string | undefined): number | undefined {
+  if (typeof duration !== 'string') return undefined;
+  const trimmed = duration.trim();
+  if (!trimmed) return undefined;
+  const parts = trimmed.split(':').map((p) => Number(p));
+  if (parts.some((n) => !Number.isFinite(n) || n < 0)) return undefined;
+  if (parts.length === 3) {
+    return ((parts[0] * 60 + parts[1]) * 60 + parts[2]) * 1000;
+  }
+  if (parts.length === 2) {
+    return (parts[0] * 60 + parts[1]) * 1000;
+  }
+  return undefined;
+}
+
+const STANDALONE_WORKOUT_RE =
+  /\b(workout|ftp\s*test|ramp\s*test|zone\s*benchmark|erg\s*mode|sst\b|sweet\s*spot|vo2\s*max|over[- ]?unders?|build\s*me\s*up|ftp\s*builder|za\s*workout|zwift\s*academy\s*workout)\b/i;
+const STANDALONE_RACE_RE =
+  /\b(race|zrl|wtrl|ttt|itt|time\s*trial|crit(?:erium)?|grand\s*prix|championship|chase\s*race|points\s*race|scratch\s*race|zwift\s*racing\s*league|tiny\s*race)\b/i;
+const STANDALONE_RIDE_RE =
+  /\b(group\s*ride|fondo|tour\s+de\s+zwift|tour\s+of\s+|stage\s+\d|social\s*ride|coffee\s*ride|recovery\s*ride|meetup|pacer\s*group|robopacer|pace\s*partner)\b/i;
+
+/**
+ * Classifies an activity across ZwiftPower, ZwiftRacing, and Zwift Core into
+ * a normalized filter category and human-readable badge label.
+ */
+export function classifyActivity(
+  zp?: ZwiftPowerRaceEntry,
+  zr?: ZwiftRacingRaceEntry,
+  activity?: ZwiftActivity | ZwiftActivityDetail,
+): { activityType: ActivityType; activityTypeLabel: string } {
+  if (zp || zr) {
+    if (
+      (typeof zp?.f_t === 'string' && /\bTYPE_WORKOUT\b/i.test(zp.f_t)) ||
+      (typeof zr?.event?.type === 'string' && /\bworkout\b/i.test(zr.event.type))
+    ) {
+      return { activityType: 'workout', activityTypeLabel: 'Workout' };
+    }
+
+    if (isRaceEntry(zp, zr)) {
+      const title = `${zp?.event_title ?? ''} ${zr?.event?.title ?? ''}`;
+      const typeHints = `${zr?.event?.subType ?? ''} ${zr?.event?.type ?? ''} ${zp?.f_t ?? ''}`;
+      if (/\bttt\b/i.test(zr?.event?.subType ?? '') || /\b(TTT|Team\s+Time\s+Trial)\b/i.test(title)) {
+        return { activityType: 'race', activityTypeLabel: 'TTT' };
+      }
+      if (/\b(itt|time\s*trial|TYPE_TT)\b/i.test(`${typeHints} ${title}`)) {
+        return { activityType: 'race', activityTypeLabel: 'Time Trial' };
+      }
+      return { activityType: 'race', activityTypeLabel: 'Race' };
+    }
+
+    return { activityType: 'ride', activityTypeLabel: 'Group Ride' };
+  }
+
+  const activityRecord = activity as Record<string, unknown> | undefined;
+  const hasWorkoutMeta = Boolean(
+    activityRecord?.workout || activityRecord?.workoutId || activityRecord?.workoutName,
+  );
+  const name = activity?.name ?? '';
+  if (hasWorkoutMeta || STANDALONE_WORKOUT_RE.test(name)) {
+    return { activityType: 'workout', activityTypeLabel: 'Workout' };
+  }
+  if (STANDALONE_RACE_RE.test(name)) {
+    if (/\b(ttt|team\s+time\s+trial)\b/i.test(name)) {
+      return { activityType: 'race', activityTypeLabel: 'TTT' };
+    }
+    if (/\b(itt|time\s*trial)\b/i.test(name)) {
+      return { activityType: 'race', activityTypeLabel: 'Time Trial' };
+    }
+    return { activityType: 'race', activityTypeLabel: 'Race' };
+  }
+  const hasEventSubgroup =
+    typeof activity?.eventSubgroupId === 'number' && activity.eventSubgroupId > 0;
+  const hasClubId = typeof activity?.clubId === 'string' && activity.clubId.trim() !== '';
+  if (hasEventSubgroup || hasClubId || STANDALONE_RIDE_RE.test(name)) {
+    return { activityType: 'ride', activityTypeLabel: 'Group Ride' };
+  }
+
+  const isRunning = activity?.sport?.toUpperCase() === 'RUNNING';
+  return {
+    activityType: 'free_ride',
+    activityTypeLabel: isRunning ? 'Run' : 'Free Ride',
+  };
+}
+
+function dedupeActivities(activities: ZwiftActivity[]): ZwiftActivity[] {
+  const seen = new Set<string>();
+  const deduped: ZwiftActivity[] = [];
+  for (const activity of activities) {
+    const id = getActivityIdStr(activity);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    deduped.push(activity);
+  }
+  return deduped;
+}
+
+/**
+ * Merges all rider activities across ZwiftPower (races, TTs, group rides, workouts),
+ * ZwiftRacing.app, and standalone Zwift Core activity feed items, newest first.
+ */
+export function mergeActivities(
   zpRaces: ZwiftPowerRaceEntry[],
   zrRaces: ZwiftRacingRaceEntry[],
   activities: ZwiftActivity[] = [],
@@ -525,20 +662,60 @@ export function mergeRaces(
     const eventId = String(zp.zid ?? '');
     const zr = eventId ? zrById.get(eventId) : undefined;
     if (zr) used.add(eventId);
-    if (!isRaceEntry(zp, zr)) continue;
     merged.push(build(eventId, zp, zr, `zp-${zp.res_id ?? zp.uid ?? eventId}-${merged.length}`));
   }
 
-  // Races ZwiftRacing knows about that ZwiftPower doesn't list.
+  // Events ZwiftRacing knows about that ZwiftPower doesn't list.
   for (const [eventId, zr] of zrById) {
-    if (!used.has(eventId) && isRaceEntry(undefined, zr)) {
+    if (!used.has(eventId)) {
       merged.push(build(eventId, undefined, zr, `zr-${eventId}`));
     }
   }
 
+  const dedupedActivities = dedupeActivities(activities);
+  const usedActivityIds = assignActivityIds(merged, dedupedActivities);
+
+  for (const activity of dedupedActivities) {
+    const activityId = getActivityIdStr(activity);
+    if (!activityId || usedActivityIds.has(activityId)) continue;
+
+    const startMs = parseIsoMs(activity.startDate);
+    const endMs = parseIsoMs(activity.endDate);
+    const dateSec = Number.isFinite(startMs)
+      ? Math.floor(startMs / 1000)
+      : Number.isFinite(endMs)
+        ? Math.floor(endMs / 1000)
+        : undefined;
+    const { activityType, activityTypeLabel } = classifyActivity(undefined, undefined, activity);
+
+    merged.push({
+      key: `act-${activityId}`,
+      eventId: '',
+      activityId,
+      activity,
+      activityType,
+      activityTypeLabel,
+      date: dateSec,
+      title: decodeHtmlEntities(activity.name?.trim()) || 'Zwift Activity',
+    });
+  }
+
   merged.sort((a, b) => (b.date ?? 0) - (a.date ?? 0));
-  assignActivityIds(merged, activities);
   return merged;
+}
+
+/**
+ * Merges race-only entries from ZwiftPower and ZwiftRacing (preserving head-to-head
+ * semantics while still linking matching Zwift Core `activityId` values).
+ */
+export function mergeRaces(
+  zpRaces: ZwiftPowerRaceEntry[],
+  zrRaces: ZwiftRacingRaceEntry[],
+  activities: ZwiftActivity[] = [],
+): MergedRace[] {
+  return mergeActivities(zpRaces, zrRaces, activities).filter(
+    (entry) => Boolean(entry.zp || entry.zr) && isRaceEntry(entry.zp, entry.zr),
+  );
 }
 
 function build(
@@ -552,11 +729,16 @@ function build(
   const zpPlace = typeof zp?.position_in_cat === 'number' ? zp.position_in_cat : undefined;
   const placeInflation =
     truePlace != null && zpPlace != null ? truePlace - zpPlace : undefined;
+  const { activityType, activityTypeLabel } = classifyActivity(zp, zr);
   return {
     key,
     eventId,
+    activityType,
+    activityTypeLabel,
     date: zp?.event_date ?? zr?.event?.time,
-    title: zp?.event_title || zr?.event?.title || 'Untitled race',
+    title:
+      decodeHtmlEntities(zp?.event_title || zr?.event?.title) ||
+      (activityType === 'race' ? 'Untitled race' : 'Untitled event'),
     zp,
     zr,
     truePlace,

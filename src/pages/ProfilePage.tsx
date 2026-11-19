@@ -2,7 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import PowerBestsSection from '../components/PowerBestsSection';
-import { AppHeader, MetricGrid, PlacingBadge, RaceExternalLinks, Stat } from '../components/RaceUi';
+import {
+  ActivityTypeBadge,
+  AppHeader,
+  MetricGrid,
+  PlacingBadge,
+  RaceExternalLinks,
+  Stat,
+} from '../components/RaceUi';
 import ZwiftRacingProfileSection from '../components/ZwiftRacingProfileSection';
 import ZwiftVictimsSection from '../components/ZwiftVictimsSection';
 import { useFavorites } from '../lib/FavoritesContext';
@@ -26,12 +33,13 @@ import type { ZwiftRacingRiderResponse } from '../api/zwiftRacing';
 import {
   formatGapSeconds,
   formatUnixSeconds,
+  formatZwiftWorld,
   isPodium,
   ordinal,
   summarize,
   zpVal,
 } from '../lib/raceHistory';
-import type { AsyncState, MergedRace } from '../lib/raceHistory';
+import type { ActivityType, AsyncState, MergedRace } from '../lib/raceHistory';
 import { useRiderRaceHistory } from '../lib/useRiderRaceHistory';
 
 function formatRiderCategory(profile: ZwiftProfile): string | undefined {
@@ -95,22 +103,71 @@ function XpProgressBar({ profile }: { profile: ZwiftProfile }) {
     </div>
   );
 }
+type ActivityTypeFilter = 'all' | ActivityType;
+
+function matchesSearchQuery(race: MergedRace, query: string): boolean {
+  if (!query) return true;
+  const haystacks = [
+    race.title,
+    race.activityTypeLabel,
+    race.eventId,
+    race.activityId,
+    race.zp?.category,
+    race.zp?.tname,
+    race.zr?.event?.subgroupId,
+    race.zr?.event?.routeName,
+    race.zr?.event?.subType,
+    race.activity?.description,
+  ];
+  return haystacks.some((val) => typeof val === 'string' && val.toLowerCase().includes(query));
+}
+
 function MergedRaceCard({
   race,
   profileId,
   units,
+  riderWeightGrams,
 }: {
   race: MergedRace;
   profileId: number;
   units: UnitSystem;
+  riderWeightGrams?: number;
 }) {
-  const { zp, zr } = race;
-  const timeSec = zpVal(zp?.time) ?? zr?.race?.time;
-  const avgPower = zpVal(zp?.avg_power);
+  const { zp, zr, activity } = race;
+  const activityType: ActivityType = race.activityType ?? 'race';
+  const activityTypeLabel = race.activityTypeLabel ?? 'Race';
+  const isStandaloneCore = !zp && !zr && Boolean(activity);
+
+  const coreMovingSec =
+    typeof activity?.movingTimeInMs === 'number' && activity.movingTimeInMs > 0
+      ? Math.round(activity.movingTimeInMs / 1000)
+      : undefined;
+  const timeSec = zpVal(zp?.time) ?? zr?.race?.time ?? coreMovingSec;
+  const avgPower =
+    zpVal(zp?.avg_power) ??
+    (typeof activity?.avgWatts === 'number' && activity.avgWatts > 0
+      ? Math.round(activity.avgWatts)
+      : undefined);
   const np = zpVal(zp?.np);
-  const avgWkg = zpVal(zp?.avg_wkg) ?? zr?.race?.wkgAvg?.toFixed(2);
-  const avgHr = zpVal(zp?.avg_hr);
-  const maxHr = zpVal(zp?.max_hr);
+  const avgWkg =
+    zpVal(zp?.avg_wkg) ??
+    zr?.race?.wkgAvg?.toFixed(2) ??
+    (typeof activity?.avgWatts === 'number' &&
+    activity.avgWatts > 0 &&
+    riderWeightGrams &&
+    riderWeightGrams > 0
+      ? (activity.avgWatts / (riderWeightGrams / 1000)).toFixed(2)
+      : undefined);
+  const avgHr =
+    zpVal(zp?.avg_hr) ??
+    (typeof activity?.avgHeartRate === 'number' && activity.avgHeartRate > 0
+      ? Math.round(activity.avgHeartRate)
+      : undefined);
+  const maxHr =
+    zpVal(zp?.max_hr) ??
+    (typeof activity?.maxHeartRate === 'number' && activity.maxHeartRate > 0
+      ? Math.round(activity.maxHeartRate)
+      : undefined);
   const w5 = zpVal(zp?.w5);
   const wkg5Raw = zpVal(zp?.wkg5);
   const wkg5 = wkg5Raw ?? (zr?.race?.wkg5 != null ? zr.race.wkg5.toFixed(1) : undefined);
@@ -124,6 +181,13 @@ function MergedRaceCard({
           : undefined;
   const gap = zp?.gap ?? zr?.race?.gap;
   const distKm = zp?.distance ?? zr?.race?.distance ?? zr?.event?.distance;
+  const distanceMeters =
+    typeof distKm === 'number'
+      ? distKm * 1000
+      : typeof activity?.distanceInMeters === 'number' && activity.distanceInMeters > 0
+        ? activity.distanceInMeters
+        : undefined;
+  const elevationMeters = zr?.event?.elevation ?? activity?.totalElevation;
   const inflated = (race.placeInflation ?? 0) > 0;
   const podiumMismatch = isPodium(race.zpPlace) && !isPodium(race.truePlace) && race.truePlace != null;
   const category = zp?.category ?? zr?.event?.subgroupId;
@@ -132,7 +196,10 @@ function MergedRaceCard({
   const sof = zr?.velo?.elo?.eventRating;
   const detailPath = race.eventId
     ? `/riders/${profileId}/races/${encodeURIComponent(race.eventId)}`
-    : null;
+    : race.activityId
+      ? `/riders/${profileId}/activities/${encodeURIComponent(race.activityId)}`
+      : null;
+  const worldName = formatZwiftWorld(activity?.worldId);
 
   const mainBody = (
     <>
@@ -146,11 +213,14 @@ function MergedRaceCard({
             {category ? ` · Cat ${category}` : ''}
             {zr?.event?.subType ? ` · ${zr.event.subType}` : ''}
             {zr?.event?.routeName ? ` · ${zr.event.routeName}` : ''}
+            {!zr?.event?.routeName && worldName ? ` · ${worldName}` : ''}
             {zp?.tname ? ` · Team ${zp.tname}` : ''}
             {race.eventId ? ` · event ${race.eventId}` : ''}
+            {!race.eventId && race.activityId ? ` · activity ${race.activityId}` : ''}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          <ActivityTypeBadge type={activityType} label={activityTypeLabel} />
           <PlacingBadge
             truePlace={race.truePlace}
             fieldSize={race.fieldSize}
@@ -172,14 +242,19 @@ function MergedRaceCard({
               UPG
             </span>
           )}
-          {!zp && (
+          {!zp && Boolean(zr) && (
             <span className="rounded-full bg-slate-700/40 border border-slate-600 px-2 py-0.5 text-xs text-slate-300">
               ZwiftRacing only
             </span>
           )}
-          {zp && !zr && (
+          {Boolean(zp) && !zr && activityType === 'race' && (
             <span className="rounded-full bg-slate-700/40 border border-slate-600 px-2 py-0.5 text-xs text-slate-300">
               No ZwiftRacing data
+            </span>
+          )}
+          {isStandaloneCore && (
+            <span className="rounded-full bg-slate-700/40 border border-slate-600 px-2 py-0.5 text-xs text-slate-300">
+              Zwift Feed
             </span>
           )}
         </div>
@@ -210,7 +285,8 @@ function MergedRaceCard({
           )}
         </div>
       ) : (
-        zp && (
+        zp &&
+        (activityType === 'race' || (zp.position_in_cat != null && zp.position_in_cat > 0)) && (
           <p className="text-xs text-slate-400">
             ZwiftPower category place: {zp.position_in_cat ?? '—'} (field may exclude hidden riders; no
             ZwiftRacing result to verify — older than 90 days or unscored).
@@ -218,46 +294,70 @@ function MergedRaceCard({
         )
       )}
 
-      <MetricGrid
-        items={[
-          {
-            label: 'Time',
-            value: typeof timeSec === 'number' ? formatDurationMs(timeSec * 1000) : undefined,
-          },
-          { label: 'Gap', value: formatGapSeconds(gap) },
-          {
-            label: 'Distance',
-            value: typeof distKm === 'number' ? formatDistance(distKm * 1000, units) : undefined,
-          },
-          { label: 'Elevation', value: formatElevation(zr?.event?.elevation, units) },
-          { label: 'Avg Power', value: avgPower !== undefined ? `${avgPower} W` : undefined },
-          { label: 'NP', value: np !== undefined ? `${np} W` : undefined },
-          { label: 'Avg W/kg', value: avgWkg !== undefined ? `${avgWkg} W/kg` : undefined },
-          {
-            label: 'Avg / Max HR',
-            value:
-              avgHr !== undefined || maxHr !== undefined
-                ? `${avgHr ?? '—'} / ${maxHr ?? '—'} bpm`
-                : undefined,
-          },
-          { label: '5s Sprint', value: sprint5s },
-          {
-            label: 'vELO',
-            value:
-              eloBefore != null && eloAfter != null
-                ? `${eloBefore.toFixed(1)} → ${eloAfter.toFixed(1)}`
-                : undefined,
-          },
-          {
-            label: 'Expected Pos',
-            value:
-              zr?.velo?.elo?.expectedPosition != null
-                ? zr.velo.elo.expectedPosition.toFixed(1)
-                : undefined,
-          },
-          { label: 'SOF', value: sof != null ? sof.toFixed(0) : undefined },
-        ]}
-      />
+      {isStandaloneCore ? (
+        <MetricGrid
+          items={[
+            {
+              label: 'Time',
+              value: typeof timeSec === 'number' ? formatDurationMs(timeSec * 1000) : undefined,
+            },
+            { label: 'Distance', value: formatDistance(distanceMeters, units) },
+            { label: 'Elevation', value: formatElevation(elevationMeters, units) },
+            { label: 'Avg Power', value: avgPower !== undefined ? `${avgPower} W` : undefined },
+            { label: 'Avg W/kg', value: avgWkg !== undefined ? `${avgWkg} W/kg` : undefined },
+            avgHr !== undefined || maxHr !== undefined
+              ? {
+                  label: 'Avg / Max HR',
+                  value: `${avgHr ?? '—'} / ${maxHr ?? '—'} bpm`,
+                }
+              : {
+                  label: 'Calories',
+                  value:
+                    typeof activity?.calories === 'number' && activity.calories > 0
+                      ? `${Math.round(activity.calories)} kcal`
+                      : undefined,
+                },
+          ]}
+        />
+      ) : (
+        <MetricGrid
+          items={[
+            {
+              label: 'Time',
+              value: typeof timeSec === 'number' ? formatDurationMs(timeSec * 1000) : undefined,
+            },
+            { label: 'Gap', value: formatGapSeconds(gap) },
+            { label: 'Distance', value: formatDistance(distanceMeters, units) },
+            { label: 'Elevation', value: formatElevation(elevationMeters, units) },
+            { label: 'Avg Power', value: avgPower !== undefined ? `${avgPower} W` : undefined },
+            { label: 'NP', value: np !== undefined ? `${np} W` : undefined },
+            { label: 'Avg W/kg', value: avgWkg !== undefined ? `${avgWkg} W/kg` : undefined },
+            {
+              label: 'Avg / Max HR',
+              value:
+                avgHr !== undefined || maxHr !== undefined
+                  ? `${avgHr ?? '—'} / ${maxHr ?? '—'} bpm`
+                  : undefined,
+            },
+            { label: '5s Sprint', value: sprint5s },
+            {
+              label: 'vELO',
+              value:
+                eloBefore != null && eloAfter != null
+                  ? `${eloBefore.toFixed(1)} → ${eloAfter.toFixed(1)}`
+                  : undefined,
+            },
+            {
+              label: 'Expected Pos',
+              value:
+                zr?.velo?.elo?.expectedPosition != null
+                  ? zr.velo.elo.expectedPosition.toFixed(1)
+                  : undefined,
+            },
+            { label: 'SOF', value: sof != null ? sof.toFixed(0) : undefined },
+          ]}
+        />
+      )}
     </>
   );
 
@@ -287,7 +387,11 @@ function MergedRaceCard({
               state={{ race }}
               className="text-xs font-semibold text-[#fc6719] hover:underline"
             >
-              View race details →
+              {race.eventId
+                ? activityType === 'race'
+                  ? 'View race details →'
+                  : 'View event details →'
+                : 'View activity details →'}
             </Link>
           )}
         </div>
@@ -308,22 +412,84 @@ function MergedRaceCard({
 function MergedTab({
   zpState,
   zrState,
-  merged,
+  activitiesState,
+  mergedRaces,
+  mergedActivities,
+  hasMoreActivities,
+  loadingMoreActivities,
+  onLoadMoreActivities,
   profileId,
   units,
+  riderWeightGrams,
 }: {
   zpState: AsyncState<ZwiftPowerRaceEntry[]>;
   zrState: AsyncState<ZwiftRacingRiderResponse>;
-  merged: MergedRace[];
+  activitiesState: AsyncState<unknown>;
+  mergedRaces: MergedRace[];
+  mergedActivities: MergedRace[];
+  hasMoreActivities: boolean;
+  loadingMoreActivities: boolean;
+  onLoadMoreActivities: () => void;
   profileId: number;
   units: UnitSystem;
+  riderWeightGrams?: number;
 }) {
-  const summary = useMemo(() => summarize(merged), [merged]);
+  const [typeFilter, setTypeFilter] = useState<ActivityTypeFilter>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  if (zpState.status === 'loading' || zrState.status === 'loading') {
-    return <p className="text-sm text-slate-400">Loading race history…</p>;
+  const summary = useMemo(() => summarize(mergedRaces), [mergedRaces]);
+
+  const counts = useMemo(() => {
+    const byType: Record<ActivityType, number> = {
+      race: 0,
+      ride: 0,
+      workout: 0,
+      free_ride: 0,
+    };
+
+    for (const item of mergedActivities) {
+      const t: ActivityType = item.activityType ?? 'race';
+      byType[t] += 1;
+    }
+
+    return {
+      all: mergedActivities.length,
+      ...byType,
+    };
+  }, [mergedActivities]);
+
+  const trimmedQuery = searchQuery.trim().toLowerCase();
+  const filteredActivities = useMemo(
+    () =>
+      mergedActivities.filter((item) => {
+        if (typeFilter !== 'all' && (item.activityType ?? 'race') !== typeFilter) return false;
+        if (trimmedQuery && !matchesSearchQuery(item, trimmedQuery)) return false;
+        return true;
+      }),
+    [mergedActivities, typeFilter, trimmedQuery],
+  );
+
+  const hasActiveFilter = typeFilter !== 'all' || trimmedQuery !== '';
+
+  function resetFilters() {
+    setTypeFilter('all');
+    setSearchQuery('');
   }
-  if (zpState.status === 'error') {
+
+  const allSourcesLoading =
+    zpState.status === 'loading' &&
+    zrState.status === 'loading' &&
+    activitiesState.status === 'loading';
+
+  if (allSourcesLoading) {
+    return <p className="text-sm text-slate-400">Loading activity history…</p>;
+  }
+
+  if (
+    zpState.status === 'error' &&
+    zrState.status === 'error' &&
+    activitiesState.status === 'error'
+  ) {
     return (
       <p role="alert" className="text-sm text-red-400">
         {zpState.message}
@@ -331,33 +497,156 @@ function MergedTab({
     );
   }
 
+  const typeTabs: Array<{ id: ActivityTypeFilter; label: string; count: number }> = [
+    { id: 'all', label: 'All', count: counts.all },
+    { id: 'race', label: 'Races', count: counts.race },
+    { id: 'ride', label: 'Group Rides', count: counts.ride },
+    { id: 'workout', label: 'Workouts', count: counts.workout },
+    { id: 'free_ride', label: 'Free Rides', count: counts.free_ride },
+  ];
+
   return (
     <div className="space-y-4">
-      {zrState.status === 'error' && (
-        <p role="alert" className="text-xs text-amber-400">
-          ZwiftRacing.app unavailable ({zrState.message}); showing ZwiftPower only.
-        </p>
+      {(zpState.status === 'error' ||
+        zrState.status === 'error' ||
+        activitiesState.status === 'error') && (
+        <div className="space-y-1">
+          {zpState.status === 'error' && (
+            <p role="alert" className="text-xs text-amber-400">
+              ZwiftPower unavailable ({zpState.message}); showing ZwiftRacing &amp; Zwift Feed only.
+            </p>
+          )}
+          {zrState.status === 'error' && (
+            <p role="alert" className="text-xs text-amber-400">
+              ZwiftRacing.app unavailable ({zrState.message}); showing ZwiftPower &amp; Zwift Feed only.
+            </p>
+          )}
+          {activitiesState.status === 'error' && (
+            <p role="alert" className="text-xs text-amber-400">
+              Zwift Core activity feed unavailable ({activitiesState.message}); solo free rides and
+              workouts may be omitted.
+            </p>
+          )}
+        </div>
       )}
 
       <MetricGrid
         items={[
+          { label: 'All Activities', value: mergedActivities.length },
           { label: 'Races', value: summary.total },
-          { label: 'Enriched', value: `${summary.enriched} / ${summary.total}` },
+          { label: 'Enriched (ZR)', value: `${summary.enriched} / ${summary.total}` },
           { label: 'Podiums (ZP)', value: summary.zpPodiums },
           { label: 'Podiums (true)', value: summary.truePodiums },
           { label: 'ZP overstates', value: `${summary.inflatedRaces} races` },
         ]}
       />
       <p className="text-xs text-slate-500">
-        Podium counts cover only races present in both sources (ZwiftRacing.app history is ~90 days).
+        Race podium counts cover races present in both ZwiftPower and ZwiftRacing.app (~90-day
+        window).
       </p>
 
-      {merged.length === 0 ? (
-        <p className="text-sm text-slate-400">No races found.</p>
+      <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3 space-y-2.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Activity type filter">
+            {typeTabs.map((tab) => {
+              const active = typeFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setTypeFilter(tab.id)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                    active
+                      ? 'bg-[#fc6719] border-[#fc6719] text-white'
+                      : 'bg-slate-900/80 border-slate-700/80 text-slate-300 hover:border-slate-500 hover:text-white'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    className={`rounded-full px-1.5 py-0.2 text-[11px] ${
+                      active ? 'bg-black/20 text-white' : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="relative sm:w-64">
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Filter by title, route, cat, team…"
+              aria-label="Filter activities"
+              className="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-[#fc6719]"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 pt-0.5">
+          <span>
+            Showing <strong className="text-slate-200">{filteredActivities.length}</strong> of{' '}
+            <strong className="text-slate-200">{mergedActivities.length}</strong> activities
+            {activitiesState.status === 'loading' ? ' (loading Zwift Feed…)' : ''}
+          </span>
+          {hasActiveFilter && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="text-xs font-semibold text-[#fc6719] hover:underline"
+            >
+              Reset filters
+            </button>
+          )}
+        </div>
+      </div>
+
+      {filteredActivities.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/40 p-6 text-center space-y-2">
+          <p className="text-sm text-slate-300">
+            {mergedActivities.length === 0
+              ? 'No activities found.'
+              : 'No activities match the current filter.'}
+          </p>
+          {hasActiveFilter && mergedActivities.length > 0 && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="text-xs font-semibold text-[#fc6719] hover:underline"
+            >
+              Clear filters to show all {mergedActivities.length} activities
+            </button>
+          )}
+        </div>
       ) : (
-        merged.map((race) => (
-          <MergedRaceCard key={race.key} race={race} profileId={profileId} units={units} />
-        ))
+        <div className="space-y-4">
+          {filteredActivities.map((race) => (
+            <MergedRaceCard
+              key={race.key}
+              race={race}
+              profileId={profileId}
+              units={units}
+              riderWeightGrams={riderWeightGrams}
+            />
+          ))}
+        </div>
+      )}
+
+      {hasMoreActivities && (
+        <div className="flex justify-center pt-1">
+          <button
+            type="button"
+            onClick={onLoadMoreActivities}
+            disabled={loadingMoreActivities}
+            className="rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-2 text-xs font-semibold text-slate-200 hover:border-[#fc6719]/60 hover:text-[#fc6719] disabled:opacity-50 transition-colors"
+          >
+            {loadingMoreActivities ? 'Loading older activities…' : 'Load older Zwift activities'}
+          </button>
+        </div>
       )}
     </div>
   );
@@ -366,32 +655,50 @@ function MergedTab({
 function RaceHistorySection({
   zpState,
   zrState,
-  merged,
+  activitiesState,
+  mergedRaces,
+  mergedActivities,
+  hasMoreActivities,
+  loadingMoreActivities,
+  onLoadMoreActivities,
   profileId,
   units,
+  riderWeightGrams,
 }: {
   zpState: AsyncState<ZwiftPowerRaceEntry[]>;
   zrState: AsyncState<ZwiftRacingRiderResponse>;
-  merged: MergedRace[];
+  activitiesState: AsyncState<unknown>;
+  mergedRaces: MergedRace[];
+  mergedActivities: MergedRace[];
+  hasMoreActivities: boolean;
+  loadingMoreActivities: boolean;
+  onLoadMoreActivities: () => void;
   profileId: number;
   units: UnitSystem;
+  riderWeightGrams?: number;
 }) {
   return (
     <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-4">
       <div>
-        <h2 className="text-lg font-bold">Race History</h2>
+        <h2 className="text-lg font-bold">Activity &amp; Race History</h2>
         <p className="text-xs text-slate-400">
-          ZwiftPower race history enriched with ZwiftRacing.app true standings, course data, and
-          vELO ratings. Click any race to inspect full standings and multi-API details.
+          All Zwift activities merged across ZwiftPower, ZwiftRacing.app, and Zwift Core. Filter by
+          activity type or search, and click any event to inspect full standings and details.
         </p>
       </div>
 
       <MergedTab
         zpState={zpState}
         zrState={zrState}
-        merged={merged}
+        activitiesState={activitiesState}
+        mergedRaces={mergedRaces}
+        mergedActivities={mergedActivities}
+        hasMoreActivities={hasMoreActivities}
+        loadingMoreActivities={loadingMoreActivities}
+        onLoadMoreActivities={onLoadMoreActivities}
         profileId={profileId}
         units={units}
+        riderWeightGrams={riderWeightGrams}
       />
     </section>
   );
@@ -408,7 +715,16 @@ export default function ProfilePage({
   // Default to the rider's Zwift preference until they pick a unit system here.
   const { units, setUnits } = useUnits(profile.useMetric === false ? 'imperial' : 'metric');
   const { favorites, isFavorite, toggleFavorite, upsertFavorite, removeFavorite } = useFavorites();
-  const { zpState, zrState, mergedRaces } = useRiderRaceHistory(profile.id, {
+  const {
+    zpState,
+    zrState,
+    activitiesState,
+    mergedRaces,
+    mergedActivities,
+    hasMoreActivities,
+    loadingMoreActivities,
+    loadMoreActivities,
+  } = useRiderRaceHistory(profile.id, {
     includeActivities: true,
   });
   const [powerProfileState, setPowerProfileState] = useState<AsyncState<ZwiftPowerProfile> | null>(
@@ -616,9 +932,15 @@ export default function ProfilePage({
       <RaceHistorySection
         zpState={zpState}
         zrState={zrState}
-        merged={mergedRaces}
+        activitiesState={activitiesState}
+        mergedRaces={mergedRaces}
+        mergedActivities={mergedActivities}
+        hasMoreActivities={hasMoreActivities}
+        loadingMoreActivities={loadingMoreActivities}
+        onLoadMoreActivities={loadMoreActivities}
         profileId={profile.id}
         units={units}
+        riderWeightGrams={profile.weight}
       />
     </main>
   );
