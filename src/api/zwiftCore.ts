@@ -93,6 +93,7 @@ export interface ZwiftRaceResultEntry {
     weightInGrams?: number;
     heightInCentimeters?: number;
     imageSrc?: string;
+    competitionMetrics?: ZwiftCompetitionMetrics | null;
     [key: string]: unknown;
   };
   activityData?: {
@@ -117,6 +118,14 @@ export interface ZwiftRaceResultEntry {
   };
   flaggedCheating?: boolean;
   flaggedSandbagging?: boolean;
+  racingScore?: number;
+  competitionMetrics?: ZwiftCompetitionMetrics | null;
+  scoreHistory?: {
+    previousScore?: number;
+    newScore?: number;
+    scoreChangeType?: string;
+    [key: string]: unknown;
+  };
   criticalP?: {
     criticalP15Seconds?: number;
     criticalP1Minute?: number;
@@ -131,6 +140,7 @@ export interface ZwiftRaceResultEntry {
 export interface ZwiftActivityDetail {
   id?: number;
   id_str?: string;
+  primaryImageUrl?: string;
   avgHeartRate?: number;
   maxHeartRate?: number;
   maxWatts?: number;
@@ -141,6 +151,9 @@ export interface ZwiftActivityDetail {
   percentageCompleted?: number;
   profileFtp?: number;
   profileMaxHeartRate?: number;
+  activitySnapshots?: Array<Record<string, unknown>>;
+  snapshots?: Array<Record<string, unknown>>;
+  images?: Array<Record<string, unknown>>;
   fitnessData?: {
     status?: string;
     fullDataUrl?: string;
@@ -171,6 +184,53 @@ export interface ZwiftActivityDetail {
     [key: string]: unknown;
   };
   /** /api/activities/{id} returns many more fields; keep them all accessible. */
+  [key: string]: unknown;
+}
+
+export interface ZwiftEventSubgroup {
+  id: number;
+  name?: string;
+  description?: string;
+  subgroupLabel?: string;
+  label?: number;
+  rangeAccessLabel?: string | null;
+  fromPaceValue?: number;
+  toPaceValue?: number;
+  paceType?: number;
+  rulesSet?: string[];
+  tags?: string[];
+  routeId?: number;
+  laps?: number;
+  distanceInMeters?: number;
+  durationInSeconds?: number;
+  totalEntrantCount?: number;
+  totalSignedUpCount?: number;
+  eventSubgroupStart?: string;
+  rulesId?: number;
+  [key: string]: unknown;
+}
+
+export interface ZwiftPublicEvent {
+  id: number;
+  name?: string;
+  description?: string;
+  eventStart?: string;
+  eventType?: string;
+  sport?: string;
+  routeId?: number;
+  worldId?: number;
+  laps?: number;
+  distanceInMeters?: number;
+  durationInSeconds?: number;
+  imageUrl?: string;
+  rulesId?: number;
+  cullingType?: string;
+  categoryEnforcement?: boolean;
+  accessExpression?: string | null;
+  rangeAccessLabel?: string | null;
+  rulesSet?: string[];
+  tags?: string[];
+  eventSubgroups?: ZwiftEventSubgroup[];
   [key: string]: unknown;
 }
 
@@ -329,6 +389,16 @@ export async function fetchRiderActivities(
   if (Array.isArray(data)) return data;
   return Array.isArray(data?.activities) ? data.activities : [];
 }
+
+export const fetchPublicEvent = (
+  accessToken: string,
+  eventId: string | number,
+): Promise<ZwiftPublicEvent> =>
+  fetchAuthorizedJson<ZwiftPublicEvent>(
+    accessToken,
+    `/api/zwift/api/public/events/${encodeURIComponent(String(eventId))}`,
+    'event details',
+  );
 
 export async function fetchRaceResults(
   accessToken: string,

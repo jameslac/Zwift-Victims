@@ -1,6 +1,336 @@
-import type { ZwiftActivity } from '../api/zwiftCore';
+import type {
+  ZwiftActivity,
+  ZwiftActivityDetail,
+  ZwiftEventSubgroup,
+  ZwiftRaceResultEntry,
+} from '../api/zwiftCore';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
 import type { ZwiftRacingRaceEntry } from '../api/zwiftRacing';
+import { formatDurationMs } from './units';
+
+export type AsyncState<T> =
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | { status: 'loaded'; data: T };
+
+export function zpVal(v: unknown): string | number | undefined {
+  const raw = Array.isArray(v) ? v[0] : v;
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  if (typeof raw === 'string' || typeof raw === 'number') return raw;
+  return String(raw);
+}
+
+export function zpNum(v: unknown): number | undefined {
+  const val = zpVal(v);
+  if (val === undefined) return undefined;
+  const num = typeof val === 'number' ? val : Number(val);
+  return Number.isFinite(num) ? num : undefined;
+}
+
+export function formatDateTime(iso: string | undefined): string {
+  if (!iso) return 'Unknown date';
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return iso;
+  return parsed.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+export function formatUnixSeconds(sec: number | undefined): string {
+  if (sec === undefined || sec === null || !Number.isFinite(sec)) return 'Unknown date';
+  return new Date(sec * 1000).toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
+export function formatGapSeconds(gap: number | undefined): string {
+  if (gap === undefined || gap === null || !Number.isFinite(gap)) return '—';
+  if (gap === 0) return '0.0s';
+  if (gap < 60) return `+${gap.toFixed(1)}s`;
+  return `+${formatDurationMs(gap * 1000)}`;
+}
+
+export function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
+}
+
+const NAMED_HTML_ENTITIES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+};
+
+export function decodeHtmlEntities(input: string | undefined): string {
+  if (!input) return '';
+  return input.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (full, entity: string) => {
+    if (entity.startsWith('#x') || entity.startsWith('#X')) {
+      const cp = parseInt(entity.slice(2), 16);
+      return Number.isFinite(cp) && cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : full;
+    }
+    if (entity.startsWith('#')) {
+      const cp = parseInt(entity.slice(1), 10);
+      return Number.isFinite(cp) && cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : full;
+    }
+    return NAMED_HTML_ENTITIES[entity] ?? full;
+  });
+}
+
+const ZP_DIV_TO_CATEGORY: Record<number, string> = {
+  5: 'A+',
+  10: 'A',
+  20: 'B',
+  30: 'C',
+  40: 'D',
+  50: 'E',
+};
+
+export function zwiftPowerDivToCategory(div: unknown): string | undefined {
+  const num = typeof div === 'number' ? div : Number(div);
+  if (!Number.isFinite(num) || num <= 0) return undefined;
+  return ZP_DIV_TO_CATEGORY[num];
+}
+
+export function formatZpRiderCategory(
+  div: unknown,
+  divw: unknown,
+  male?: number,
+): string | undefined {
+  const open = zwiftPowerDivToCategory(div);
+  const women = zwiftPowerDivToCategory(divw);
+  if (male === 0 && women) {
+    return open && open !== women ? `${women} (W) / ${open}` : `${women} (W)`;
+  }
+  return open ?? women;
+}
+
+function finiteNum(v: unknown): number | undefined {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+  if (typeof v === 'string') {
+    const trimmed = v.trim();
+    if (!trimmed) return undefined;
+    const n = Number(trimmed);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  return undefined;
+}
+
+export function extractCoreZrs(entry: ZwiftRaceResultEntry | undefined): {
+  score?: number;
+  previousScore?: number;
+  delta?: number;
+  changeType?: string;
+  hasEventScore: boolean;
+} {
+  if (!entry) return { hasEventScore: false };
+  const profileRec = entry.profileData as Record<string, unknown> | undefined;
+  const activityRec = entry.activityData as Record<string, unknown> | undefined;
+  const metricsRec = entry.competitionMetrics as Record<string, unknown> | undefined;
+  const rawHistory =
+    entry.scoreHistory ??
+    profileRec?.scoreHistory ??
+    activityRec?.scoreHistory ??
+    metricsRec?.scoreHistory;
+  const sh = (
+    Array.isArray(rawHistory) ? rawHistory[rawHistory.length - 1] : rawHistory
+  ) as Record<string, unknown> | undefined;
+
+  const newScore = sh
+    ? finiteNum(sh.newScore ?? sh.scoreAfter ?? sh.after ?? sh.score)
+    : undefined;
+  const previousScore = sh
+    ? finiteNum(sh.previousScore ?? sh.prevScore ?? sh.scoreBefore ?? sh.before)
+    : undefined;
+  const explicitDelta = sh ? finiteNum(sh.delta ?? sh.scoreDelta ?? sh.change) : undefined;
+  const changeType =
+    sh && typeof sh.scoreChangeType === 'string' && sh.scoreChangeType.trim()
+      ? sh.scoreChangeType.trim()
+      : undefined;
+
+  const direct = [
+    newScore,
+    finiteNum(entry.racingScore),
+    finiteNum(entry.competitionMetrics?.racingScore),
+    finiteNum(entry.profileData?.competitionMetrics?.racingScore),
+  ].find((v): v is number => v !== undefined && v > 0);
+
+  const score = direct ?? previousScore;
+  const delta =
+    newScore != null && previousScore != null ? newScore - previousScore : explicitDelta;
+  return {
+    score,
+    previousScore,
+    delta,
+    changeType,
+    hasEventScore: score != null,
+  };
+}
+
+export interface ActivityPhoto {
+  url: string;
+  label: string;
+}
+
+function pickUrlFromSnapshot(item: unknown): { url?: string; label?: string } {
+  if (typeof item === 'string' && /^https?:\/\//i.test(item)) {
+    return { url: item };
+  }
+  if (!item || typeof item !== 'object') return {};
+  const rec = item as Record<string, unknown>;
+  const urlKeys = [
+    'imageUrl',
+    'fullImageUrl',
+    'largeImageUrl',
+    'url',
+    'src',
+    'thumbnailUrl',
+  ];
+  let url: string | undefined;
+  for (const key of urlKeys) {
+    const candidate = rec[key];
+    if (typeof candidate === 'string' && /^https?:\/\//i.test(candidate.trim())) {
+      url = candidate.trim();
+      break;
+    }
+  }
+  const milestone =
+    typeof rec.milestoneType === 'string'
+      ? rec.milestoneType
+      : typeof rec.notableMomentType === 'string'
+        ? rec.notableMomentType
+        : typeof rec.type === 'string'
+          ? rec.type
+          : undefined;
+  return { url, label: milestone };
+}
+
+export function extractActivityPhotos(
+  activity?: ZwiftActivity,
+  detail?: ZwiftActivityDetail,
+): ActivityPhoto[] {
+  const photos: ActivityPhoto[] = [];
+  const seen = new Set<string>();
+
+  function add(url: unknown, label: string) {
+    if (typeof url !== 'string') return;
+    const clean = url.trim();
+    if (!/^https?:\/\//i.test(clean) || seen.has(clean)) return;
+    seen.add(clean);
+    photos.push({ url: clean, label });
+  }
+
+  add(activity?.primaryImageUrl, 'Primary activity snapshot');
+  add(detail?.primaryImageUrl, 'Primary activity snapshot');
+
+  const collections: Array<[unknown, string]> = [
+    [detail?.activitySnapshots, 'Activity snapshot'],
+    [detail?.snapshots, 'Activity snapshot'],
+    [detail?.images, 'Activity photo'],
+    [(detail as Record<string, unknown> | undefined)?.activityImages, 'Activity photo'],
+    [(detail as Record<string, unknown> | undefined)?.photos, 'Activity photo'],
+    [(activity as Record<string, unknown> | undefined)?.activitySnapshots, 'Activity snapshot'],
+    [(activity as Record<string, unknown> | undefined)?.snapshots, 'Activity snapshot'],
+    [(activity as Record<string, unknown> | undefined)?.images, 'Activity photo'],
+  ];
+
+  for (const [list, fallbackLabel] of collections) {
+    if (!Array.isArray(list)) continue;
+    for (const item of list) {
+      const picked = pickUrlFromSnapshot(item);
+      if (picked.url) {
+        const label = picked.label
+          ? `${fallbackLabel} (${picked.label.replace(/_/g, ' ').toLowerCase()})`
+          : fallbackLabel;
+        add(picked.url, label);
+      }
+    }
+  }
+
+  return photos;
+}
+
+const NUMERIC_SUBGROUP_LABELS: Record<number, string> = {
+  1: 'A',
+  2: 'B',
+  3: 'C',
+  4: 'D',
+  5: 'E',
+};
+
+export function subgroupCategoryLabel(sg: ZwiftEventSubgroup): string | undefined {
+  if (typeof sg.subgroupLabel === 'string' && sg.subgroupLabel.trim()) {
+    return sg.subgroupLabel.trim().toUpperCase();
+  }
+  if (typeof sg.label === 'number' && NUMERIC_SUBGROUP_LABELS[sg.label]) {
+    return NUMERIC_SUBGROUP_LABELS[sg.label];
+  }
+  return undefined;
+}
+
+export function resolveSubgroupForCategory(
+  subgroups: ZwiftEventSubgroup[] | undefined,
+  category: string | undefined,
+): ZwiftEventSubgroup | undefined {
+  if (!subgroups || subgroups.length === 0 || !category) return undefined;
+  const norm = category.trim().toUpperCase();
+  const base = norm.replace(/\+$/, '');
+  return (
+    subgroups.find((sg) => subgroupCategoryLabel(sg) === norm) ??
+    subgroups.find((sg) => subgroupCategoryLabel(sg) === base) ??
+    subgroups.find(
+      (sg) =>
+        typeof sg.name === 'string' &&
+        new RegExp(`\\(${base}\\)|\\bCat\\s*${base}\\b`, 'i').test(sg.name),
+    )
+  );
+}
+
+export function matchActivityForRace(
+  activities: ZwiftActivity[],
+  opts: { subgroupIds?: number[]; raceDateSec?: number; eventTitle?: string },
+): ZwiftActivity | undefined {
+  const ids = new Set((opts.subgroupIds ?? []).filter((id) => Number.isFinite(id) && id > 0));
+  if (ids.size > 0) {
+    const bySubgroup = activities.find(
+      (a) => typeof a.eventSubgroupId === 'number' && ids.has(a.eventSubgroupId),
+    );
+    if (bySubgroup) return bySubgroup;
+  }
+
+  if (opts.raceDateSec != null && Number.isFinite(opts.raceDateSec)) {
+    const windowMs = 3 * 60 * 60 * 1000;
+    const targetMs = opts.raceDateSec * 1000;
+    const candidates = activities
+      .map((a) => {
+        const startMs = a.startDate ? Date.parse(a.startDate) : NaN;
+        const endMs = a.endDate ? Date.parse(a.endDate) : NaN;
+        const diff = Math.min(
+          Number.isFinite(startMs) ? Math.abs(startMs - targetMs) : Infinity,
+          Number.isFinite(endMs) ? Math.abs(endMs - targetMs) : Infinity,
+        );
+        return { activity: a, diff };
+      })
+      .filter((c) => c.diff <= windowMs)
+      .sort((a, b) => {
+        const aEvent = a.activity.eventSubgroupId ? 0 : 1;
+        const bEvent = b.activity.eventSubgroupId ? 0 : 1;
+        if (aEvent !== bEvent) return aEvent - bEvent;
+        if (opts.eventTitle) {
+          const titleLower = opts.eventTitle.toLowerCase();
+          const aMatch = (a.activity.name ?? '').toLowerCase().includes(titleLower) ? 0 : 1;
+          const bMatch = (b.activity.name ?? '').toLowerCase().includes(titleLower) ? 0 : 1;
+          if (aMatch !== bMatch) return aMatch - bMatch;
+        }
+        return a.diff - b.diff;
+      });
+    if (candidates[0]) return candidates[0].activity;
+  }
+
+  return undefined;
+}
 
 /**
  * One race, merged across sources. ZwiftPower is the primary race list;

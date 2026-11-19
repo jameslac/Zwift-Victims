@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { FormEvent, ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import PowerBestsSection from '../components/PowerBestsSection';
+import { AppHeader, MetricGrid, PlacingBadge, RaceExternalLinks, Stat } from '../components/RaceUi';
 import ZwiftRacingProfileSection from '../components/ZwiftRacingProfileSection';
 import ZwiftVictimsSection from '../components/ZwiftVictimsSection';
 import { useFavorites } from '../lib/FavoritesContext';
-import { ordinal } from '../lib/headToHead';
 import { useUnits } from '../lib/UnitsContext';
 import {
   formatDistance,
@@ -23,41 +23,16 @@ import { getXpProgress } from '../lib/profileXp';
 import { extractPowerProfileMetrics } from '../lib/powerBests';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
 import type { ZwiftRacingRiderResponse } from '../api/zwiftRacing';
-import PowerBestsSection from '../components/PowerBestsSection';
-import { MetricGrid } from '../components/ProfileShared';
-import { formatUnixSeconds } from '../lib/profileUtils';
-
 import {
-  buildZwiftActivityUrl,
-  buildZwiftPowerEventUrl,
-  buildZwiftRacingEventUrl,
-  buildZwiftToolsBikeComparisonUrl,
-  buildZwiftToolsRaceReplayUrl,
-  buildZwifterBikesRouteUrl,
+  formatGapSeconds,
+  formatUnixSeconds,
   isPodium,
+  ordinal,
   summarize,
+  zpVal,
 } from '../lib/raceHistory';
-import type { MergedRace } from '../lib/raceHistory';
+import type { AsyncState, MergedRace } from '../lib/raceHistory';
 import { useRiderRaceHistory } from '../lib/useRiderRaceHistory';
-import type { AsyncState } from '../lib/useRiderRaceHistory';
-
-function Stat({
-  label,
-  value,
-  subValue,
-}: {
-  label: string;
-  value: string | number | undefined;
-  subValue?: string;
-}) {
-  return (
-    <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-4">
-      <dt className="text-xs uppercase tracking-wide text-slate-400">{label}</dt>
-      <dd className="mt-1 text-xl font-bold">{value ?? '—'}</dd>
-      {subValue && <dd className="mt-0.5 text-xs text-slate-400">{subValue}</dd>}
-    </div>
-  );
-}
 
 function formatRiderCategory(profile: ZwiftProfile): string | undefined {
   const metrics = profile.competitionMetrics;
@@ -120,294 +95,15 @@ function XpProgressBar({ profile }: { profile: ZwiftProfile }) {
     </div>
   );
 }
-function zpVal(v: unknown): string | number | undefined {
-  const raw = Array.isArray(v) ? v[0] : v;
-  if (raw === undefined || raw === null || raw === '') return undefined;
-  if (typeof raw === 'string' || typeof raw === 'number') return raw;
-  return String(raw);
-}
-
-function formatGapSeconds(gap: number | undefined): string {
-  if (gap === undefined || gap === null || !Number.isFinite(gap)) return '—';
-  if (gap === 0) return '0.0s';
-  if (gap < 60) return `+${gap.toFixed(1)}s`;
-  return `+${formatDurationMs(gap * 1000)}`;
-}
-
-function PlacingBadge({
-  truePlace,
-  fieldSize,
-  zpPlace,
-  didNotFinish,
-  disqualified,
-  penalty,
+function MergedRaceCard({
+  race,
+  profileId,
+  units,
 }: {
-  truePlace?: number;
-  fieldSize?: number;
-  zpPlace?: number;
-  didNotFinish?: boolean;
-  disqualified?: boolean;
-  penalty?: string;
+  race: MergedRace;
+  profileId: number;
+  units: UnitSystem;
 }) {
-  if (didNotFinish) {
-    return (
-      <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2.5 py-0.5 text-xs font-semibold text-red-300">
-        DNF
-      </span>
-    );
-  }
-  if (disqualified) {
-    return (
-      <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2.5 py-0.5 text-xs font-semibold text-red-300">
-        DQ
-      </span>
-    );
-  }
-  if (truePlace != null) {
-    const label = fieldSize ? `${ordinal(truePlace)} / ${fieldSize}` : ordinal(truePlace);
-    let tone = 'bg-slate-800/80 border-slate-600 text-slate-100';
-    if (truePlace === 1) {
-      tone = 'bg-amber-400/20 border-amber-400/50 text-amber-300';
-    } else if (truePlace === 2) {
-      tone = 'bg-slate-300/20 border-slate-300/50 text-slate-200';
-    } else if (truePlace === 3) {
-      tone = 'bg-orange-500/20 border-orange-500/50 text-orange-300';
-    }
-    return (
-      <span
-        className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${tone}`}
-        title="True category placing from ZwiftRacing (includes private riders)"
-      >
-        {label}
-      </span>
-    );
-  }
-  if (penalty) {
-    return (
-      <span className="rounded-full bg-red-500/20 border border-red-500/40 px-2.5 py-0.5 text-xs font-semibold text-red-300">
-        {penalty}
-      </span>
-    );
-  }
-  if (zpPlace != null) {
-    return (
-      <span
-        className="rounded-full bg-slate-700/40 border border-slate-600 px-2.5 py-0.5 text-xs font-semibold text-slate-300"
-        title="ZwiftPower category placing (private/hidden riders excluded)"
-      >
-        {ordinal(zpPlace)} (ZP*)
-      </span>
-    );
-  }
-  return null;
-}
-
-function ZwiftIcon({ className = 'w-4 h-4' }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.25"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M6 6h12L6 18h12" />
-    </svg>
-  );
-}
-
-function ZwiftPowerIcon({ className = 'w-4 h-4' }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5Z" />
-    </svg>
-  );
-}
-
-function ZwiftRacingIcon({ className = 'w-4 h-4' }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
-      <line x1="4" y1="22" x2="4" y2="15" />
-    </svg>
-  );
-}
-
-function RouteIcon({ className = 'w-4 h-4' }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <circle cx="6" cy="19" r="3" />
-      <path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15" />
-      <circle cx="18" cy="5" r="3" />
-    </svg>
-  );
-}
-
-function BikeIcon({ className = 'w-4 h-4' }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <circle cx="5.5" cy="16.5" r="3.5" />
-      <circle cx="18.5" cy="16.5" r="3.5" />
-      <path d="M5.5 16.5h6l4-6.5h-6l-4 6.5Z" />
-      <path d="M11.5 16.5 8.8 8H7" />
-      <path d="M18.5 16.5 14.5 7.8H17" />
-    </svg>
-  );
-}
-
-function ReplayIcon({ className = 'w-4 h-4' }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-      <path d="M3 3v5h5" />
-      <path d="M10.5 8.5v7l5.5-3.5-5.5-3.5Z" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-const TOOL_ICON_LINK_CLASS =
-  'inline-flex items-center justify-center rounded-lg border border-slate-700/80 bg-slate-900/80 p-1.5 text-slate-300 hover:border-[#fc6719]/60 hover:text-[#fc6719] hover:bg-slate-800 transition-colors';
-
-function RaceExternalLinks({ race }: { race: MergedRace }) {
-  const links: Array<{
-    key: string;
-    href: string;
-    title: string;
-    label: string;
-    icon: ReactNode;
-  }> = [];
-
-  const zpZid = race.zp?.zid != null ? String(race.zp.zid).trim() : '';
-  if (zpZid) {
-    links.push({
-      key: 'zwiftpower',
-      href: buildZwiftPowerEventUrl(zpZid),
-      title: 'ZwiftPower Event',
-      label: 'Open Event on ZwiftPower',
-      icon: <ZwiftPowerIcon />,
-    });
-  }
-
-  const zrEventId = race.zr?.event?.eventId != null ? String(race.zr.event.eventId).trim() : '';
-  const zrSubgroup = (race.zr?.event?.subgroupId ?? race.zp?.category)?.trim().replace(/\+$/, '');
-  if (race.zr && zrEventId && zrSubgroup) {
-    links.push({
-      key: 'zwiftracing',
-      href: buildZwiftRacingEventUrl(zrEventId, zrSubgroup),
-      title: 'ZwiftRacing.app Event',
-      label: 'Open Event on ZwiftRacing.app',
-      icon: <ZwiftRacingIcon />,
-    });
-  }
-
-  const routeName = race.zr?.event?.routeName?.trim();
-  const routeUrl = routeName ? buildZwifterBikesRouteUrl(routeName) : undefined;
-  if (routeName && routeUrl) {
-    links.push({
-      key: 'zwifterbikes',
-      href: routeUrl,
-      title: `ZwifterBikes Route (${routeName})`,
-      label: 'Open Route on ZwifterBikes',
-      icon: <RouteIcon />,
-    });
-  }
-
-  if (race.activityId) {
-    links.push(
-      {
-        key: 'zwift',
-        href: buildZwiftActivityUrl(race.activityId),
-        title: 'Zwift Activity',
-        label: 'Open Activity on Zwift',
-        icon: <ZwiftIcon />,
-      },
-      {
-        key: 'zwifttools-bike',
-        href: buildZwiftToolsBikeComparisonUrl(race.activityId),
-        title: 'ZwiftTools Bike Comparison',
-        label: 'Open Bike Comparison on ZwiftTools',
-        icon: <BikeIcon />,
-      },
-      {
-        key: 'zwifttools-replay',
-        href: buildZwiftToolsRaceReplayUrl(race.activityId),
-        title: 'ZwiftTools Race Replay',
-        label: 'Open Race Replay on ZwiftTools',
-        icon: <ReplayIcon />,
-      },
-    );
-  }
-
-  if (links.length === 0) return null;
-
-  return (
-    <footer className="border-t border-slate-800/80 pt-3 flex flex-wrap items-center justify-end gap-2">
-      {links.map((link) => (
-        <a
-          key={link.key}
-          href={link.href}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={link.title}
-          aria-label={link.label}
-          className={TOOL_ICON_LINK_CLASS}
-        >
-          {link.icon}
-        </a>
-      ))}
-    </footer>
-  );
-}
-
-function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }) {
   const { zp, zr } = race;
   const timeSec = zpVal(zp?.time) ?? zr?.race?.time;
   const avgPower = zpVal(zp?.avg_power);
@@ -434,12 +130,17 @@ function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }
   const eloBefore = zr?.velo?.elo?.before;
   const eloAfter = zr?.velo?.elo?.after;
   const sof = zr?.velo?.elo?.eventRating;
+  const detailPath = race.eventId
+    ? `/riders/${profileId}/races/${encodeURIComponent(race.eventId)}`
+    : null;
 
-  return (
-    <article className="rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-3">
+  const mainBody = (
+    <>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="font-bold text-base">{race.title}</h3>
+          <h3 className="font-bold text-base group-hover:text-[#fc6719] transition-colors">
+            {race.title}
+          </h3>
           <p className="text-xs text-slate-400">
             {formatUnixSeconds(race.date)}
             {category ? ` · Cat ${category}` : ''}
@@ -557,8 +258,49 @@ function MergedRaceCard({ race, units }: { race: MergedRace; units: UnitSystem }
           { label: 'SOF', value: sof != null ? sof.toFixed(0) : undefined },
         ]}
       />
+    </>
+  );
 
-      <RaceExternalLinks race={race} />
+  return (
+    <article
+      className={`rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-3 ${
+        detailPath ? 'hover:border-[#fc6719]/70 transition-colors' : ''
+      }`}
+    >
+      {detailPath ? (
+        <Link
+          to={detailPath}
+          state={{ race }}
+          className="block space-y-3 group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#fc6719] rounded-lg"
+        >
+          {mainBody}
+        </Link>
+      ) : (
+        <div className="space-y-3">{mainBody}</div>
+      )}
+
+      <footer className="border-t border-slate-800/80 pt-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          {detailPath && (
+            <Link
+              to={detailPath}
+              state={{ race }}
+              className="text-xs font-semibold text-[#fc6719] hover:underline"
+            >
+              View race details →
+            </Link>
+          )}
+        </div>
+        <RaceExternalLinks
+          zpZid={race.zp?.zid != null ? String(race.zp.zid) : undefined}
+          zrEventId={
+            race.zr && race.zr.event?.eventId != null ? String(race.zr.event.eventId) : undefined
+          }
+          zrSubgroup={race.zr ? (race.zr.event?.subgroupId ?? race.zp?.category) : undefined}
+          routeName={race.zr?.event?.routeName}
+          activityId={race.activityId}
+        />
+      </footer>
     </article>
   );
 }
@@ -567,11 +309,13 @@ function MergedTab({
   zpState,
   zrState,
   merged,
+  profileId,
   units,
 }: {
   zpState: AsyncState<ZwiftPowerRaceEntry[]>;
   zrState: AsyncState<ZwiftRacingRiderResponse>;
   merged: MergedRace[];
+  profileId: number;
   units: UnitSystem;
 }) {
   const summary = useMemo(() => summarize(merged), [merged]);
@@ -611,7 +355,9 @@ function MergedTab({
       {merged.length === 0 ? (
         <p className="text-sm text-slate-400">No races found.</p>
       ) : (
-        merged.map((race) => <MergedRaceCard key={race.key} race={race} units={units} />)
+        merged.map((race) => (
+          <MergedRaceCard key={race.key} race={race} profileId={profileId} units={units} />
+        ))
       )}
     </div>
   );
@@ -621,11 +367,13 @@ function RaceHistorySection({
   zpState,
   zrState,
   merged,
+  profileId,
   units,
 }: {
   zpState: AsyncState<ZwiftPowerRaceEntry[]>;
   zrState: AsyncState<ZwiftRacingRiderResponse>;
   merged: MergedRace[];
+  profileId: number;
   units: UnitSystem;
 }) {
   return (
@@ -633,11 +381,18 @@ function RaceHistorySection({
       <div>
         <h2 className="text-lg font-bold">Race History</h2>
         <p className="text-xs text-slate-400">
-          ZwiftPower race history enriched with ZwiftRacing.app true standings, course data, and vELO ratings.
+          ZwiftPower race history enriched with ZwiftRacing.app true standings, course data, and
+          vELO ratings. Click any race to inspect full standings and multi-API details.
         </p>
       </div>
 
-      <MergedTab zpState={zpState} zrState={zrState} merged={merged} units={units} />
+      <MergedTab
+        zpState={zpState}
+        zrState={zrState}
+        merged={merged}
+        profileId={profileId}
+        units={units}
+      />
     </section>
   );
 }
@@ -650,8 +405,6 @@ export default function ProfilePage({
   isOwnProfile?: boolean;
 }) {
   const { logout, getAccessToken } = useAuth();
-  const navigate = useNavigate();
-  const [lookupId, setLookupId] = useState('');
   // Default to the rider's Zwift preference until they pick a unit system here.
   const { units, setUnits } = useUnits(profile.useMetric === false ? 'imperial' : 'metric');
   const { favorites, isFavorite, toggleFavorite, upsertFavorite, removeFavorite } = useFavorites();
@@ -726,67 +479,14 @@ export default function ProfilePage({
     upsertFavorite,
   ]);
 
-  function handleLookupSubmit(e: FormEvent) {
-    e.preventDefault();
-    const cleaned = lookupId.trim();
-    if (!/^\d+$/.test(cleaned)) return;
-    setLookupId('');
-    navigate(`/riders/${cleaned}`);
-  }
-
   return (
     <main className="min-h-dvh max-w-4xl mx-auto p-4 sm:p-8 space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Link to="/" className="font-extrabold text-lg">
-            Zwift Victims
-          </Link>
-          {!isOwnProfile && (
-            <Link
-              to="/"
-              className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
-            >
-              My profile
-            </Link>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <form onSubmit={handleLookupSubmit} className="flex items-center gap-1">
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              placeholder="View rider ID…"
-              aria-label="View rider by Zwift ID"
-              value={lookupId}
-              onChange={(e) => setLookupId(e.target.value)}
-              className="w-32 rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm focus:outline-none focus:border-[#fc6719]"
-            />
-            <button
-              type="submit"
-              disabled={!/^\d+$/.test(lookupId.trim())}
-              className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-sm hover:bg-slate-800 disabled:opacity-40"
-            >
-              Go
-            </button>
-          </form>
-          <select
-            aria-label="Units"
-            value={units}
-            onChange={(e) => setUnits(e.target.value as UnitSystem)}
-            className="rounded-lg bg-slate-900 border border-slate-700 px-2 py-1.5 text-sm"
-          >
-            <option value="metric">Metric (kg, cm)</option>
-            <option value="imperial">Imperial (lb, ft)</option>
-          </select>
-          <button
-            onClick={logout}
-            className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm hover:bg-slate-800"
-          >
-            Log out
-          </button>
-        </div>
-      </header>
+      <AppHeader
+        isOwnProfile={isOwnProfile}
+        units={units}
+        onUnitsChange={setUnits}
+        onLogout={logout}
+      />
 
       <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-6">
         <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-4 text-center sm:text-left">
@@ -917,6 +617,7 @@ export default function ProfilePage({
         zpState={zpState}
         zrState={zrState}
         merged={mergedRaces}
+        profileId={profile.id}
         units={units}
       />
     </main>

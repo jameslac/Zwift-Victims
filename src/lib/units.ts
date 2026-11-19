@@ -41,6 +41,13 @@ export function formatDrops(drops: number | undefined): string {
   return Math.round(drops).toLocaleString();
 }
 
+export function formatSpeed(mps: number | undefined, units: UnitSystem): string {
+  if (mps === undefined || mps === null || !Number.isFinite(mps)) return '—';
+  return units === 'metric'
+    ? `${(mps * 3.6).toFixed(1)} km/h`
+    : `${(mps * 2.23694).toFixed(1)} mph`;
+}
+
 export function formatDurationMs(ms: number | undefined): string {
   if (ms === undefined || ms === null || !Number.isFinite(ms) || ms < 0) return '—';
   const totalSeconds = Math.round(ms / 1000);
