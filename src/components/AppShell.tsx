@@ -159,14 +159,7 @@ export function ThemePreferencesModal({ onClose }: { onClose: () => void }) {
                   </div>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-sm font-bold text-slate-100">{scheme.name}</span>
-                    {scheme.badge && (
-                      <span className="rounded-full bg-accent/20 border border-accent/40 px-1.5 py-0.2 text-[10px] font-bold text-accent-text">
-                        {scheme.badge}
-                      </span>
-                    )}
-                  </div>
+                  <span className="block text-sm font-bold text-slate-100">{scheme.name}</span>
                   <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">{scheme.tagline}</p>
                 </div>
               </button>

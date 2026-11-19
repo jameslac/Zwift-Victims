@@ -513,10 +513,12 @@ export default function RaceDetailStandings({
                     </button>
                   </th>
                 )}
-                <th className="py-2 pr-3 whitespace-nowrap">Rider</th>
+                <th className="sticky left-0 z-10 bg-slate-900 py-2 pl-2 pr-3 whitespace-nowrap border-r border-slate-800/80">
+                  Rider
+                </th>
                 {columns.riderCategory && (
                   <th
-                    className="py-2 pr-3 whitespace-nowrap"
+                    className="py-2 pl-3 pr-3 whitespace-nowrap"
                     title="Rider's actual Zwift category (not event pen)"
                   >
                     Rider Cat
@@ -591,6 +593,12 @@ export default function RaceDetailStandings({
                     : isFav
                       ? 'bg-amber-400/15'
                       : 'hover:bg-slate-900/50';
+                const stickyCellBg =
+                  isTarget || isYou
+                    ? 'bg-[color-mix(in_srgb,var(--zv-accent)_16%,var(--color-slate-900))]'
+                    : isFav
+                      ? 'bg-[color-mix(in_srgb,#fbbf24_15%,var(--color-slate-900))]'
+                      : 'bg-slate-900';
                 const nameTone =
                   isTarget || isYou
                     ? 'text-accent-text font-bold'
@@ -683,12 +691,15 @@ export default function RaceDetailStandings({
                       </td>
                     )}
 
-                    <td className="py-2 pr-3 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
+                    <td
+                      className={`sticky left-0 z-10 ${stickyCellBg} py-2 pl-2 pr-3 whitespace-nowrap border-r border-slate-800/80 max-w-[11rem] sm:max-w-[16rem]`}
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
                         {row.riderId > 0 ? (
                           <Link
                             to={`/riders/${row.riderId}`}
-                            className={`hover:underline ${
+                            title={row.name}
+                            className={`truncate hover:underline ${
                               isFav && !isTarget && !isYou
                                 ? 'hover:text-amber-200'
                                 : 'hover:text-accent-text'
@@ -697,15 +708,17 @@ export default function RaceDetailStandings({
                             {row.name}
                           </Link>
                         ) : (
-                          <span className={nameTone}>{row.name}</span>
+                          <span className={`truncate ${nameTone}`} title={row.name}>
+                            {row.name}
+                          </span>
                         )}
                         {isYou && (
-                          <span className="rounded bg-accent/25 px-1.5 py-0.5 text-[10px] font-semibold text-accent-text">
+                          <span className="shrink-0 rounded bg-accent/25 px-1.5 py-0.5 text-[10px] font-semibold text-accent-text">
                             You
                           </span>
                         )}
                         {isTarget && !isYou && (
-                          <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] font-semibold text-accent-text">
+                          <span className="shrink-0 rounded bg-accent/20 px-1.5 py-0.5 text-[10px] font-semibold text-accent-text">
                             Rider
                           </span>
                         )}
@@ -713,7 +726,7 @@ export default function RaceDetailStandings({
                           <span
                             aria-label="Favorited rider"
                             title="Favorited rider"
-                            className="text-amber-300 text-xs"
+                            className="shrink-0 text-amber-300 text-xs"
                           >
                             ★
                           </span>
@@ -722,7 +735,7 @@ export default function RaceDetailStandings({
                     </td>
 
                     {columns.riderCategory && (
-                      <td className="py-2 pr-3 whitespace-nowrap">
+                      <td className="py-2 pl-3 pr-3 whitespace-nowrap">
                         {row.riderCategory ? (
                           <span className="rounded bg-slate-800 border border-slate-700 px-1.5 py-0.5 text-[11px] font-semibold text-slate-200">
                             {row.riderCategory}

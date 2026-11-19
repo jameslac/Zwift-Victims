@@ -12,7 +12,6 @@ export type ColorSchemeId =
 export interface ColorSchemeOption {
   id: ColorSchemeId;
   name: string;
-  badge?: string;
   tagline: string;
   accentHex: string;
   secondaryHex: string;
@@ -24,7 +23,6 @@ export const COLOR_SCHEMES: readonly ColorSchemeOption[] = [
   {
     id: 'emerald',
     name: 'Aero Emerald',
-    badge: 'Default',
     tagline: 'Obsidian carbon with electric mint & cyan telemetry accents',
     accentHex: '#10b981',
     secondaryHex: '#06b6d4',
@@ -34,7 +32,6 @@ export const COLOR_SCHEMES: readonly ColorSchemeOption[] = [
   {
     id: 'gold',
     name: 'Black & Gold',
-    badge: 'Championship',
     tagline: 'Pure pitch-black obsidian with metallic championship gold & amber',
     accentHex: '#eab308',
     secondaryHex: '#f59e0b',
@@ -44,7 +41,6 @@ export const COLOR_SCHEMES: readonly ColorSchemeOption[] = [
   {
     id: 'cyberpunk',
     name: 'Neon Synthwave',
-    badge: 'Neon',
     tagline: 'Midnight void with electric hot-pink magenta & neon laser cyan',
     accentHex: '#ff2a85',
     secondaryHex: '#00f0ff',
@@ -54,7 +50,6 @@ export const COLOR_SCHEMES: readonly ColorSchemeOption[] = [
   {
     id: 'laser',
     name: 'Neon Cyber Cyan',
-    badge: 'Neon',
     tagline: 'Deep tech carbon with hyper-neon electric cyan & acid lime',
     accentHex: '#06b6d4',
     secondaryHex: '#a3e635',
@@ -64,7 +59,6 @@ export const COLOR_SCHEMES: readonly ColorSchemeOption[] = [
   {
     id: 'volt',
     name: 'Neon Volt',
-    badge: 'Neon',
     tagline: 'Matte zinc carbon with high-visibility acid volt-lime & emerald',
     accentHex: '#84cc16',
     secondaryHex: '#10b981',
