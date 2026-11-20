@@ -39,6 +39,8 @@ All browser calls hit same-origin `/api/*` endpoints exposed by [worker/index.ts
 | `GET /api/zwift/api/profiles/{riderId}/activities` | `start`, `limit` | `us-or-rly101.zwift.com` | `fetchRiderActivities` (`zwiftCore.ts`) | Returns activity feed (`ZwiftActivity[]`). |
 | `GET /api/zwift/api/profiles/{riderId}/activities/{activityId}` | — | `us-or-rly101.zwift.com` | `fetchRiderActivityDetail` (`zwiftCore.ts`) | Alternate rider-scoped activity detail path (used as fallback on `ActivityDetailPage`). |
 | `GET /api/zwift/api/activities/{activityIdStr}` | `fetchSnapshots`, `fetchEvent` | `us-or-rly101.zwift.com` | `fetchActivityDetail` (`zwiftCore.ts`) | Calls with `?fetchSnapshots=true&fetchEvent=true`; always pass `id_str` (64-bit safe). |
+| `GET /api/zwift/activities/{activityIdStr}/fit` | `riderId` (optional) | `us-or-rly101.zwift.com` → Zwift S3 bucket | `fetchActivityFitFile` (`zwiftCore.ts`) | Resolves authoritative `fitFileBucket`/`fitFileKey` server-side (with `/api/profiles/{riderId}/activities/{id}` fallback), downloads `.fit` from allowlisted Zwift S3 hosts without forwarding `Authorization` to S3, and verifies the `.FIT` signature. |
+| `GET /api/zwift/activities/{activityIdStr}/fitness-data` | `riderId` (optional) | `us-or-rly101.zwift.com` → `fitnessData.fullDataUrl` | `fetchActivityFitnessData` (`zwiftCore.ts`) | Resolves `fitnessData.fullDataUrl` (or `smallDataUrl`) server-side on allowlisted `zwift.com` / `amazonaws.com` / `cloudfront.net` hosts (forwarding `Authorization` only to `*.zwift.com`) as a telemetry JSON fallback. |
 | `GET /api/zwift/api/race-results/entries` | `event_subgroup_id` | `us-or-rly101.zwift.com` | `fetchRaceResults` (`zwiftCore.ts`) | Unfiltered finisher entries for a category subgroup. |
 | `GET /api/zwift/api/public/events/{eventId}` | — | `us-or-rly101.zwift.com` | `fetchPublicEvent` (`zwiftCore.ts`) | Event details and `eventSubgroups` mapping. |
 | `GET /api/zwiftpower/cache3/profile/{riderId}_all.json` | — | `zwiftpower.com` | `fetchZwiftPowerRaces` (`zwiftPower.ts`) | Full rider race history; Worker seeds CloudFront cookies and retries once on `403`. |
@@ -168,8 +170,8 @@ When the Zwift Core API returns an activity or race result, it identifies routes
    - **Segments:** Sprint and KOM arches per world.
 2. **Zwift Equipment / Frame & Wheel IDs (`bikes` & `wheels` lookup tables):**
    - Game asset dictionaries extracted from `ZwiftApp` log/asset files that map `frameId` and `wheelId` integers to frame/wheel names, star ratings, and community-tested CdA (aero) and weight parameters (similar to ZwiftER / ZwiftInsider speed test data).
-3. **`.fit` File Parsing (Client-Side in Browser):**
-   - Using `@garmin/fitsdk` (official Garmin FIT TypeScript SDK) in the browser to parse `.fit` files downloaded from Zwift's S3 bucket (`fitFileBucket` / `fitFileKey` from `/api/profiles/{riderId}/activities`) for second-by-second power, draft savings, heart rate, cadence, and gradient analysis.
+3. **`.fit` File Parsing & Telemetry Export (Client-Side in Browser):**
+   - Using `@garmin/fitsdk` (official Garmin FIT TypeScript SDK) and `fflate` in [src/lib/fitTelemetry.ts](../src/lib/fitTelemetry.ts) to decode `.fit` files fetched via `/api/zwift/activities/{id}/fit` (with `/api/zwift/activities/{id}/fitness-data` JSON fallback) into per-second/resampled RFC-4180 CSVs, combined multi-activity CSVs, raw `.fit` downloads, ZIP bundles, and Gemini/Claude context summaries.
 
 ---
 

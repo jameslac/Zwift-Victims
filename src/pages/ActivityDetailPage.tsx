@@ -7,7 +7,9 @@ import {
 } from '../api/zwiftCore';
 import type { ZwiftActivity, ZwiftActivityDetail, ZwiftProfile } from '../api/zwiftCore';
 import { useAuth } from '../auth/AuthContext';
+import ActivityExportModal from '../components/ActivityExportModal';
 import { ActivityTypeBadge, AppHeader, MetricGrid, RaceExternalLinks } from '../components/RaceUi';
+import type { ActivityExportItem, ActivityExportRiderContext } from '../lib/fitTelemetry';
 import {
   classifyActivity,
   decodeHtmlEntities,
@@ -25,6 +27,7 @@ import {
   formatWeight,
 } from '../lib/units';
 import { useUnits } from '../lib/UnitsContext';
+import { formatRiderCategory } from '../lib/useRiderProfile';
 
 type KeyedState<T> = { key: string; state: AsyncState<T> };
 
@@ -81,6 +84,7 @@ export default function ActivityDetailPage() {
   const [activityTab, setActivityTab] = useState<'overview' | 'physiology' | 'metadata'>(
     'overview',
   );
+  const [exportModalOpen, setExportModalOpen] = useState(false);
 
   useEffect(() => {
     if (!activityKey || targetRiderId === null || !activityId) return;
@@ -332,6 +336,51 @@ export default function ActivityDetailPage() {
 
   const photos = extractActivityPhotos(baseActivity, detail);
 
+  const weightKg = weightGrams != null ? weightGrams / 1000 : undefined;
+  const exportRider: ActivityExportRiderContext = {
+    riderId: targetRiderId,
+    riderName,
+    weightKg,
+    ftpW: activityFtp,
+    category: targetProfile ? formatRiderCategory(targetProfile) : undefined,
+    zrs: targetProfile?.competitionMetrics?.racingScore ?? undefined,
+  };
+  const exportItem: ActivityExportItem = {
+    key: `act-${activityId}`,
+    activityId,
+    eventId: linkedEventId || undefined,
+    riderId: targetRiderId,
+    title,
+    activityTypeLabel: classified.activityTypeLabel,
+    dateSec: Number.isFinite(startMs) ? Math.floor(startMs / 1000) : passedRace?.date,
+    startDateIso: startDate,
+    worldName,
+    routeName: passedRace?.zr?.event?.routeName,
+    category: linkedEventSubgroup,
+    subType: passedRace?.zr?.event?.subType,
+    truePlace: passedRace?.truePlace,
+    fieldSize: passedRace?.fieldSize,
+    zpPlace: passedRace?.zpPlace,
+    durationSec: movingSec !== undefined ? Math.round(movingSec) : undefined,
+    distanceM: distanceMeters,
+    elevationM: elevationMeters,
+    avgPowerW: avgWatts !== undefined ? Math.round(avgWatts) : undefined,
+    normalizedPowerW: normalizedPower !== undefined ? Math.round(normalizedPower) : undefined,
+    maxPowerW: maxWatts !== undefined ? Math.round(maxWatts) : undefined,
+    avgWkg:
+      avgWatts !== undefined && weightKg !== undefined && weightKg > 0
+        ? Math.round((avgWatts / weightKg) * 100) / 100
+        : undefined,
+    avgHrBpm: avgHr !== undefined ? Math.round(avgHr) : undefined,
+    maxHrBpm: maxHr !== undefined ? Math.round(maxHr) : undefined,
+    avgCadenceRpm: avgCadence !== undefined ? Math.round(avgCadence) : undefined,
+    weightKg,
+    ftpW: activityFtp,
+    veloBefore: passedRace?.zr?.velo?.elo?.before,
+    veloAfter: passedRace?.zr?.velo?.elo?.after,
+    sof: passedRace?.zr?.velo?.elo?.eventRating,
+  };
+
   return (
     <main className="min-h-dvh max-w-6xl mx-auto p-4 sm:p-8 pb-24 md:pb-12 space-y-6">
       <AppHeader
@@ -407,15 +456,24 @@ export default function ActivityDetailPage() {
             showLabels
           />
 
-          {linkedEventId && (
-            <Link
-              to={`/riders/${targetRiderId}/races/${encodeURIComponent(linkedEventId)}`}
-              state={passedRace ? { race: passedRace } : undefined}
-              className="inline-flex items-center rounded-lg border border-accent/50 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent-text hover:bg-accent/20 transition-colors"
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setExportModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-accent/60 bg-accent/15 px-3 py-1.5 text-xs font-bold text-accent-text hover:bg-accent/25 transition-colors"
             >
-              View Event Standings &amp; Ratings →
-            </Link>
-          )}
+              <span>Export CSV / FIT</span>
+            </button>
+            {linkedEventId && (
+              <Link
+                to={`/riders/${targetRiderId}/races/${encodeURIComponent(linkedEventId)}`}
+                state={passedRace ? { race: passedRace } : undefined}
+                className="inline-flex items-center rounded-lg border border-accent/50 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent-text hover:bg-accent/20 transition-colors"
+              >
+                View Event Standings &amp; Ratings →
+              </Link>
+            )}
+          </div>
         </div>
 
         {description && (
@@ -715,6 +773,14 @@ export default function ActivityDetailPage() {
             </div>
           )}
         </section>
+      )}
+
+      {exportModalOpen && (
+        <ActivityExportModal
+          onClose={() => setExportModalOpen(false)}
+          rider={exportRider}
+          items={[exportItem]}
+        />
       )}
     </main>
   );

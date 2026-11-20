@@ -26,10 +26,12 @@ import type {
   ZwiftRacingRiderResponse,
 } from '../api/zwiftRacing';
 import { useAuth } from '../auth/AuthContext';
+import ActivityExportModal from '../components/ActivityExportModal';
 import RaceDetailStandings from '../components/RaceDetailStandings';
 import RacePowerCurve from '../components/RacePowerCurve';
 import RaceRatingsSection from '../components/RaceRatingsSection';
 import { AppHeader, MetricGrid, PlacingBadge, RaceExternalLinks } from '../components/RaceUi';
+import type { ActivityExportItem, ActivityExportRiderContext } from '../lib/fitTelemetry';
 import {
   decodeHtmlEntities,
   extractActivityPhotos,
@@ -52,6 +54,7 @@ import {
   formatWeight,
 } from '../lib/units';
 import { useUnits } from '../lib/UnitsContext';
+import { formatRiderCategory } from '../lib/useRiderProfile';
 
 type KeyedState<T> = { key: string; state: AsyncState<T> };
 
@@ -131,6 +134,7 @@ export default function RaceDetailPage() {
   const [raceTab, setRaceTab] = useState<'standings' | 'ratings' | 'power' | 'overview'>(
     'standings',
   );
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const [expectedMode, setExpectedMode] = useState<ExpectedPositionMode>(loadExpectedMode);
   const [penProfilesMap, setPenProfilesMap] = useState<Map<number, ZwiftProfile>>(() => new Map());
   const [visibleCandidateKey, setVisibleCandidateKey] = useState<string>('');
@@ -888,6 +892,76 @@ export default function RaceDetailPage() {
     ? (zrEntry?.event?.subgroupId ?? zrEventPen?.name ?? riderCategory ?? activePen?.category)
     : undefined;
 
+  const avgHrVal =
+    zpNum(bestZpEntry?.avg_hr) ??
+    activityDetail?.avgHeartRate ??
+    matchedActivity?.avgHeartRate ??
+    myCoreEntry?.sensorData?.heartRateData?.avgHeartRate;
+  const maxHrVal =
+    zpNum(bestZpEntry?.max_hr) ??
+    activityDetail?.maxHeartRate ??
+    matchedActivity?.maxHeartRate ??
+    myCoreEntry?.sensorData?.heartRateData?.maxHeartRate;
+  const raceFtpNum = raceFtp !== undefined ? Number(raceFtp) : undefined;
+  const avgWkgNum = avgWkg !== undefined ? Number(avgWkg) : undefined;
+  const exportRider: ActivityExportRiderContext = {
+    riderId: targetRiderId,
+    riderName,
+    weightKg: raceWeightKg,
+    ftpW:
+      raceFtpNum !== undefined && Number.isFinite(raceFtpNum) && raceFtpNum > 0
+        ? raceFtpNum
+        : targetProfile?.ftp,
+    category: targetProfile ? formatRiderCategory(targetProfile) : riderCategory,
+    zrs: coreZrs.score ?? targetProfile?.competitionMetrics?.racingScore ?? undefined,
+  };
+  const exportItem: ActivityExportItem | null = activityIdStr
+    ? {
+        key: `race-${eventId}-${activityIdStr}`,
+        activityId: activityIdStr,
+        eventId,
+        riderId: targetRiderId,
+        title: raceTitle,
+        activityTypeLabel: passedRace?.activityTypeLabel ?? 'Race',
+        dateSec: raceDateSec,
+        startDateIso:
+          activityDetail?.startDate ??
+          matchedActivity?.startDate ??
+          (raceDateSec !== undefined ? new Date(raceDateSec * 1000).toISOString() : undefined),
+        worldName,
+        routeName,
+        category: riderCategory,
+        subType: eventSubType,
+        truePlace: bestVerifiedPlace,
+        fieldSize: truePlace != null ? zrFieldSize : coreFieldSize,
+        zpPlace,
+        durationSec: timeSec !== undefined ? Math.round(timeSec) : undefined,
+        distanceM: eventDistanceMeters,
+        elevationM: elevationMeters,
+        avgPowerW:
+          avgPowerNum !== undefined && Number.isFinite(avgPowerNum)
+            ? Math.round(avgPowerNum)
+            : undefined,
+        normalizedPowerW:
+          npNum !== undefined && Number.isFinite(npNum) ? Math.round(npNum) : undefined,
+        maxPowerW: maxWatts,
+        avgWkg: avgWkgNum !== undefined && Number.isFinite(avgWkgNum) ? avgWkgNum : undefined,
+        avgHrBpm:
+          avgHrVal !== undefined && Number.isFinite(avgHrVal) ? Math.round(avgHrVal) : undefined,
+        maxHrBpm:
+          maxHrVal !== undefined && Number.isFinite(maxHrVal) ? Math.round(maxHrVal) : undefined,
+        avgCadenceRpm: avgCadence,
+        weightKg: raceWeightKg,
+        ftpW:
+          raceFtpNum !== undefined && Number.isFinite(raceFtpNum) && raceFtpNum > 0
+            ? raceFtpNum
+            : undefined,
+        veloBefore: zrEntry?.velo?.elo?.before,
+        veloAfter: zrEntry?.velo?.elo?.after,
+        sof: zrEntry?.velo?.elo?.eventRating,
+      }
+    : null;
+
   return (
     <main className="min-h-dvh max-w-6xl mx-auto p-4 sm:p-8 pb-24 md:pb-12 space-y-6">
       <AppHeader
@@ -952,15 +1026,26 @@ export default function RaceDetailPage() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <RaceExternalLinks
-            zpZid={linkZpZid}
-            zrEventId={linkZrEventId}
-            zrSubgroup={linkZrSubgroup}
-            routeName={routeName}
-            activityId={activityIdStr ?? undefined}
-            align="start"
-            showLabels
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <RaceExternalLinks
+              zpZid={linkZpZid}
+              zrEventId={linkZrEventId}
+              zrSubgroup={linkZrSubgroup}
+              routeName={routeName}
+              activityId={activityIdStr ?? undefined}
+              align="start"
+              showLabels
+            />
+            {exportItem && (
+              <button
+                type="button"
+                onClick={() => setExportModalOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-accent/60 bg-accent/15 px-3 py-1.5 text-xs font-bold text-accent-text hover:bg-accent/25 transition-colors"
+              >
+                <span>Export CSV / FIT</span>
+              </button>
+            )}
+          </div>
 
           {zrEvent?.rules &&
             (zrEvent.rules.powerMeterRequired ||
@@ -1139,6 +1224,14 @@ export default function RaceDetailPage() {
             </div>
           )}
         </section>
+      )}
+
+      {exportModalOpen && exportItem && (
+        <ActivityExportModal
+          onClose={() => setExportModalOpen(false)}
+          rider={exportRider}
+          items={[exportItem]}
+        />
       )}
     </main>
   );

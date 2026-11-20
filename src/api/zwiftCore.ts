@@ -507,3 +507,69 @@ export async function fetchRaceResults(
   if (Array.isArray(data)) return data;
   return Array.isArray(data?.entries) ? data.entries : [];
 }
+
+async function readWorkerErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await res.json()) as { message?: unknown; error?: unknown };
+    if (typeof body?.message === 'string' && body.message.trim()) {
+      return body.message.trim();
+    }
+    if (typeof body?.error === 'string' && body.error.trim()) {
+      return body.error.trim();
+    }
+  } catch {
+    // Ignore non-JSON error payloads
+  }
+  return fallback;
+}
+
+function buildTelemetryUrl(activityIdStr: string, suffix: 'fit' | 'fitness-data', riderId?: number): string {
+  const base = `/api/zwift/activities/${encodeURIComponent(activityIdStr)}/${suffix}`;
+  if (typeof riderId === 'number' && Number.isFinite(riderId) && riderId > 0) {
+    return `${base}?riderId=${Math.floor(riderId)}`;
+  }
+  return base;
+}
+
+export async function fetchActivityFitFile(
+  accessToken: string,
+  activityIdStr: string,
+  riderId?: number,
+): Promise<ArrayBuffer> {
+  const res = await fetch(buildTelemetryUrl(activityIdStr, 'fit', riderId), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (res.status === 401) throw new AuthError('Session expired.');
+  if (!res.ok) {
+    const msg = await readWorkerErrorMessage(
+      res,
+      `Failed to fetch FIT file (${res.status}).`,
+    );
+    throw new Error(msg);
+  }
+  return res.arrayBuffer();
+}
+
+export async function fetchActivityFitnessData(
+  accessToken: string,
+  activityIdStr: string,
+  riderId?: number,
+): Promise<unknown> {
+  const res = await fetch(buildTelemetryUrl(activityIdStr, 'fitness-data', riderId), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (res.status === 401) throw new AuthError('Session expired.');
+  if (!res.ok) {
+    const msg = await readWorkerErrorMessage(
+      res,
+      `Failed to fetch activity fitness stream (${res.status}).`,
+    );
+    throw new Error(msg);
+  }
+  const text = await res.text();
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new Error('Activity fitness stream returned an unexpected non-JSON format.');
+  }
+}

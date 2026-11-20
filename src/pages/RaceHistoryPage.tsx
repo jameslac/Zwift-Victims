@@ -4,6 +4,7 @@ import type { ZwiftProfile } from '../api/zwiftCore';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
 import type { ZwiftRacingRiderResponse } from '../api/zwiftRacing';
 import { useAuth } from '../auth/AuthContext';
+import ActivityExportModal from '../components/ActivityExportModal';
 import { AppHeader, RiderContextBanner } from '../components/AppShell';
 import {
   ActivityTypeBadge,
@@ -11,6 +12,8 @@ import {
   PlacingBadge,
   RaceExternalLinks,
 } from '../components/RaceUi';
+import { mergedRaceToExportItem } from '../lib/fitTelemetry';
+import type { ActivityExportItem, ActivityExportRiderContext } from '../lib/fitTelemetry';
 import { useUnits } from '../lib/UnitsContext';
 import {
   formatGapSeconds,
@@ -24,7 +27,11 @@ import {
 import type { ActivityType, AsyncState, MergedRace } from '../lib/raceHistory';
 import { formatDistance, formatDurationMs, formatElevation } from '../lib/units';
 import type { UnitSystem } from '../lib/units';
-import { formatRiderName, useRiderProfile } from '../lib/useRiderProfile';
+import {
+  formatRiderCategory,
+  formatRiderName,
+  useRiderProfile,
+} from '../lib/useRiderProfile';
 import { useRiderRaceHistory } from '../lib/useRiderRaceHistory';
 
 type ActivityTypeFilter = 'all' | ActivityType;
@@ -51,16 +58,23 @@ function MergedRaceCard({
   profileId,
   units,
   riderWeightGrams,
+  selectMode = false,
+  selected = false,
+  onToggleSelect,
 }: {
   race: MergedRace;
   profileId: number;
   units: UnitSystem;
   riderWeightGrams?: number;
+  selectMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (key: string) => void;
 }) {
   const { zp, zr, activity } = race;
   const activityType: ActivityType = race.activityType ?? 'race';
   const activityTypeLabel = race.activityTypeLabel ?? 'Race';
   const isStandaloneCore = !zp && !zr && Boolean(activity);
+  const selectable = Boolean(race.activityId);
 
   const coreMovingSec =
     typeof activity?.movingTimeInMs === 'number' && activity.movingTimeInMs > 0
@@ -129,21 +143,42 @@ function MergedRaceCard({
   const mainBody = (
     <>
       <div className="flex items-start justify-between gap-2.5">
-        <div className="min-w-0 flex-1">
-          <h3 className="font-bold text-base group-hover:text-accent-text transition-colors leading-snug break-words">
-            {race.title}
-          </h3>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {formatUnixSeconds(race.date)}
-            {zr?.event?.subType ? ` · ${zr.event.subType}` : ''}
-            {zr?.event?.routeName ? ` · ${zr.event.routeName}` : ''}
-            {!zr?.event?.routeName && worldName ? ` · ${worldName}` : ''}
-            {zp?.tname ? ` · Team ${zp.tname}` : ''}
-            {race.eventId ? ` · event ${race.eventId}` : ''}
-            {!race.eventId && race.activityId ? ` · activity ${race.activityId}` : ''}
-          </p>
+        <div className="min-w-0 flex-1 flex items-start gap-2.5">
+          {selectMode && (
+            <span
+              aria-hidden="true"
+              className={`mt-0.5 inline-flex items-center justify-center w-5 h-5 rounded-md border text-xs font-extrabold shrink-0 transition-colors ${
+                !selectable
+                  ? 'border-slate-700 bg-slate-900/50 text-slate-600'
+                  : selected
+                    ? 'border-accent bg-accent text-white'
+                    : 'border-slate-500 bg-slate-900 text-transparent'
+              }`}
+            >
+              {selectable && selected ? '✓' : ''}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <h3 className="font-bold text-base group-hover:text-accent-text transition-colors leading-snug break-words">
+              {race.title}
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {formatUnixSeconds(race.date)}
+              {zr?.event?.subType ? ` · ${zr.event.subType}` : ''}
+              {zr?.event?.routeName ? ` · ${zr.event.routeName}` : ''}
+              {!zr?.event?.routeName && worldName ? ` · ${worldName}` : ''}
+              {zp?.tname ? ` · Team ${zp.tname}` : ''}
+              {race.eventId ? ` · event ${race.eventId}` : ''}
+              {!race.eventId && race.activityId ? ` · activity ${race.activityId}` : ''}
+            </p>
+          </div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-1.5 shrink-0 ml-auto">
+          {selectMode && !selectable && (
+            <span className="rounded-full bg-slate-800/90 border border-slate-700 px-2 py-0.5 text-[11px] font-medium text-slate-400">
+              No FIT link
+            </span>
+          )}
           {category && (
             <span className="rounded-full bg-slate-800 border border-slate-700 px-2 py-0.5 text-xs font-bold text-slate-200">
               Cat {category}
@@ -253,13 +288,35 @@ function MergedRaceCard({
     </>
   );
 
+  const cardBorderClass = selectMode
+    ? selectable
+      ? selected
+        ? 'border-accent ring-1 ring-accent/50'
+        : 'border-slate-600/80 hover:border-accent/70'
+      : 'border-slate-700/60 opacity-65'
+    : detailPath
+      ? 'border-slate-600/80 hover:border-accent/80'
+      : 'border-slate-600/80';
+
   return (
     <article
-      className={`rounded-2xl bg-slate-950/95 border-2 border-slate-600/80 border-l-4 border-l-accent shadow-lg shadow-black/50 p-4 sm:p-5 space-y-3.5 ${
-        detailPath ? 'hover:border-accent/80 transition-colors' : ''
-      }`}
+      className={`rounded-2xl bg-slate-950/95 border-2 border-l-4 border-l-accent shadow-lg shadow-black/50 p-4 sm:p-5 space-y-3.5 transition-colors ${cardBorderClass}`}
     >
-      {detailPath ? (
+      {selectMode ? (
+        selectable ? (
+          <button
+            type="button"
+            onClick={() => onToggleSelect?.(race.key)}
+            aria-pressed={selected}
+            aria-label={`${selected ? 'Deselect' : 'Select'} ${race.title} for export`}
+            className="block w-full text-left space-y-3 group focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-lg"
+          >
+            {mainBody}
+          </button>
+        ) : (
+          <div className="space-y-3">{mainBody}</div>
+        )
+      ) : detailPath ? (
         <Link
           to={detailPath}
           state={{ race }}
@@ -313,6 +370,7 @@ function MergedTab({
   profileId,
   units,
   riderWeightGrams,
+  riderContext,
 }: {
   zpState: AsyncState<ZwiftPowerRaceEntry[]>;
   zrState: AsyncState<ZwiftRacingRiderResponse>;
@@ -325,9 +383,13 @@ function MergedTab({
   profileId: number;
   units: UnitSystem;
   riderWeightGrams?: number;
+  riderContext: ActivityExportRiderContext;
 }) {
   const [typeFilter, setTypeFilter] = useState<ActivityTypeFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
+  const [exportModalOpen, setExportModalOpen] = useState(false);
 
   const summary = useMemo(() => summarize(mergedRaces), [mergedRaces]);
 
@@ -361,11 +423,44 @@ function MergedTab({
     [mergedActivities, typeFilter, trimmedQuery],
   );
 
+  const visibleExportableKeys = useMemo(
+    () => filteredActivities.filter((r) => Boolean(r.activityId)).map((r) => r.key),
+    [filteredActivities],
+  );
+  const visibleUnmatchedCount = filteredActivities.length - visibleExportableKeys.length;
+
+  const selectedExportItems = useMemo(() => {
+    const items: ActivityExportItem[] = [];
+    for (const race of mergedActivities) {
+      if (!selectedKeys.has(race.key)) continue;
+      const item = mergedRaceToExportItem(race, profileId, riderContext);
+      if (item) items.push(item);
+    }
+    return items;
+  }, [mergedActivities, selectedKeys, profileId, riderContext]);
+
   const hasActiveFilter = typeFilter !== 'all' || trimmedQuery !== '';
 
   function resetFilters() {
     setTypeFilter('all');
     setSearchQuery('');
+  }
+
+  function handleToggleSelect(key: string) {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function handleSelectVisible() {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      for (const k of visibleExportableKeys) next.add(k);
+      return next;
+    });
   }
 
   const allSourcesLoading =
@@ -398,7 +493,7 @@ function MergedTab({
   ];
 
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 ${selectMode ? 'pb-16' : ''}`}>
       {(zpState.status === 'error' ||
         zrState.status === 'error' ||
         activitiesState.status === 'error') && (
@@ -472,15 +567,29 @@ function MergedTab({
             })}
           </div>
 
-          <div className="relative sm:w-64">
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Filter by title, route, cat, team…"
-              aria-label="Filter activities"
-              className="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-accent"
-            />
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+            <div className="relative flex-1 sm:w-64">
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Filter by title, route, cat, team…"
+                aria-label="Filter activities"
+                className="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-accent"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectMode((prev) => !prev)}
+              aria-pressed={selectMode}
+              className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${
+                selectMode
+                  ? 'bg-accent border-accent text-white'
+                  : 'bg-slate-900 border-slate-700 text-slate-200 hover:border-accent/60 hover:text-accent-text'
+              }`}
+            >
+              {selectMode ? 'Done Selecting' : 'Select & Export'}
+            </button>
           </div>
         </div>
 
@@ -500,6 +609,48 @@ function MergedTab({
             </button>
           )}
         </div>
+
+        {selectMode && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800/80 pt-2.5 text-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={visibleExportableKeys.length === 0}
+                onClick={handleSelectVisible}
+                className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:border-accent/60 hover:text-accent-text disabled:opacity-45 transition-colors"
+              >
+                Select visible ({visibleExportableKeys.length})
+              </button>
+              {selectedExportItems.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedKeys(new Set())}
+                  className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs font-semibold text-slate-300 hover:text-white transition-colors"
+                >
+                  Clear ({selectedExportItems.length})
+                </button>
+              )}
+            </div>
+            {visibleUnmatchedCount > 0 && (
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                <span>
+                  {visibleUnmatchedCount} older{' '}
+                  {visibleUnmatchedCount === 1 ? 'entry needs' : 'entries need'} Zwift Feed loaded
+                </span>
+                {hasMoreActivities && (
+                  <button
+                    type="button"
+                    disabled={loadingMoreActivities}
+                    onClick={onLoadMoreActivities}
+                    className="font-semibold text-accent-text hover:underline disabled:opacity-50"
+                  >
+                    {loadingMoreActivities ? 'Loading…' : 'Load older'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {filteredActivities.length === 0 ? (
@@ -528,6 +679,9 @@ function MergedTab({
               profileId={profileId}
               units={units}
               riderWeightGrams={riderWeightGrams}
+              selectMode={selectMode}
+              selected={selectedKeys.has(race.key)}
+              onToggleSelect={handleToggleSelect}
             />
           ))}
         </div>
@@ -544,6 +698,65 @@ function MergedTab({
             {loadingMoreActivities ? 'Loading older activities…' : 'Load older Zwift activities'}
           </button>
         </div>
+      )}
+
+      {selectMode && (
+        <div className="fixed bottom-16 md:bottom-5 inset-x-0 z-40 px-3 sm:px-6 pointer-events-none">
+          <div className="max-w-3xl mx-auto pointer-events-auto rounded-2xl border border-accent/60 bg-slate-950/95 backdrop-blur-xl shadow-2xl shadow-black/70 px-4 py-3 flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-100">
+              <span className="inline-flex items-center justify-center rounded-full bg-accent/20 border border-accent/50 px-2.5 py-0.5 text-xs font-extrabold text-accent-text tabular-nums">
+                {selectedExportItems.length}
+              </span>
+              <span>
+                {selectedExportItems.length === 1 ? 'activity selected' : 'activities selected'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 ml-auto">
+              {selectedExportItems.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedKeys(new Set())}
+                  className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white"
+                >
+                  Clear
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectMode(false);
+                  setSelectedKeys(new Set());
+                }}
+                className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={selectedExportItems.length === 0}
+                onClick={() => setExportModalOpen(true)}
+                className="rounded-xl bg-accent hover:bg-accent-hover px-4 py-1.5 text-xs sm:text-sm font-bold text-white shadow disabled:opacity-45 transition-colors"
+              >
+                Export CSV / FIT ({selectedExportItems.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {exportModalOpen && selectedExportItems.length > 0 && (
+        <ActivityExportModal
+          onClose={() => setExportModalOpen(false)}
+          rider={riderContext}
+          items={selectedExportItems}
+          onRemoveItem={(key) =>
+            setSelectedKeys((prev) => {
+              const next = new Set(prev);
+              next.delete(key);
+              return next;
+            })
+          }
+        />
       )}
     </div>
   );
@@ -572,6 +785,20 @@ function RiderRaceHistoryView({
   });
 
   const riderName = formatRiderName(profile);
+  const riderContext = useMemo<ActivityExportRiderContext>(
+    () => ({
+      riderId: profile.id,
+      riderName,
+      weightKg:
+        typeof profile.weight === 'number' && profile.weight > 0
+          ? profile.weight / 1000
+          : undefined,
+      ftpW: typeof profile.ftp === 'number' && profile.ftp > 0 ? profile.ftp : undefined,
+      category: formatRiderCategory(profile),
+      zrs: profile.competitionMetrics?.racingScore ?? undefined,
+    }),
+    [profile, riderName],
+  );
 
   return (
     <main className="min-h-dvh max-w-5xl mx-auto p-4 sm:p-8 pb-24 md:pb-12 space-y-6">
@@ -617,6 +844,7 @@ function RiderRaceHistoryView({
           profileId={profile.id}
           units={units}
           riderWeightGrams={profile.weight}
+          riderContext={riderContext}
         />
       </section>
     </main>
