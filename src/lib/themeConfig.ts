@@ -19,7 +19,6 @@ export interface ColorSchemeOption {
   tagline: string;
   accentHex: string;
   secondaryHex: string;
-  tertiaryHex?: string;
   surfaceHex: string;
   cardHex: string;
 }
@@ -64,10 +63,9 @@ export const COLOR_SCHEMES: readonly ColorSchemeOption[] = [
   {
     id: 'jchillz',
     name: 'JChillz Cryo-HUD',
-    tagline: 'Deep obsidian & frost white with electric ice cyan, arctic mint & cryo violet',
+    tagline: 'Deep obsidian & crisp frost white with electric ice cyan core glow',
     accentHex: '#00f0ff',
-    secondaryHex: '#8a2be2',
-    tertiaryHex: '#00ffaa',
+    secondaryHex: '#f4faff',
     surfaceHex: '#0b0f19',
     cardHex: '#111827',
   },

@@ -131,7 +131,6 @@ export function ThemePreferencesModal({ onClose }: { onClose: () => void }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
           {COLOR_SCHEMES.map((scheme) => {
             const active = colorScheme === scheme.id;
-            const dotSize = scheme.tertiaryHex ? 'w-3 h-3' : 'w-3.5 h-3.5';
             return (
               <button
                 key={scheme.id}
@@ -150,19 +149,13 @@ export function ThemePreferencesModal({ onClose }: { onClose: () => void }) {
                 >
                   <div className="flex -space-x-1">
                     <span
-                      className={`${dotSize} rounded-full border border-black/40`}
+                      className="w-3.5 h-3.5 rounded-full border border-black/40"
                       style={{ backgroundColor: scheme.accentHex }}
                     />
                     <span
-                      className={`${dotSize} rounded-full border border-black/40`}
+                      className="w-3.5 h-3.5 rounded-full border border-black/40"
                       style={{ backgroundColor: scheme.secondaryHex }}
                     />
-                    {scheme.tertiaryHex && (
-                      <span
-                        className={`${dotSize} rounded-full border border-black/40`}
-                        style={{ backgroundColor: scheme.tertiaryHex }}
-                      />
-                    )}
                   </div>
                 </div>
                 <div className="min-w-0 flex-1">
@@ -280,7 +273,7 @@ export function AppHeader({
               <span
                 className="inline-flex items-center justify-center w-8 h-8 rounded-xl text-white font-black text-sm shadow-md"
                 style={{
-                  background: `linear-gradient(135deg, ${currentScheme.accentHex}, ${currentScheme.secondaryHex})`,
+                  background: 'linear-gradient(135deg, var(--zv-accent), var(--zv-accent-secondary))',
                 }}
               >
                 Z
@@ -462,7 +455,7 @@ export function AppHeader({
                   <span
                     className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-white font-black text-xs"
                     style={{
-                      background: `linear-gradient(135deg, ${currentScheme.accentHex}, ${currentScheme.secondaryHex})`,
+                      background: 'linear-gradient(135deg, var(--zv-accent), var(--zv-accent-secondary))',
                     }}
                   >
                     Z
@@ -619,12 +612,6 @@ export function AppHeader({
                             className="w-2.5 h-2.5 rounded-full shrink-0"
                             style={{ backgroundColor: scheme.secondaryHex }}
                           />
-                          {scheme.tertiaryHex && (
-                            <span
-                              className="w-2.5 h-2.5 rounded-full shrink-0"
-                              style={{ backgroundColor: scheme.tertiaryHex }}
-                            />
-                          )}
                         </div>
                         <span className="text-[10px] font-bold text-slate-200 leading-tight truncate">
                           {scheme.name.replace('Neon ', '').replace('Classic ', '')}

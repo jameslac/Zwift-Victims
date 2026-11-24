@@ -91,11 +91,10 @@
 [data-theme="jchillz"] {
   --zv-accent: #008299;
   --zv-accent-hover: #006b80;
-  --zv-accent-secondary: #8a2be2;
+  --zv-accent-secondary: #00f0ff;
   --zv-accent-text: #00f0ff;
-  --zv-glow-primary: rgba(0, 240, 255, 0.18);
-  --zv-glow-secondary: rgba(138, 43, 226, 0.18);
-  --zv-glow-tertiary: rgba(0, 255, 170, 0.12);
+  --zv-glow-primary: rgba(0, 240, 255, 0.2);
+  --zv-glow-secondary: rgba(244, 250, 255, 0.1);
 
   --color-slate-950: #0b0f19;
   --color-slate-900: #111827;
@@ -278,7 +277,6 @@ body {
 body {
   background-image:
     radial-gradient(ellipse 80% 50% at 15% -10%, var(--zv-glow-primary, rgba(16, 185, 129, 0.14)), transparent),
-    radial-gradient(ellipse 65% 45% at 85% -5%, var(--zv-glow-secondary, rgba(6, 182, 212, 0.1)), transparent),
-    radial-gradient(ellipse 55% 40% at 50% 105%, var(--zv-glow-tertiary, transparent), transparent);
+    radial-gradient(ellipse 65% 45% at 85% -5%, var(--zv-glow-secondary, rgba(6, 182, 212, 0.1)), transparent);
   background-attachment: fixed;
 }
