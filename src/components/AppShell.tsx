@@ -271,7 +271,7 @@ export function AppHeader({
               className="inline-flex items-center gap-2.5 font-extrabold text-base sm:text-lg tracking-tight text-slate-100 hover:opacity-90 transition-opacity shrink-0"
             >
               <span
-                className="inline-flex items-center justify-center w-8 h-8 rounded-xl text-white font-black text-sm shadow-md"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-xl text-accent-foreground font-black text-sm shadow-md"
                 style={{
                   background: 'linear-gradient(135deg, var(--zv-accent), var(--zv-accent-secondary))',
                 }}
@@ -314,7 +314,7 @@ export function AppHeader({
                   aria-current={active ? 'page' : undefined}
                   className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all ${
                     active
-                      ? 'bg-accent text-white shadow-sm'
+                      ? 'bg-accent text-accent-foreground shadow-sm'
                       : 'text-slate-300 hover:text-white hover:bg-slate-800/70'
                   }`}
                 >
@@ -324,7 +324,7 @@ export function AppHeader({
                     <span
                       className={`rounded-full px-1.5 py-0.2 text-[10px] font-extrabold tabular-nums ${
                         active
-                          ? 'bg-black/25 text-white'
+                          ? 'bg-black/25 text-accent-foreground'
                           : 'bg-slate-800 text-slate-300 border border-slate-700'
                       }`}
                     >
@@ -383,7 +383,7 @@ export function AppHeader({
                 aria-pressed={units === 'metric'}
                 className={`rounded-lg px-2 py-1 font-bold transition-colors ${
                   units === 'metric'
-                    ? 'bg-accent text-white'
+                    ? 'bg-accent text-accent-foreground'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -395,7 +395,7 @@ export function AppHeader({
                 aria-pressed={units === 'imperial'}
                 className={`rounded-lg px-2 py-1 font-bold transition-colors ${
                   units === 'imperial'
-                    ? 'bg-accent text-white'
+                    ? 'bg-accent text-accent-foreground'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -453,7 +453,7 @@ export function AppHeader({
               <div className="flex items-center justify-between border-b border-slate-800 pb-3.5">
                 <div className="flex items-center gap-2 font-extrabold text-base text-slate-100">
                   <span
-                    className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-white font-black text-xs"
+                    className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-accent-foreground font-black text-xs"
                     style={{
                       background: 'linear-gradient(135deg, var(--zv-accent), var(--zv-accent-secondary))',
                     }}
@@ -490,7 +490,7 @@ export function AppHeader({
                   <button
                     type="submit"
                     disabled={!/^\d+$/.test(lookupId.trim())}
-                    className="rounded-xl bg-accent px-3.5 py-2 text-sm font-bold text-white disabled:opacity-40"
+                    className="rounded-xl bg-accent px-3.5 py-2 text-sm font-bold text-accent-foreground disabled:opacity-40"
                   >
                     Go
                   </button>
@@ -510,7 +510,7 @@ export function AppHeader({
                       to={item.to}
                       onClick={() => setDrawerOpen(false)}
                       className={`flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-bold transition-colors ${
-                        active ? 'bg-accent text-white' : 'text-slate-200 hover:bg-slate-800'
+                        active ? 'bg-accent text-accent-foreground' : 'text-slate-200 hover:bg-slate-800'
                       }`}
                     >
                       <span className="flex items-center gap-2.5">
@@ -520,7 +520,7 @@ export function AppHeader({
                       {item.badge !== undefined && (
                         <span
                           className={`rounded-full px-2 py-0.5 text-xs font-extrabold ${
-                            active ? 'bg-black/25 text-white' : 'bg-slate-800 text-slate-300'
+                            active ? 'bg-black/25 text-accent-foreground' : 'bg-slate-800 text-slate-300'
                           }`}
                         >
                           {item.badge}
@@ -551,7 +551,7 @@ export function AppHeader({
                     onClick={() => onUnitsChange('metric')}
                     className={`rounded-lg py-1.5 text-xs font-bold transition-colors ${
                       units === 'metric'
-                        ? 'bg-accent text-white'
+                        ? 'bg-accent text-accent-foreground'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
@@ -562,7 +562,7 @@ export function AppHeader({
                     onClick={() => onUnitsChange('imperial')}
                     className={`rounded-lg py-1.5 text-xs font-bold transition-colors ${
                       units === 'imperial'
-                        ? 'bg-accent text-white'
+                        ? 'bg-accent text-accent-foreground'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
@@ -661,7 +661,7 @@ export function AppHeader({
                 <div className="relative flex items-center justify-center">
                   {item.icon}
                   {item.badge !== undefined && (
-                    <span className="absolute -top-1.5 -right-3.5 rounded-full bg-accent px-1.5 py-0.1 text-[9px] font-extrabold text-white tabular-nums shadow">
+                    <span className="absolute -top-1.5 -right-3.5 rounded-full bg-accent px-1.5 py-0.1 text-[9px] font-extrabold text-accent-foreground tabular-nums shadow">
                       {item.badge}
                     </span>
                   )}

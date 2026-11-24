@@ -360,7 +360,7 @@ export default function RaceDetailStandings({
                 type="button"
                 onClick={() => handleSplitsUnit(u)}
                 className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
-                  splitsUnit === u ? 'bg-accent text-white' : 'text-slate-300 hover:text-white'
+                  splitsUnit === u ? 'bg-accent text-accent-foreground' : 'text-slate-300 hover:text-white'
                 }`}
               >
                 {u === 'w' ? 'W' : 'W/kg'}
@@ -424,7 +424,7 @@ export default function RaceDetailStandings({
                 onClick={() => onSelectPen(pen)}
                 className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
                   isActive
-                    ? 'bg-accent border-accent text-white'
+                    ? 'bg-accent border-accent text-accent-foreground'
                     : 'bg-slate-950 border-slate-700 text-slate-300 hover:bg-slate-800'
                 }`}
               >

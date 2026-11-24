@@ -292,7 +292,7 @@ export default function ProfilePage({
               onClick={() => setSubTab(tab.id)}
               className={`rounded-xl py-2.5 px-2 sm:px-3 text-xs sm:text-sm font-bold transition-all ${
                 active
-                  ? 'bg-accent text-white shadow'
+                  ? 'bg-accent text-accent-foreground shadow'
                   : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
               }`}
             >

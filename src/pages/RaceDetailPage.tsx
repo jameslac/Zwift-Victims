@@ -712,7 +712,7 @@ export default function RaceDetailPage() {
           </p>
           <Link
             to="/login"
-            className="inline-block rounded-lg bg-accent px-5 py-2.5 text-sm font-bold text-white"
+            className="inline-block rounded-lg bg-accent px-5 py-2.5 text-sm font-bold text-accent-foreground"
           >
             Log in with Zwift
           </Link>
@@ -728,7 +728,7 @@ export default function RaceDetailPage() {
           <p className="text-red-400 text-sm">Invalid rider or event ID in URL.</p>
           <Link
             to="/"
-            className="inline-block rounded-lg bg-accent px-4 py-2 text-sm font-bold text-white"
+            className="inline-block rounded-lg bg-accent px-4 py-2 text-sm font-bold text-accent-foreground"
           >
             Back to profile
           </Link>
@@ -1107,7 +1107,7 @@ export default function RaceDetailPage() {
               onClick={() => setRaceTab(tab.id)}
               className={`rounded-xl py-2.5 px-3 text-xs sm:text-sm font-bold transition-all ${
                 active
-                  ? 'bg-accent text-white shadow'
+                  ? 'bg-accent text-accent-foreground shadow'
                   : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
               }`}
             >

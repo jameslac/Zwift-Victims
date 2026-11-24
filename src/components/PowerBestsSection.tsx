@@ -316,7 +316,7 @@ export default function PowerBestsSection({
               type="button"
               onClick={() => setUnit('watts')}
               className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
-                unit === 'watts' ? 'bg-accent text-white' : 'text-slate-300 hover:text-white'
+                unit === 'watts' ? 'bg-accent text-accent-foreground' : 'text-slate-300 hover:text-white'
               }`}
             >
               Watts (W)
@@ -325,7 +325,7 @@ export default function PowerBestsSection({
               type="button"
               onClick={() => setUnit('wkg')}
               className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
-                unit === 'wkg' ? 'bg-accent text-white' : 'text-slate-300 hover:text-white'
+                unit === 'wkg' ? 'bg-accent text-accent-foreground' : 'text-slate-300 hover:text-white'
               }`}
             >
               W/kg
@@ -671,7 +671,7 @@ export default function PowerBestsSection({
                     onClick={() => setSelectedSeconds(row.seconds)}
                     className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
                       isActive
-                        ? 'bg-accent text-white'
+                        ? 'bg-accent text-accent-foreground'
                         : 'bg-slate-900 border border-slate-800 text-slate-300 hover:border-slate-600'
                     }`}
                   >

@@ -396,7 +396,7 @@ export default function RacePowerCurve({
               type="button"
               onClick={() => handleUnitChange(u)}
               className={`rounded-md px-3 py-1 text-xs font-medium transition ${
-                unit === u ? 'bg-accent text-white' : 'text-slate-300 hover:text-white'
+                unit === u ? 'bg-accent text-accent-foreground' : 'text-slate-300 hover:text-white'
               }`}
             >
               {u === 'wkg' ? 'W/kg' : 'Watts (W)'}

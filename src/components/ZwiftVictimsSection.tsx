@@ -449,7 +449,7 @@ export default function ZwiftVictimsSection({
           <button
             type="submit"
             disabled={!/^\d+$/.test(rivalIdInput.trim())}
-            className="rounded-xl bg-accent px-3.5 py-1.5 text-xs font-bold text-white disabled:opacity-40"
+            className="rounded-xl bg-accent px-3.5 py-1.5 text-xs font-bold text-accent-foreground disabled:opacity-40"
           >
             Inspect Rider →
           </button>

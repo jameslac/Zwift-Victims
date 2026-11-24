@@ -67,7 +67,7 @@ export default function LoginPage() {
           )}
           <button
             disabled={busy}
-            className="w-full rounded-lg bg-accent hover:bg-accent-hover transition-colors py-2.5 font-bold text-white disabled:opacity-60"
+            className="w-full rounded-lg bg-accent hover:bg-accent-hover transition-colors py-2.5 font-bold text-accent-foreground disabled:opacity-60"
           >
             {busy ? 'Logging in…' : 'Log in'}
           </button>
