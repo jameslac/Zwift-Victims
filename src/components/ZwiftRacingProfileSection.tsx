@@ -1252,7 +1252,7 @@ export default function ZwiftRacingProfileSection({
             onClick={() => setScaleMode('velo2')}
             className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
               effectiveScale === 'velo2'
-                ? 'bg-accent text-white'
+                ? 'bg-accent text-accent-foreground'
                 : 'text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed'
             }`}
           >
@@ -1264,7 +1264,7 @@ export default function ZwiftRacingProfileSection({
             onClick={() => setScaleMode('legacy')}
             className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
               effectiveScale === 'legacy'
-                ? 'bg-accent text-white'
+                ? 'bg-accent text-accent-foreground'
                 : 'text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed'
             }`}
           >
@@ -1286,7 +1286,7 @@ export default function ZwiftRacingProfileSection({
           onClick={() => setZrTab('velo')}
           className={`flex-1 rounded-lg py-1.5 px-2.5 text-xs font-bold transition-colors ${
             zrTab === 'velo'
-              ? 'bg-accent text-white'
+              ? 'bg-accent text-accent-foreground'
               : 'text-slate-400 hover:text-slate-100'
           }`}
         >
@@ -1299,7 +1299,7 @@ export default function ZwiftRacingProfileSection({
           onClick={() => setZrTab('phenotype')}
           className={`flex-1 rounded-lg py-1.5 px-2.5 text-xs font-bold transition-colors ${
             zrTab === 'phenotype'
-              ? 'bg-accent text-white'
+              ? 'bg-accent text-accent-foreground'
               : 'text-slate-400 hover:text-slate-100'
           }`}
         >
@@ -1313,7 +1313,7 @@ export default function ZwiftRacingProfileSection({
             onClick={() => setZrTab('factors')}
             className={`flex-1 rounded-lg py-1.5 px-2.5 text-xs font-bold transition-colors ${
               zrTab === 'factors'
-                ? 'bg-accent text-white'
+                ? 'bg-accent text-accent-foreground'
                 : 'text-slate-400 hover:text-slate-100'
             }`}
           >

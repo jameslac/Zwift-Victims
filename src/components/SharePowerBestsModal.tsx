@@ -337,7 +337,7 @@ export default function SharePowerBestsModal({
               type="button"
               onClick={() => setScope('marked')}
               className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
-                scope === 'marked' ? 'bg-accent text-white' : 'text-slate-300 hover:text-white'
+                scope === 'marked' ? 'bg-accent text-accent-foreground' : 'text-slate-300 hover:text-white'
               }`}
             >
               Marked ({markedRows.length})
@@ -346,7 +346,7 @@ export default function SharePowerBestsModal({
               type="button"
               onClick={() => setScope('all')}
               className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
-                scope === 'all' ? 'bg-accent text-white' : 'text-slate-300 hover:text-white'
+                scope === 'all' ? 'bg-accent text-accent-foreground' : 'text-slate-300 hover:text-white'
               }`}
             >
               All ({allDataRows.length})
@@ -358,7 +358,7 @@ export default function SharePowerBestsModal({
               type="button"
               disabled={busy !== null || rows.length === 0}
               onClick={() => handleExportPng('share')}
-              className="rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-white hover:bg-accent-hover disabled:opacity-50"
+              className="rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-accent-foreground hover:bg-accent-hover disabled:opacity-50"
             >
               {busy === 'share' ? 'Rendering…' : 'Share Image'}
             </button>
@@ -391,7 +391,7 @@ export default function SharePowerBestsModal({
         <div className="rounded-2xl border border-slate-700 bg-slate-950 p-4 sm:p-5 space-y-4">
           <div className="space-y-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="inline-flex items-center rounded-full bg-accent px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
+              <span className="inline-flex items-center rounded-full bg-accent px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-accent-foreground">
                 Zwift Victims
               </span>
               <span className="text-[11px] text-slate-400">Power Bests · {generatedDateLabel}</span>

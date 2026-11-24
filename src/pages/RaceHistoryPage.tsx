@@ -151,7 +151,7 @@ function MergedRaceCard({
                 !selectable
                   ? 'border-slate-700 bg-slate-900/50 text-slate-600'
                   : selected
-                    ? 'border-accent bg-accent text-white'
+                    ? 'border-accent bg-accent text-accent-foreground'
                     : 'border-slate-500 bg-slate-900 text-transparent'
               }`}
             >
@@ -550,14 +550,14 @@ function MergedTab({
                   onClick={() => setTypeFilter(tab.id)}
                   className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors ${
                     active
-                      ? 'bg-accent border-accent text-white'
+                      ? 'bg-accent border-accent text-accent-foreground'
                       : 'bg-slate-900/80 border-slate-700/80 text-slate-300 hover:border-slate-500 hover:text-white'
                   }`}
                 >
                   <span>{tab.label}</span>
                   <span
                     className={`rounded-full px-1.5 py-0.2 text-[11px] ${
-                      active ? 'bg-black/20 text-white' : 'bg-slate-800 text-slate-400'
+                      active ? 'bg-black/20 text-accent-foreground' : 'bg-slate-800 text-slate-400'
                     }`}
                   >
                     {tab.count}
@@ -584,7 +584,7 @@ function MergedTab({
               aria-pressed={selectMode}
               className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${
                 selectMode
-                  ? 'bg-accent border-accent text-white'
+                  ? 'bg-accent border-accent text-accent-foreground'
                   : 'bg-slate-900 border-slate-700 text-slate-200 hover:border-accent/60 hover:text-accent-text'
               }`}
             >
@@ -735,7 +735,7 @@ function MergedTab({
                 type="button"
                 disabled={selectedExportItems.length === 0}
                 onClick={() => setExportModalOpen(true)}
-                className="rounded-xl bg-accent hover:bg-accent-hover px-4 py-1.5 text-xs sm:text-sm font-bold text-white shadow disabled:opacity-45 transition-colors"
+                className="rounded-xl bg-accent hover:bg-accent-hover px-4 py-1.5 text-xs sm:text-sm font-bold text-accent-foreground shadow disabled:opacity-45 transition-colors"
               >
                 Export CSV / FIT ({selectedExportItems.length})
               </button>
@@ -875,7 +875,7 @@ export default function RaceHistoryPage() {
           </p>
           <Link
             to="/"
-            className="inline-block rounded-lg bg-accent px-4 py-2 text-sm font-bold text-white"
+            className="inline-block rounded-lg bg-accent px-4 py-2 text-sm font-bold text-accent-foreground"
           >
             Back to my profile
           </Link>
@@ -891,7 +891,7 @@ export default function RaceHistoryPage() {
           <p className="text-red-400 text-sm">{resolution.message}</p>
           <Link
             to="/"
-            className="inline-block rounded-lg bg-accent px-4 py-2 text-sm font-bold text-white"
+            className="inline-block rounded-lg bg-accent px-4 py-2 text-sm font-bold text-accent-foreground"
           >
             Back to my profile
           </Link>

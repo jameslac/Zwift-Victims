@@ -23,7 +23,7 @@ export default function HomePage() {
           </p>
           <Link
             to="/"
-            className="inline-block rounded-lg bg-accent px-4 py-2 text-sm font-bold text-white"
+            className="inline-block rounded-lg bg-accent px-4 py-2 text-sm font-bold text-accent-foreground"
           >
             Back to my profile
           </Link>
@@ -39,7 +39,7 @@ export default function HomePage() {
           <p className="text-red-400 text-sm">{resolution.message}</p>
           <Link
             to="/"
-            className="inline-block rounded-lg bg-accent px-4 py-2 text-sm font-bold text-white"
+            className="inline-block rounded-lg bg-accent px-4 py-2 text-sm font-bold text-accent-foreground"
           >
             Back to my profile
           </Link>
@@ -62,7 +62,7 @@ export default function HomePage() {
     <main className="min-h-dvh flex items-center justify-center p-6">
       <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-xl text-center space-y-6">
         <div
-          className="inline-flex items-center justify-center w-16 h-16 rounded-2xl text-white font-black text-3xl shadow-lg"
+          className="inline-flex items-center justify-center w-16 h-16 rounded-2xl text-accent-foreground font-black text-3xl shadow-lg"
           style={{
             background: 'linear-gradient(135deg, var(--zv-accent), var(--zv-accent-secondary))',
           }}
@@ -78,7 +78,7 @@ export default function HomePage() {
         </div>
         <Link
           to="/login"
-          className="block w-full rounded-xl bg-accent hover:bg-accent-hover transition-colors py-3 font-bold text-white"
+          className="block w-full rounded-xl bg-accent hover:bg-accent-hover transition-colors py-3 font-bold text-accent-foreground"
         >
           Log in with Zwift
         </Link>

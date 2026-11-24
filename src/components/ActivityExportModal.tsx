@@ -555,7 +555,7 @@ export default function ActivityExportModal({
                     aria-pressed={packaging === 'combined'}
                     className={`rounded-md px-2.5 py-1 font-semibold transition-colors ${
                       packaging === 'combined'
-                        ? 'bg-accent text-white'
+                        ? 'bg-accent text-accent-foreground'
                         : 'text-slate-300 hover:text-white'
                     }`}
                   >
@@ -568,7 +568,7 @@ export default function ActivityExportModal({
                     aria-pressed={packaging === 'separate_zip'}
                     className={`rounded-md px-2.5 py-1 font-semibold transition-colors ${
                       packaging === 'separate_zip'
-                        ? 'bg-accent text-white'
+                        ? 'bg-accent text-accent-foreground'
                         : 'text-slate-300 hover:text-white'
                     }`}
                   >
@@ -601,7 +601,7 @@ export default function ActivityExportModal({
                       onClick={() => setIntervalSec(opt.id)}
                       className={`rounded-md px-2.5 py-1 font-semibold transition-colors ${
                         intervalSec === opt.id
-                          ? 'bg-accent text-white'
+                          ? 'bg-accent text-accent-foreground'
                           : 'text-slate-300 hover:text-white'
                       }`}
                     >
@@ -766,7 +766,7 @@ export default function ActivityExportModal({
               type="button"
               disabled={items.length === 0 || isBusy}
               onClick={() => runExport('download')}
-              className="rounded-xl bg-accent hover:bg-accent-hover px-4 py-2 text-xs sm:text-sm font-bold text-white shadow disabled:opacity-50 transition-colors"
+              className="rounded-xl bg-accent hover:bg-accent-hover px-4 py-2 text-xs sm:text-sm font-bold text-accent-foreground shadow disabled:opacity-50 transition-colors"
             >
               {getPrimaryButtonLabel(format, items.length, packaging, busyMode === 'download')}
             </button>

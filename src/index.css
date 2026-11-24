@@ -3,6 +3,7 @@
 @theme {
   --color-accent: var(--zv-accent, #10b981);
   --color-accent-hover: var(--zv-accent-hover, #059669);
+  --color-accent-foreground: var(--zv-accent-fg, #ffffff);
   --color-accent-secondary: var(--zv-accent-secondary, #06b6d4);
   --color-accent-text: var(--zv-accent-text, #34d399);
 }
@@ -89,22 +90,23 @@
 }
 
 [data-theme="jchillz"] {
-  --zv-accent: #008299;
-  --zv-accent-hover: #006b80;
-  --zv-accent-secondary: #00f0ff;
+  --zv-accent: #00f0ff;
+  --zv-accent-hover: #00d4e6;
+  --zv-accent-fg: #050505;
+  --zv-accent-secondary: #f4faff;
   --zv-accent-text: #00f0ff;
-  --zv-glow-primary: rgba(0, 240, 255, 0.2);
-  --zv-glow-secondary: rgba(244, 250, 255, 0.1);
+  --zv-glow-primary: rgba(0, 240, 255, 0.14);
+  --zv-glow-secondary: rgba(244, 250, 255, 0.05);
 
-  --color-slate-950: #0b0f19;
-  --color-slate-900: #111827;
-  --color-slate-800: #1b253b;
-  --color-slate-700: #283754;
-  --color-slate-600: #3d5278;
-  --color-slate-500: #5f78a3;
-  --color-slate-400: #8ea7cc;
-  --color-slate-300: #c2d6ee;
-  --color-slate-200: #e0efff;
+  --color-slate-950: #000000;
+  --color-slate-900: #0a0a0c;
+  --color-slate-800: #17181c;
+  --color-slate-700: #272930;
+  --color-slate-600: #3f424d;
+  --color-slate-500: #666b78;
+  --color-slate-400: #9da4b2;
+  --color-slate-300: #cbd2dc;
+  --color-slate-200: #e5ebf2;
   --color-slate-100: #f4faff;
 }
 

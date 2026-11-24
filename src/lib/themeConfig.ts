@@ -63,11 +63,11 @@ export const COLOR_SCHEMES: readonly ColorSchemeOption[] = [
   {
     id: 'jchillz',
     name: 'JChillz Cryo-HUD',
-    tagline: 'Deep obsidian & crisp frost white with electric ice cyan core glow',
+    tagline: 'Pitch-black obsidian with electric ice cyan highlights & crisp frost white',
     accentHex: '#00f0ff',
     secondaryHex: '#f4faff',
-    surfaceHex: '#0b0f19',
-    cardHex: '#111827',
+    surfaceHex: '#000000',
+    cardHex: '#0a0a0c',
   },
   {
     id: 'neon_purple',
