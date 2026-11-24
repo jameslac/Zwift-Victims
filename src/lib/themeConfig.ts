@@ -2,6 +2,8 @@ export type ColorSchemeId =
   | 'emerald'
   | 'gold'
   | 'jaguars'
+  | 'okc_thunder'
+  | 'jchillz'
   | 'neon_purple'
   | 'cyberpunk'
   | 'laser'
@@ -48,6 +50,24 @@ export const COLOR_SCHEMES: readonly ColorSchemeOption[] = [
     secondaryHex: '#d7a22a',
     surfaceHex: '#05090b',
     cardHex: '#0b1418',
+  },
+  {
+    id: 'okc_thunder',
+    name: 'OKC Thunder',
+    tagline: 'Thunder blue & sunset orange over midnight navy',
+    accentHex: '#007ac1',
+    secondaryHex: '#ef3b24',
+    surfaceHex: '#040a14',
+    cardHex: '#081629',
+  },
+  {
+    id: 'jchillz',
+    name: 'JChillz Cryo-HUD',
+    tagline: 'Deep obsidian & crisp frost white with electric ice cyan core glow',
+    accentHex: '#00f0ff',
+    secondaryHex: '#f4faff',
+    surfaceHex: '#0b0f19',
+    cardHex: '#111827',
   },
   {
     id: 'neon_purple',

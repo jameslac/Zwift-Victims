@@ -273,7 +273,7 @@ export function AppHeader({
               <span
                 className="inline-flex items-center justify-center w-8 h-8 rounded-xl text-white font-black text-sm shadow-md"
                 style={{
-                  background: `linear-gradient(135deg, ${currentScheme.accentHex}, ${currentScheme.secondaryHex})`,
+                  background: 'linear-gradient(135deg, var(--zv-accent), var(--zv-accent-secondary))',
                 }}
               >
                 Z
@@ -455,7 +455,7 @@ export function AppHeader({
                   <span
                     className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-white font-black text-xs"
                     style={{
-                      background: `linear-gradient(135deg, ${currentScheme.accentHex}, ${currentScheme.secondaryHex})`,
+                      background: 'linear-gradient(135deg, var(--zv-accent), var(--zv-accent-secondary))',
                     }}
                   >
                     Z
