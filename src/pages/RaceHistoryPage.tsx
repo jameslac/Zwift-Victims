@@ -4,7 +4,7 @@ import type { ZwiftProfile } from '../api/zwiftCore';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
 import type { ZwiftRacingRiderResponse } from '../api/zwiftRacing';
 import { useAuth } from '../auth/AuthContext';
-import ActivityExportModal from '../components/ActivityExportModal';
+import LazyActivityExportModal from '../components/LazyActivityExportModal';
 import { AppHeader, RiderContextBanner } from '../components/AppShell';
 import {
   ActivityTypeBadge,
@@ -12,8 +12,8 @@ import {
   PlacingBadge,
   RaceExternalLinks,
 } from '../components/RaceUi';
-import { mergedRaceToExportItem } from '../lib/fitTelemetry';
-import type { ActivityExportItem, ActivityExportRiderContext } from '../lib/fitTelemetry';
+import { mergedRaceToExportItem } from '../lib/activityExport';
+import type { ActivityExportItem, ActivityExportRiderContext } from '../lib/activityExport';
 import { useUnits } from '../lib/UnitsContext';
 import {
   formatGapSeconds,
@@ -745,7 +745,7 @@ function MergedTab({
       )}
 
       {exportModalOpen && selectedExportItems.length > 0 && (
-        <ActivityExportModal
+        <LazyActivityExportModal
           onClose={() => setExportModalOpen(false)}
           rider={riderContext}
           items={selectedExportItems}

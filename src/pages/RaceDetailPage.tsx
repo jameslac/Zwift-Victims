@@ -26,12 +26,12 @@ import type {
   ZwiftRacingRiderResponse,
 } from '../api/zwiftRacing';
 import { useAuth } from '../auth/AuthContext';
-import ActivityExportModal from '../components/ActivityExportModal';
+import LazyActivityExportModal from '../components/LazyActivityExportModal';
 import RaceDetailStandings from '../components/RaceDetailStandings';
 import RacePowerCurve from '../components/RacePowerCurve';
 import RaceRatingsSection from '../components/RaceRatingsSection';
 import { AppHeader, MetricGrid, PlacingBadge, RaceExternalLinks } from '../components/RaceUi';
-import type { ActivityExportItem, ActivityExportRiderContext } from '../lib/fitTelemetry';
+import type { ActivityExportItem, ActivityExportRiderContext } from '../lib/activityExport';
 import {
   decodeHtmlEntities,
   extractActivityPhotos,
@@ -1227,7 +1227,7 @@ export default function RaceDetailPage() {
       )}
 
       {exportModalOpen && exportItem && (
-        <ActivityExportModal
+        <LazyActivityExportModal
           onClose={() => setExportModalOpen(false)}
           rider={exportRider}
           items={[exportItem]}

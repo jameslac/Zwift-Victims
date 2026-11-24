@@ -7,9 +7,9 @@ import {
 } from '../api/zwiftCore';
 import type { ZwiftActivity, ZwiftActivityDetail, ZwiftProfile } from '../api/zwiftCore';
 import { useAuth } from '../auth/AuthContext';
-import ActivityExportModal from '../components/ActivityExportModal';
+import LazyActivityExportModal from '../components/LazyActivityExportModal';
 import { ActivityTypeBadge, AppHeader, MetricGrid, RaceExternalLinks } from '../components/RaceUi';
-import type { ActivityExportItem, ActivityExportRiderContext } from '../lib/fitTelemetry';
+import type { ActivityExportItem, ActivityExportRiderContext } from '../lib/activityExport';
 import {
   classifyActivity,
   decodeHtmlEntities,
@@ -776,7 +776,7 @@ export default function ActivityDetailPage() {
       )}
 
       {exportModalOpen && (
-        <ActivityExportModal
+        <LazyActivityExportModal
           onClose={() => setExportModalOpen(false)}
           rider={exportRider}
           items={[exportItem]}
