@@ -21,7 +21,7 @@ know what already exists.
 
 ## UI Navigation, Sub-Tabbed Layout & Page vs. Section Placement
 We organize the app into distinct top-level pages with **Hybrid Navigation** (fixed 3-tab bottom bar on mobile + segmented top pill bar on desktop + slide-over utility/theme menu in `src/components/AppShell.tsx`) rather than a single long scrolling page:
-- **Profile (`/` & `/riders/:riderId` → `src/pages/ProfilePage.tsx`)**: All things about the rider, organized into a compact Rider Identity Hero + **Sub-Tabs** (`Overview & Bio` | `ZwiftRacing & Phenotype` | `Power Curve & Bests`).
+- **Profile (`/` & `/riders/:riderId` → `src/pages/HomePage.tsx` → `src/pages/ProfilePage.tsx`)**: Landing/rider-resolution wrapper (`HomePage`) rendering all things about the rider (`ProfilePage`), organized into a compact Rider Identity Hero + **Sub-Tabs** (`Overview & Bio` | `ZwiftRacing & Phenotype` | `Power Curve & Bests`).
 - **Race History (`/history` & `/riders/:riderId/history` → `src/pages/RaceHistoryPage.tsx`)**: Activity & race history feed with activity-type sub-tabs (`All`, `Races`, `Group Rides`, `Workouts`, `Free Rides`), keyword search, and click-in links to **Race Detail** (`/races/:eventId`, sub-tabbed into `Standings` | `Ratings & Impact` | `Power Curve` | `Metrics & Photos`) and **Activity Detail** (`/activities/:activityId`, sub-tabbed into `Summary & Photos` | `Effort & Physiology` | `Context & Metadata`).
 - **Victims (`/victims` → `src/pages/VictimsPage.tsx`)**: Favorited rivals and pairwise Head-to-Head Win/Loss records (`src/components/ZwiftVictimsSection.tsx`).
 

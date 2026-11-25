@@ -78,10 +78,11 @@ Zwift-Victims/
 │   └── index.ts              # Cloudflare Worker handling /api/* routes + SPA static asset fallback
 ├── src/                      # Frontend PWA source code
 │   ├── api/                  # Modular API clients (separated by upstream provider)
+│   ├── auth/                 # AuthContext (session tokens & Zwift authentication state)
 │   ├── components/           # Shared UI shell (AppShell) & feature sections
 │   ├── lib/                  # Domain logic, hooks, and theme/layout/favorites contexts
-│   ├── pages/                # Route views (ProfilePage, RaceHistoryPage, VictimsPage, RaceDetailPage, ActivityDetailPage, LoginPage)
-│   ├── App.tsx
+│   ├── pages/                # Route views (HomePage [wrapper for "/" & "/riders/:riderId" → ProfilePage], ProfilePage, RaceHistoryPage, VictimsPage, RaceDetailPage, ActivityDetailPage, LoginPage)
+│   ├── App.tsx               # React Router route definitions & global providers
 │   └── main.tsx
 ├── wrangler.jsonc            # Unified Cloudflare Worker + Static Assets configuration
 ├── vite.config.ts            # Vite + React + Tailwind + PWA configuration
