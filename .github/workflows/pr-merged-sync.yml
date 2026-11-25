@@ -1,0 +1,17 @@
+name: PR Merged Sync
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  sync:
+    uses: jameslac/github-workflows/.github/workflows/pr-merged-sync.yml@main
+    secrets: inherit
+    with:
+      trello_done_list: "Done"
