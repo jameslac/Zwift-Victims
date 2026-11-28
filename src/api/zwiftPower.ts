@@ -114,6 +114,70 @@ function sortRank(entry: ZwiftPowerRaceEntry): number {
   return Number.isFinite(num) && num > 0 ? num : Number.MAX_SAFE_INTEGER;
 }
 
+export interface ZwiftPowerEventListItem {
+  DT_RowId?: string;
+  zid?: string | number;
+  /** Event title (may contain HTML entities) */
+  t?: string;
+  /** Event start timestamp in Unix seconds */
+  tm?: number;
+  /** Distance in METERS (e.g. 18123 = 18.123 km) */
+  km?: number;
+  /** Duration in seconds (string or number) when time-based */
+  dur?: string | number;
+  laps?: string | number;
+  /** Numeric world ID (string or number) */
+  w?: string | number;
+  /** World filter tag (e.g. "WORLD_WATOPIA") */
+  f_w?: string;
+  /** Numeric Zwift route ID */
+  rt?: string | number;
+  /** Route terrain filter tag ("ROUTE_FLAT", "ROUTE_HILLY", etc.) */
+  f_r?: string;
+  /** Space-delimited type tags ("TYPE_RACE", "TYPE_RIDE", "TYPE_WORKOUT", "TYPE_RUN", "TYPE_TIME_TRIAL", "TYPE_TEAM_TIME_TRIAL", "TYPE_WOMENS") */
+  f_t?: string;
+  rtype?: string;
+  /** Comma-separated categories (e.g. "A,B,C,D,E") */
+  cats?: string;
+  /** Comma-separated signup counts matching `cats` */
+  signups?: string;
+  stag?: number;
+  /** Organizer / creator tag (e.g. "ZWIFT") */
+  rid?: string;
+  /** Space-delimited rule filter codes ("R_1", "R_4", "R_7", "R_8", etc.) */
+  f_ru?: string;
+  rules?: string | number;
+  crules?: string | number;
+  cul?: number;
+  lbl?: number;
+  r?: string;
+  tags?: unknown[];
+  recur?: unknown;
+  [key: string]: unknown;
+}
+
+export interface ZwiftPowerEventSignupEntry {
+  zwid?: number;
+  name?: string;
+  /** Pen index (1=A, 2=B, 3=C, 4=D, 5=E) */
+  label?: number | string;
+  div?: number;
+  divw?: number;
+  male?: number;
+  gender?: string;
+  flag?: string;
+  tname?: string;
+  tid?: string | number;
+  ftp?: string | number;
+  w?: string;
+  weight?: ZwiftPowerTuple<string>;
+  rank?: string | number;
+  reg?: number;
+  lead?: number;
+  sweep?: number;
+  [key: string]: unknown;
+}
+
 export async function fetchZwiftPowerEventResults(
   accessToken: string,
   eventId: string | number,
@@ -133,4 +197,53 @@ export async function fetchZwiftPowerEventResults(
       ? payload.data
       : [];
   return [...entries].sort((a, b) => sortRank(a) - sortRank(b));
+}
+
+export async function fetchZwiftPowerEventList(
+  accessToken: string,
+  days: 1 | 3 | 7 = 3,
+): Promise<ZwiftPowerEventListItem[]> {
+  const res = await fetch(`/api/zwiftpower/cache3/lists/0_zwift_event_list_${days}.json`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (res.status === 401) throw new AuthError('Session expired.');
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`Failed to load ZwiftPower event calendar (${res.status}).`);
+  const payload = (await res.json()) as { data?: ZwiftPowerEventListItem[] };
+  return Array.isArray(payload?.data) ? payload.data : [];
+}
+
+export async function fetchZwiftPowerRiderSignups(
+  accessToken: string,
+  riderId: number,
+): Promise<ZwiftPowerEventListItem[]> {
+  const res = await fetch(`/api/zwiftpower/cache3/profile/${riderId}_signups.json`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (res.status === 401) throw new AuthError('Session expired.');
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`Failed to load ZwiftPower signups (${res.status}).`);
+  const payload = (await res.json()) as { data?: ZwiftPowerEventListItem[] };
+  return Array.isArray(payload?.data) ? payload.data : [];
+}
+
+export async function fetchZwiftPowerEventSignups(
+  accessToken: string,
+  eventId: string | number,
+): Promise<ZwiftPowerEventSignupEntry[]> {
+  const res = await fetch(
+    `/api/zwiftpower/cache3/results/${encodeURIComponent(String(eventId))}_signups.json`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  if (res.status === 401) throw new AuthError('Session expired.');
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`Failed to load ZwiftPower event signups (${res.status}).`);
+  const payload = (await res.json()) as
+    | ZwiftPowerEventSignupEntry[]
+    | { data?: ZwiftPowerEventSignupEntry[] };
+  return Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.data)
+      ? payload.data
+      : [];
 }

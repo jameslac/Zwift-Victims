@@ -193,3 +193,62 @@ export function extractZwiftRacingEventData(html: string): Record<string, unknow
 
   return null;
 }
+
+const UPCOMING_EVENT_FIELDS = [
+  'eventId',
+  'time',
+  'title',
+  'routeId',
+  'distance',
+  'elevation',
+  'numLaps',
+  'type',
+  'subType',
+  'staggeredStart',
+  'categories',
+  'signups',
+  'imageUrl',
+  'route',
+  'velo',
+] as const;
+
+export function extractZwiftRacingUpcomingEvents(html: string): Record<string, unknown>[] {
+  const matches = parseTsrMatches(html);
+  let fallbackEvents: unknown[] | null = null;
+  let upcomingEvents: unknown[] | null = null;
+
+  for (const item of matches) {
+    if (!item || typeof item !== 'object') continue;
+    const loaderData = (item as { l?: unknown }).l;
+    if (!loaderData || typeof loaderData !== 'object') continue;
+    const rec = loaderData as Record<string, unknown>;
+    if (!Array.isArray(rec.events)) continue;
+    if (rec.tab === 'upcoming') {
+      upcomingEvents = rec.events;
+      break;
+    }
+    if (!fallbackEvents) {
+      fallbackEvents = rec.events;
+    }
+  }
+
+  const rawList = upcomingEvents ?? fallbackEvents;
+  if (!rawList) return [];
+
+  const result: Record<string, unknown>[] = [];
+  for (const rawItem of rawList) {
+    if (!rawItem || typeof rawItem !== 'object') continue;
+    const cleaned = stripMongooseInternals(rawItem);
+    if (!cleaned || typeof cleaned !== 'object') continue;
+    const rec = cleaned as Record<string, unknown>;
+    const compact: Record<string, unknown> = {};
+    for (const key of UPCOMING_EVENT_FIELDS) {
+      if (rec[key] !== undefined) compact[key] = rec[key];
+    }
+    if (compact.eventId !== undefined || compact.title !== undefined) {
+      result.push(compact);
+    }
+  }
+
+  return result;
+}

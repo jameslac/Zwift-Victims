@@ -1,4 +1,8 @@
-import { extractZwiftRacingData, extractZwiftRacingEventData } from './seroval';
+import {
+  extractZwiftRacingData,
+  extractZwiftRacingEventData,
+  extractZwiftRacingUpcomingEvents,
+} from './seroval';
 
 export interface Env {
   ASSETS: Fetcher;
@@ -23,7 +27,7 @@ const ZWIFT_API_ALLOWLIST = [
   /^\/api\/profiles\/\d+(\/(followees|followers|activities(\/\d+)?))?$/,
   /^\/api\/activities\/\d+$/,
   /^\/api\/race-results\/entries$/,
-  /^\/api\/public\/events\/\d+$/,
+  /^\/api\/public\/events\/(upcoming|\d+)$/,
   /^\/api\/power-curve\/(power-profile|best-all-time|all-time|best)$/,
   /^\/api\/competition-metrics\/\d+$/,
 ];
@@ -36,8 +40,9 @@ const ALLOWED_CORE_QUERY_PARAMS: Record<string, RegExp> = {
 };
 
 const ZWIFTPOWER_ALLOWLIST = [
-  /^\/cache3\/profile\/\d+_all\.json$/,
-  /^\/cache3\/results\/\d+_(view|zwift)\.json$/,
+  /^\/cache3\/lists\/0_zwift_event_list_[137]\.json$/,
+  /^\/cache3\/profile\/\d+_(all|signups)\.json$/,
+  /^\/cache3\/results\/\d+_(view|zwift|signups)\.json$/,
 ];
 
 let cachedZpCookies: string | null = null;
@@ -307,12 +312,23 @@ async function fetchZwiftRacingHtml(upstreamPath: string): Promise<string | Resp
 async function handleZwiftRacing(request: Request, path: string): Promise<Response> {
   if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405);
 
-  const riderMatch = path.match(/^\/riders\/(\d+)$/);
-  const eventMatch = riderMatch ? null : path.match(/^\/events\/(\d+)$/);
-  if (!riderMatch && !eventMatch) return json({ error: 'not_allowed' }, 403);
+  const upcomingEventsMatch = path === '/events';
+  const riderMatch = upcomingEventsMatch ? null : path.match(/^\/riders\/(\d+)$/);
+  const eventMatch =
+    upcomingEventsMatch || riderMatch ? null : path.match(/^\/events\/(\d+)$/);
+  if (!upcomingEventsMatch && !riderMatch && !eventMatch) {
+    return json({ error: 'not_allowed' }, 403);
+  }
 
   const authError = await requireVerifiedZwiftAuth(request);
   if (authError) return authError;
+
+  if (upcomingEventsMatch) {
+    const htmlOrErr = await fetchZwiftRacingHtml('/events');
+    if (htmlOrErr instanceof Response) return htmlOrErr;
+    const events = extractZwiftRacingUpcomingEvents(htmlOrErr);
+    return json({ events }, 200);
+  }
 
   if (riderMatch) {
     const htmlOrErr = await fetchZwiftRacingHtml(`/riders/${riderMatch[1]}`);

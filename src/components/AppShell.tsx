@@ -9,7 +9,7 @@ import { COLOR_SCHEMES } from '../lib/themeConfig';
 import { formatRiderName, getFavoriteCategory } from '../lib/useRiderProfile';
 import type { UnitSystem } from '../lib/units';
 
-export type ActiveNavTab = 'profile' | 'history' | 'victims' | 'detail';
+export type ActiveNavTab = 'profile' | 'history' | 'events' | 'victims' | 'detail';
 
 function ProfileNavIcon({ className = 'w-4 h-4' }: { className?: string }) {
   return (
@@ -43,6 +43,26 @@ function HistoryNavIcon({ className = 'w-4 h-4' }: { className?: string }) {
     >
       <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
       <line x1="4" y1="22" x2="4" y2="15" />
+    </svg>
+  );
+}
+
+function EventsNavIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
     </svg>
   );
 }
@@ -207,17 +227,20 @@ export function AppHeader({
     !isOwnProfile && targetRiderId ? `/riders/${encodeURIComponent(String(targetRiderId))}` : '';
   const profilePath = basePath || '/';
   const historyPath = basePath ? `${basePath}/history` : '/history';
+  const eventsPath = '/events';
   const victimsPath = '/victims';
 
   const inferredTab: ActiveNavTab =
     explicitActiveTab ??
     (location.pathname.endsWith('/history') || location.pathname === '/history'
       ? 'history'
-      : location.pathname.endsWith('/victims') || location.pathname === '/victims'
-        ? 'victims'
-        : location.pathname.includes('/races/') || location.pathname.includes('/activities/')
-          ? 'detail'
-          : 'profile');
+      : location.pathname === '/events' || location.pathname.startsWith('/events/')
+        ? 'events'
+        : location.pathname.endsWith('/victims') || location.pathname === '/victims'
+          ? 'victims'
+          : location.pathname.includes('/races/') || location.pathname.includes('/activities/')
+            ? 'detail'
+            : 'profile');
 
   function handleLookupSubmit(e: FormEvent) {
     e.preventDefault();
@@ -249,6 +272,13 @@ export function AppHeader({
       shortLabel: 'History',
       to: historyPath,
       icon: <HistoryNavIcon className="w-4 h-4" />,
+    },
+    {
+      id: 'events',
+      label: 'Events',
+      shortLabel: 'Events',
+      to: eventsPath,
+      icon: <EventsNavIcon className="w-4 h-4" />,
     },
     {
       id: 'victims',
@@ -642,9 +672,9 @@ export function AppHeader({
       {/* Mobile Fixed Bottom Navigation Bar (< md) */}
       <nav
         aria-label="Mobile bottom navigation"
-        className="fixed bottom-0 inset-x-0 z-30 md:hidden backdrop-blur-xl bg-slate-950/95 border-t border-slate-800/90 px-3 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+        className="fixed bottom-0 inset-x-0 z-30 md:hidden backdrop-blur-xl bg-slate-950/95 border-t border-slate-800/90 px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
       >
-        <div className="max-w-md mx-auto grid grid-cols-3 gap-1">
+        <div className="max-w-md mx-auto grid grid-cols-4 gap-1">
           {navItems.map((item) => {
             const active = inferredTab === item.id;
             return (
@@ -652,7 +682,7 @@ export function AppHeader({
                 key={item.id}
                 to={item.to}
                 aria-current={active ? 'page' : undefined}
-                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-xl py-1.5 px-2 text-[11px] font-bold transition-colors ${
+                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-xl py-1.5 px-1.5 text-[11px] font-bold transition-colors ${
                   active
                     ? 'bg-accent/15 text-accent-text'
                     : 'text-slate-400 hover:text-slate-200'
