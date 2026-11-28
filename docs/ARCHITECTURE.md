@@ -81,7 +81,7 @@ Zwift-Victims/
 │   ├── auth/                 # AuthContext (session tokens & Zwift authentication state)
 │   ├── components/           # Shared UI shell (AppShell) & feature sections
 │   ├── lib/                  # Domain logic, hooks, and theme/layout/favorites contexts
-│   ├── pages/                # Route views (HomePage [wrapper for "/" & "/riders/:riderId" → ProfilePage], ProfilePage, RaceHistoryPage, VictimsPage, RaceDetailPage, ActivityDetailPage, LoginPage)
+│   ├── pages/                # Route views (HomePage [wrapper for "/" & "/riders/:riderId" → ProfilePage], ProfilePage, RaceHistoryPage, EventsCalendarPage, VictimsPage, RaceDetailPage, ActivityDetailPage, LoginPage)
 │   ├── App.tsx               # React Router route definitions & global providers
 │   └── main.tsx
 ├── wrangler.jsonc            # Unified Cloudflare Worker + Static Assets configuration
@@ -133,6 +133,10 @@ ZwiftPower's native head-to-head and win-loss statistics often fail to count rac
 ### Feature 3: Activity Telemetry Export for Gemini / Claude
 - **Multi-Activity Selection (`RaceHistoryPage`) & Single-Activity Export (`ActivityDetailPage`, `RaceDetailPage`):** Users can toggle **Select & Export** on the Activity & Race History feed to select multiple activities with a Zwift Core `activityId` (or launch export directly from any Activity Detail or matched Race Detail hero) via the shared [ActivityExportModal](../src/components/ActivityExportModal.tsx).
 - **Telemetry Relay & Fallback (`worker/index.ts` → `src/lib/fitTelemetry.ts`):** The Worker resolves authoritative `fitFileBucket`/`fitFileKey` or `fitnessData.fullDataUrl` coordinates from Zwift Core without trusting client-supplied URLs and without leaking OIDC Bearer tokens to S3/CloudFront. The browser decodes `.fit` binaries via `@garmin/fitsdk` (automatically falling back to `fitnessData` JSON streams if S3 `.fit` retrieval fails) and produces clean RFC-4180 per-second (or 5s/10s averaged) CSVs, single combined multi-activity CSVs (`activity_id`-keyed), raw `.fit` files, `fflate`-compressed `.zip` archives with `activities_summary.csv`, Web Share handoffs, and `Copy AI Context` Markdown summaries.
+
+### Feature 4: Zwift Event Calendar & Victim Signups
+- **Dedicated Event Calendar Page (`/events` → `EventsCalendarPage` + `EventCalendarCard`):** Added to the top-level 4-tab hybrid navigation (`Profile`, `History`, `Events`, `Victims` in [AppShell.tsx](../src/components/AppShell.tsx)). Merges ZwiftPower's 1/3/7-day event lists (`/cache3/lists/0_zwift_event_list_{1|3|7}.json`) with ZwiftRacing.app's `/events` SSR stream (live route names, elevation, race subTypes, and GPX terrain weights), offline route fallback ([src/lib/zwiftRoutes.ts](../src/lib/zwiftRoutes.ts)), and Zwift Core `/api/public/events/upcoming` fallback. Supports instant keyword search (including victim names), event type tabs, quick filter chips (`Victims Going`, `My Signups`, min riders, `Women Only`), advanced filters (World, Terrain, Category Pen, Distance/Format, Local Time of Day, Sort), lazy-loaded inline event details (`/api/public/events/{id}` + `{eventId}_signups.json`), and one-tap **Open in Companion** links (`https://www.zwift.com/events/view/{eventId}`).
+- **Victim Signups Integration (`VictimsPage`, `ZwiftVictimsSection`, `VictimSignupsPanel`, `useVictimSignups`):** Fetches upcoming signups across all favorited rivals (`/cache3/profile/{riderId}_signups.json`) and enriches up to 10 upcoming events with `{eventId}_signups.json` to resolve each rival's exact category pen. Displays each rival's upcoming signups directly inside their `VictimRow` card (with 1-tap `Join ↗` Companion links) and adds a dedicated **Upcoming Signups** sub-tab on `/victims` listing all rival signups chronologically.
 
 ---
 

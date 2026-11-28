@@ -1,14 +1,22 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { ZwiftPowerRaceEntry } from '../api/zwiftPower';
 import type { ZwiftRacingRiderResponse } from '../api/zwiftRacing';
 import type { FavoriteRider } from '../lib/FavoritesContext';
+import {
+  buildZwiftCompanionEventUrl,
+  formatEventCountdown,
+  formatEventDateTimeShort,
+} from '../lib/eventCalendar';
 import { computeHeadToHead } from '../lib/headToHead';
 import type { HeadToHeadOutcome } from '../lib/headToHead';
 import type { MergedRace } from '../lib/raceHistory';
+import { formatDistance } from '../lib/units';
+import type { UnitSystem } from '../lib/units';
 import { useRiderRaceHistory } from '../lib/useRiderRaceHistory';
 import type { AsyncState } from '../lib/useRiderRaceHistory';
+import type { VictimSignupItem } from '../lib/useVictimSignups';
 
 function formatShortDate(sec: number | undefined): string {
   if (sec === undefined || sec === null || !Number.isFinite(sec)) return 'Unknown';
@@ -59,6 +67,10 @@ function VictimRow({
   profileRaces,
   profileZpState,
   profileZrState,
+  units,
+  upcomingSignups,
+  signupsLoading,
+  nowMs,
   onRemove,
 }: {
   profileId: number;
@@ -67,9 +79,14 @@ function VictimRow({
   profileRaces: MergedRace[];
   profileZpState: AsyncState<ZwiftPowerRaceEntry[]>;
   profileZrState: AsyncState<ZwiftRacingRiderResponse>;
+  units: UnitSystem;
+  upcomingSignups: VictimSignupItem[];
+  signupsLoading: boolean;
+  nowMs: number;
   onRemove: (riderId: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [showAllSignups, setShowAllSignups] = useState(false);
   const {
     zpState: friendZpState,
     zrState: friendZrState,
@@ -228,6 +245,92 @@ function VictimRow({
         </div>
       )}
 
+      {/* Upcoming Event Signups Strip */}
+      {(upcomingSignups.length > 0 || signupsLoading) && (
+        <div className="border-t border-slate-800/80 bg-amber-500/5 px-4 py-3 space-y-2">
+          {upcomingSignups.length === 0 ? (
+            <p className="text-[11px] text-slate-400">Checking upcoming event signups…</p>
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-300">
+                  Upcoming Signups ({upcomingSignups.length})
+                </span>
+                {upcomingSignups.length > 3 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllSignups((prev) => !prev)}
+                    className="text-[11px] font-semibold text-accent-text hover:underline"
+                  >
+                    {showAllSignups ? 'Show fewer' : `Show all ${upcomingSignups.length}`}
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                {(showAllSignups ? upcomingSignups : upcomingSignups.slice(0, 3)).map((item) => {
+                  const distStr =
+                    item.event.distanceKm !== undefined && item.event.distanceKm > 0
+                      ? formatDistance(item.event.distanceKm * 1000, units)
+                      : undefined;
+                  return (
+                    <div
+                      key={item.event.eventId}
+                      className="rounded-xl bg-slate-950/80 border border-slate-800 px-3 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                    >
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-bold text-slate-200 tabular-nums">
+                            {formatEventDateTimeShort(item.event.startSec)}
+                          </span>
+                          <span className="text-[11px] text-slate-400 tabular-nums">
+                            ({formatEventCountdown(item.event.startSec, nowMs)})
+                          </span>
+                          {item.pen && (
+                            <span
+                              className={`rounded-full border px-1.5 py-0 text-[10px] font-extrabold ${categoryBadgeTone(
+                                item.pen,
+                              )}`}
+                            >
+                              Cat {item.pen}
+                            </span>
+                          )}
+                          {item.userAlsoSignedUp && (
+                            <span className="rounded-full bg-emerald-500/15 border border-emerald-500/40 px-1.5 py-0 text-[10px] font-bold text-emerald-300">
+                              ✓ You&apos;re in
+                            </span>
+                          )}
+                        </div>
+                        <p className="font-semibold text-slate-100 leading-snug break-words">
+                          {item.event.title}
+                        </p>
+                        {(item.event.routeName || distStr) && (
+                          <p className="text-[11px] text-slate-400">
+                            {item.event.routeName ?? ''}
+                            {item.event.routeName && distStr ? ' · ' : ''}
+                            {distStr ?? ''}
+                          </p>
+                        )}
+                      </div>
+
+                      <a
+                        href={buildZwiftCompanionEventUrl(item.event.eventId)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center gap-1 rounded-lg bg-accent hover:bg-accent-hover px-3 py-1.5 text-xs font-extrabold text-accent-foreground shrink-0 transition-colors"
+                      >
+                        <span>Join</span>
+                        <span aria-hidden="true">↗</span>
+                      </a>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {expanded && (
         <div className="border-t border-slate-800 bg-slate-900/50 px-4 py-3.5 space-y-3">
           {errorMessage ? (
@@ -369,6 +472,9 @@ export default function ZwiftVictimsSection({
   profileRaces,
   profileZpState,
   profileZrState,
+  units = 'metric',
+  signupsByRiderId,
+  signupsLoading = false,
 }: {
   profileId: number;
   favorites: FavoriteRider[];
@@ -376,10 +482,21 @@ export default function ZwiftVictimsSection({
   profileRaces: MergedRace[];
   profileZpState: AsyncState<ZwiftPowerRaceEntry[]>;
   profileZrState: AsyncState<ZwiftRacingRiderResponse>;
+  units?: UnitSystem;
+  signupsByRiderId?: Map<number, VictimSignupItem[]>;
+  signupsLoading?: boolean;
 }) {
   const navigate = useNavigate();
   const [includeTeamEvents, setIncludeTeamEvents] = useState(false);
   const [rivalIdInput, setRivalIdInput] = useState('');
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const otherFavorites = useMemo(
     () => favorites.filter((f) => f.id !== profileId),
@@ -476,6 +593,10 @@ export default function ZwiftVictimsSection({
               profileRaces={profileRaces}
               profileZpState={profileZpState}
               profileZrState={profileZrState}
+              units={units}
+              upcomingSignups={signupsByRiderId?.get(friend.id) ?? []}
+              signupsLoading={signupsLoading}
+              nowMs={nowMs}
               onRemove={onRemoveFavorite}
             />
           ))}

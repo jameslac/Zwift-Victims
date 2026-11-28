@@ -494,6 +494,26 @@ export const fetchPublicEvent = (
     'event details',
   );
 
+export async function fetchUpcomingPublicEvents(
+  accessToken: string,
+  options: { start?: number; limit?: number } = {},
+): Promise<ZwiftPublicEvent[]> {
+  const start = Math.max(0, Math.floor(options.start ?? 0));
+  // Upstream returns HTTP 400 if limit > 200.
+  const limit = Math.min(200, Math.max(1, Math.floor(options.limit ?? 200)));
+  const params = new URLSearchParams({
+    start: String(start),
+    limit: String(limit),
+  });
+  const data = await fetchAuthorizedJson<ZwiftPublicEvent[] | { events?: ZwiftPublicEvent[] }>(
+    accessToken,
+    `/api/zwift/api/public/events/upcoming?${params.toString()}`,
+    'upcoming events',
+  );
+  if (Array.isArray(data)) return data;
+  return Array.isArray(data?.events) ? data.events : [];
+}
+
 export async function fetchRaceResults(
   accessToken: string,
   eventSubgroupId: number,

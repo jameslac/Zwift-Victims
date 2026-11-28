@@ -4,6 +4,7 @@ import { FavoritesProvider } from './lib/FavoritesContext';
 import { ThemeProvider } from './lib/ThemeContext';
 import { UnitsProvider } from './lib/UnitsContext';
 import ActivityDetailPage from './pages/ActivityDetailPage';
+import EventsCalendarPage from './pages/EventsCalendarPage';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RaceDetailPage from './pages/RaceDetailPage';
@@ -20,6 +21,7 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/history" element={<RaceHistoryPage />} />
+                <Route path="/events" element={<EventsCalendarPage />} />
                 <Route path="/victims" element={<VictimsPage />} />
                 <Route path="/riders/:riderId" element={<HomePage />} />
                 <Route path="/riders/:riderId/history" element={<RaceHistoryPage />} />

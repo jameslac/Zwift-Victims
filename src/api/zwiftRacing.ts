@@ -413,6 +413,34 @@ export async function fetchZwiftRacingRider(
   return (await res.json()) as ZwiftRacingRiderResponse;
 }
 
+export interface ZwiftRacingUpcomingEvent {
+  eventId?: string;
+  time?: number;
+  title?: string;
+  routeId?: string;
+  distance?: number;
+  elevation?: number;
+  numLaps?: string | number;
+  type?: string;
+  subType?: string;
+  staggeredStart?: boolean;
+  categories?: string;
+  signups?: string;
+  imageUrl?: string;
+  route?: {
+    routeId?: string;
+    world?: string;
+    name?: string;
+    [key: string]: unknown;
+  };
+  velo?: {
+    factorWeights?: Record<string, unknown>;
+    version?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export async function fetchZwiftRacingEvent(
   accessToken: string,
   eventId: string | number,
@@ -424,4 +452,17 @@ export async function fetchZwiftRacingEvent(
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Failed to load ZwiftRacing.app event (${res.status}).`);
   return (await res.json()) as ZwiftRacingEventResponse;
+}
+
+export async function fetchZwiftRacingUpcomingEvents(
+  accessToken: string,
+): Promise<ZwiftRacingUpcomingEvent[]> {
+  const res = await fetch('/api/zwiftracing/events', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (res.status === 401) throw new AuthError('Session expired.');
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`Failed to load ZwiftRacing.app upcoming events (${res.status}).`);
+  const payload = (await res.json()) as { events?: ZwiftRacingUpcomingEvent[] };
+  return Array.isArray(payload?.events) ? payload.events : [];
 }
