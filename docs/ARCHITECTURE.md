@@ -75,12 +75,17 @@ Zwift-Victims/
 │   ├── ARCHITECTURE.md       # System design, tech stack, and domain rules (this file)
 │   └── API_REFERENCE.md      # Comprehensive guide to Zwift, ZwiftPower, ZwiftRacing & Game Data APIs
 ├── worker/
-│   └── index.ts              # Cloudflare Worker handling /api/* routes + SPA static asset fallback
+│   ├── index.ts              # Cloudflare Worker handling /api/* & /mcp routes + SPA static asset fallback
+│   ├── mcp.ts                # Stateless Streamable HTTP JSON-RPC 2.0 transport (/mcp)
+│   ├── mcpAuth.ts            # Split-key AES-256-GCM MCP token vault (MCP_TOKENS KV) & /api/mcp/tokens CRUD
+│   ├── mcpTools.ts           # 6 read-only MCP tools with rider-ownership enforcement
+│   ├── zwiftUpstream.ts      # Shared Zwift Core / ZwiftPower / ZwiftRacing / S3 FIT fetchers
+│   └── seroval.ts            # Safe recursive-descent parser for ZwiftRacing SSR payloads
 ├── src/                      # Frontend PWA source code
-│   ├── api/                  # Modular API clients (separated by upstream provider)
+│   ├── api/                  # Modular API clients (Zwift Core, ZP, ZR, MCP token management)
 │   ├── auth/                 # AuthContext (session tokens & Zwift authentication state)
-│   ├── components/           # Shared UI shell (AppShell) & feature sections
-│   ├── lib/                  # Domain logic, hooks, and theme/layout/favorites contexts
+│   ├── components/           # Shared UI shell (AppShell), Connect AI/MCP modal & feature sections
+│   ├── lib/                  # Domain logic, shared telemetryCore.ts, hooks, and contexts
 │   ├── pages/                # Route views (HomePage [wrapper for "/" & "/riders/:riderId" → ProfilePage], ProfilePage, RaceHistoryPage, VictimsPage, RaceDetailPage, ActivityDetailPage, LoginPage)
 │   ├── App.tsx               # React Router route definitions & global providers
 │   └── main.tsx
@@ -132,7 +137,11 @@ ZwiftPower's native head-to-head and win-loss statistics often fail to count rac
 
 ### Feature 3: Activity Telemetry Export for Gemini / Claude
 - **Multi-Activity Selection (`RaceHistoryPage`) & Single-Activity Export (`ActivityDetailPage`, `RaceDetailPage`):** Users can toggle **Select & Export** on the Activity & Race History feed to select multiple activities with a Zwift Core `activityId` (or launch export directly from any Activity Detail or matched Race Detail hero) via the shared [ActivityExportModal](../src/components/ActivityExportModal.tsx).
-- **Telemetry Relay & Fallback (`worker/index.ts` → `src/lib/fitTelemetry.ts`):** The Worker resolves authoritative `fitFileBucket`/`fitFileKey` or `fitnessData.fullDataUrl` coordinates from Zwift Core without trusting client-supplied URLs and without leaking OIDC Bearer tokens to S3/CloudFront. The browser decodes `.fit` binaries via `@garmin/fitsdk` (automatically falling back to `fitnessData` JSON streams if S3 `.fit` retrieval fails) and produces clean RFC-4180 per-second (or 5s/10s averaged) CSVs, single combined multi-activity CSVs (`activity_id`-keyed), raw `.fit` files, `fflate`-compressed `.zip` archives with `activities_summary.csv`, Web Share handoffs, and `Copy AI Context` Markdown summaries.
+- **Telemetry Relay & Fallback (`worker/index.ts` → `src/lib/fitTelemetry.ts` & `src/lib/telemetryCore.ts`):** The Worker resolves authoritative `fitFileBucket`/`fitFileKey` or `fitnessData.fullDataUrl` coordinates from Zwift Core without trusting client-supplied URLs and without leaking OIDC Bearer tokens to S3/CloudFront. Pure FIT decoding (`@garmin/fitsdk`), `fitnessData` parsing, and resampling live in shared [telemetryCore.ts](../src/lib/telemetryCore.ts) (used by both browser exports and the remote MCP Worker). The browser packages RFC-4180 CSVs, combined multi-activity CSVs, raw `.fit` files, `fflate`-compressed `.zip` archives, Web Share handoffs, and Markdown summaries.
+
+### Feature 4: Remote MCP Server (`/mcp`)
+- **Stateless Streamable HTTP (`worker/mcp.ts`):** Exposes 6 read-only MCP tools (`get_activities`, `get_activity_detail`, `get_activity_stream`, `get_power_curve`, `get_race_results`, `get_intervals`) over `/mcp` so Gemini CLI, Claude Code, and Claude Desktop (`mcp-remote`) can query the signed-in rider's Zwift data on demand.
+- **Per-User Split-Key KV Auth (`worker/mcpAuth.ts`):** Signed-in users mint and revoke personal tokens (`zv_mcp_<tokenId>.<secret>`) from the **Connect AI / MCP** modal (utility menu / drawer + own Profile overview). Zwift OIDC tokens are encrypted at rest in optional Cloudflare KV (`MCP_TOKENS`) using AES-256-GCM keyed by the client-held `secret`, so neither raw Zwift credentials nor unencrypted OIDC tokens are ever persisted in KV.
 
 ---
 

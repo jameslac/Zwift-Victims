@@ -47,6 +47,52 @@ All browser calls hit same-origin `/api/*` endpoints exposed by [worker/index.ts
 | `GET /api/zwiftpower/cache3/results/{eventId}_(view\|zwift).json` | — | `zwiftpower.com` | `fetchZwiftPowerEventResults` (`zwiftPower.ts`) | Requires verified `Authorization: Bearer <token>`. Filtered (`_view`) or unfiltered (`_zwift`) event results on ZwiftPower. |
 | `GET /api/zwiftracing/riders/{riderId}` | — | `zwiftracing.app/riders/{riderId}` | `fetchZwiftRacingRider` (`zwiftRacing.ts`) | Requires verified `Authorization: Bearer <token>`. Scrapes SSR HTML via [seroval.ts](../worker/seroval.ts) (`self.$R`) and returns `{ rider, overview }`. |
 | `GET /api/zwiftracing/events/{eventId}` | — | `zwiftracing.app/events/{eventId}` | `fetchZwiftRacingEvent` (`zwiftRacing.ts`) | Requires verified `Authorization: Bearer <token>`. Scrapes SSR HTML via [seroval.ts](../worker/seroval.ts) and returns event metadata, ZRS pen ranges, and per-pen `riders[]` (with Mongoose `$__` internals stripped). |
+| `POST /mcp` (plus `OPTIONS`/`DELETE`) | — | Local Worker MCP Handler ([worker/mcp.ts](../worker/mcp.ts)) | — | Stateless Streamable HTTP JSON-RPC 2.0 MCP endpoint. Authenticated via per-user `Authorization: Bearer zv_mcp_<tokenId>.<secret>` stored encrypted in `MCP_TOKENS` KV. Read-only tools only. |
+| `GET /api/mcp/tokens` | — | Local Worker KV (`MCP_TOKENS`) | `fetchMcpTokens` (`mcpTokens.ts`) | Same-origin + verified Zwift Bearer required. Lists active MCP tokens for the signed-in rider (`configured: false` if `MCP_TOKENS` KV is not yet bound). |
+| `POST /api/mcp/tokens` | — | Local Worker KV (`MCP_TOKENS`) | `createMcpToken` (`mcpTokens.ts`) | Same-origin + verified Zwift Bearer required. Mints a split-key AES-256-GCM encrypted MCP token (max 10 active/rider, TTL 1–365 days). |
+| `DELETE /api/mcp/tokens` | — | Local Worker KV (`MCP_TOKENS`) | `revokeAllMcpTokens` (`mcpTokens.ts`) | Same-origin + verified Zwift Bearer required. Revokes all MCP tokens owned by the signed-in rider. |
+| `DELETE /api/mcp/tokens/{tokenId}` | — | Local Worker KV (`MCP_TOKENS`) | `revokeMcpToken` (`mcpTokens.ts`) | Same-origin + verified Zwift Bearer required. Revokes one owned MCP token immediately. |
+
+---
+
+## Remote MCP Server (`/mcp`)
+
+The Worker exposes a stateless, read-only **Model Context Protocol (MCP)** endpoint at `/mcp` using **Streamable HTTP** (`POST` JSON-RPC 2.0, `OPTIONS` CORS preflight, `DELETE` 204, `GET` 405). No Durable Objects or `nodejs_compat` flags are required.
+
+### Authentication & Split-Key KV Encryption (`worker/mcpAuth.ts`)
+- **Opaque Per-User Token Format:** `zv_mcp_<tokenId>.<secret>` (`tokenId`: 16 random bytes base64url; `secret`: 32 random bytes base64url).
+- **Zero-Plaintext Server Storage:** The client retains `secret` (never stored in KV). The Worker stores `keyCheck = SHA-256("zv-mcp-chk-v1:" + secret)` and encrypts `{ zwiftAccessToken, zwiftRefreshToken, zwiftExpiresAt }` using **AES-256-GCM** keyed by `SHA-256("zv-mcp-enc-v1:" + secret + optionalPepper)` with `additionalData = "zv-mcp:<tokenId>:<riderId>"`.
+- **Automatic Zwift Refresh:** When an incoming `/mcp` call sees `zwiftExpiresAt` within 2 minutes of expiry (or receives an upstream `401`), the Worker exchanges `zwiftRefreshToken` with `secure.zwift.com` and re-encrypts the updated token bundle in KV with a fresh 12-byte IV.
+- **KV Provisioning (`MCP_TOKENS`):** To avoid breaking Cloudflare Workers Builds preview deployments (`code: 10021` when a `kv_namespaces` entry lacks a real `id`), `wrangler.jsonc` does not commit an unprovisioned `kv_namespaces` block. Provision in your Cloudflare account with:
+  ```bash
+  npx wrangler kv namespace create MCP_TOKENS
+  npx wrangler kv namespace create MCP_TOKENS --preview
+  ```
+  Then bind `MCP_TOKENS` in `wrangler.jsonc` (with both `id` and `preview_id`) or via Cloudflare Dashboard Worker Settings → Bindings. Optional secret `MCP_TOKEN_PEPPER` adds server-side key peppering.
+
+### Client Compatibility Matrix
+| Client | Transport / Setup | Status | Notes |
+| :--- | :--- | :--- | :--- |
+| **Gemini CLI** | Native `httpUrl` + `headers` (`gemini mcp add --transport http`) | **Supported** | Direct Streamable HTTP with `Authorization: Bearer` header. |
+| **Claude Code** | Native `http` (`claude mcp add --transport http` / `.mcp.json`) | **Supported** | Direct Streamable HTTP with `Authorization: Bearer` header. |
+| **Claude Desktop** | `npx -y mcp-remote <url> --header Authorization:${AUTH_HEADER}` | **Supported** | Bridged via `mcp-remote` with token stored in `env.AUTH_HEADER`. |
+| **claude.ai / gemini.google.com** | Web Custom Connectors | **Future OAuth 2.1** | Web apps expect OAuth 2.1 + DCR/PKCE. Use **Select & Export** on Race History for web chat attachments. |
+
+### Read-Only MCP Tools (`worker/mcpTools.ts`)
+All 6 tools declare `annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true }` and enforce `riderId` ownership on private activity endpoints.
+
+| Tool | Parameters | Defaults & Caps | Data Sources |
+| :--- | :--- | :--- | :--- |
+| `get_activities` | `type?` (`all`, `race`, `ride`, `group_ride`, `workout`, `free_ride`), `fromDate?`, `toDate?`, `search?`, `limit?`, `offset?` | `limit: 20` (max `50`), scans up to 200 recent Core activities + full ZP history | Zwift Core + ZwiftPower + ZwiftRacing (`mergeActivities`) |
+| `get_activity_detail` | `activityId` (required numeric string) | Ownership verified against `session.riderId` | Zwift Core `/api/activities/{id}` + ZP/ZR match |
+| `get_activity_stream` | `activityId` (required), `resample?`, `fields?`, `startSec?`, `endSec?`, `maxRows?`, `format?` (`csv` \| `json`) | `resample: 5`s (`1–60`), `maxRows: 720` (hard cap `2000`), `12 MB` FIT cap | Worker FIT decode (`@garmin/fitsdk`) with `fitnessData` JSON fallback (`telemetryCore.ts`) |
+| `get_power_curve` | `range?` (`all`, `all_time`, `90d`, `race_best`) | `range: "all"` | Zwift Core `/api/power-curve/power-profile` + ZP + ZR (`buildPowerBests`) |
+| `get_race_results` | `eventId` (required), `category?`, `limit?`, `offset?` | Auto-selects user's pen; `limit: 50` (max `100`) | Zwift Core `/api/race-results/entries` + `/api/public/events/{id}` + ZR + ZP (`mergePenStandings`) |
+| `get_intervals` | `activityId` (required), `mode?` (`auto`, `laps`, `efforts`), `minEffortSec?` | `mode: "auto"`, `minEffortSec: 30`, top 30 detected intervals | FIT `lapMesgs` + 10s rolling power effort detection (`telemetryCore.ts`) |
+
+### Cloudflare Worker Limits & Stream Guardrails
+- **FIT Binary Size Cap:** `12 MB` (`MAX_FIT_BYTES`) before decoding to stay comfortably within Worker memory and CPU limits.
+- **CPU Budget Considerations:** Resampling defaults to **5s** (`resample: 5`) and **720 rows** (`maxRows: 720`, max `2000`, `startSec`/`endSec` window pagination) so payloads stay compact inside LLM context windows. Decoding large multi-hour FIT binaries (`@garmin/fitsdk`) runs comfortably inside the Cloudflare Workers Paid plan CPU limit (30s default), whereas long >1h FIT files may exceed the 10ms Free plan CPU limit (falling back gracefully to `fitnessData` when FIT is unavailable).
 
 ---
 

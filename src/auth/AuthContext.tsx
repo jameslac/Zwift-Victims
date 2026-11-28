@@ -21,6 +21,7 @@ interface AuthState {
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   getAccessToken: () => Promise<string>;
+  getTokenSet: () => Promise<TokenSet>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -78,15 +79,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [ensureFreshTokens],
   );
 
-  const getAccessToken = useCallback(async (): Promise<string> => {
+  const getTokenSet = useCallback(async (): Promise<TokenSet> => {
     const tokens = loadTokens();
     if (!tokens) {
       logout();
       throw new AuthError('Not authenticated.');
     }
-    const active = await ensureFreshTokens(tokens);
-    return active.accessToken;
+    return ensureFreshTokens(tokens);
   }, [ensureFreshTokens, logout]);
+
+  const getAccessToken = useCallback(async (): Promise<string> => {
+    const active = await getTokenSet();
+    return active.accessToken;
+  }, [getTokenSet]);
 
   // Restore session on startup.
   useEffect(() => {
@@ -111,8 +116,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ loading, profile, login, logout, getAccessToken }),
-    [loading, profile, login, logout, getAccessToken],
+    () => ({ loading, profile, login, logout, getAccessToken, getTokenSet }),
+    [loading, profile, login, logout, getAccessToken, getTokenSet],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

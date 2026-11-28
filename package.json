@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
+    "test:mcp": "esbuild tests/mcp.test.ts --bundle --platform=node --format=esm --outfile=.wrangler/tmp/mcp.test.mjs && node --test .wrangler/tmp/mcp.test.mjs",
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {

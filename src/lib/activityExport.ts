@@ -65,12 +65,29 @@ export interface ActivityExportItem {
   sof?: number;
 }
 
+export interface TelemetryLap {
+  lapNumber: number;
+  startSec?: number;
+  endSec?: number;
+  durationSec?: number;
+  distanceM?: number;
+  avgPowerW?: number;
+  maxPowerW?: number;
+  normalizedPowerW?: number;
+  avgHrBpm?: number;
+  maxHrBpm?: number;
+  avgCadenceRpm?: number;
+  avgSpeedKmh?: number;
+  totalAscentM?: number;
+}
+
 export interface ParsedActivityTelemetry {
   source: TelemetrySource;
   samples: TelemetrySample[];
   sampleCount: number;
   durationSec?: number;
   fitBytes?: Uint8Array;
+  laps?: TelemetryLap[];
 }
 
 export interface CsvFormatOptions {
