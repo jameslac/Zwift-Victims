@@ -390,7 +390,7 @@ export default function ActivityDetailPage() {
         onUnitsChange={setUnits}
         onLogout={logout}
         backTo={historyPath}
-        backLabel="← History"
+        backLabel="← Ride History"
       />
 
       {detailState.status === 'error' && (

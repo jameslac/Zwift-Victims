@@ -245,8 +245,8 @@ export function AppHeader({
     },
     {
       id: 'history',
-      label: isOwnProfile ? 'Race History' : 'Rider History',
-      shortLabel: 'History',
+      label: 'Ride History',
+      shortLabel: 'Ride History',
       to: historyPath,
       icon: <HistoryNavIcon className="w-4 h-4" />,
     },
@@ -284,9 +284,9 @@ export function AppHeader({
             {backTo && backLabel && (
               <Link
                 to={backTo}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-700/80 bg-slate-900/90 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:border-accent/60 hover:text-accent-text transition-colors truncate"
+                className="inline-flex items-center gap-1 min-w-0 rounded-lg border border-slate-700/80 bg-slate-900/90 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:border-accent/60 hover:text-accent-text transition-colors"
               >
-                <span>{backLabel}</span>
+                <span className="truncate">{backLabel}</span>
               </Link>
             )}
 
