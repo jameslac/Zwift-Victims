@@ -24,12 +24,12 @@ This document serves as our **central reference guide** so that whenever we pick
 
 ## Implemented Worker Relay Routes (`worker/index.ts`) & Client Helpers (`src/api/*`)
 
-All browser calls hit same-origin `/api/*` endpoints exposed by [worker/index.ts](../worker/index.ts), which enforces path/query allowlists and manages auth/cookie forwarding.
+All browser calls hit same-origin `/api/*` endpoints exposed by [worker/index.ts](../worker/index.ts), which enforces path/query allowlists, same-origin request checks (`Origin` / `Sec-Fetch-Site` on all routes except `/api/health`), Zwift Bearer token verification (on `/api/zwift/*`, `/api/zwiftpower/*`, and `/api/zwiftracing/*`), and auth/cookie forwarding.
 
 | Worker Route | Query Params Allowed | Upstream Target | Client Helper (`src/api/*`) | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET /api/health` | — | Local Worker | — | Health check JSON (`{ status, service, timestamp }`). |
-| `POST /api/zwift/auth/token` | — | `secure.zwift.com/.../token` | `login`, `refresh` (`zwiftCore.ts`) | Relays `password` and `refresh_token` grants using `client_id: Zwift_Mobile_Link`. |
+| `GET /api/health` | — | Local Worker | — | Health check JSON (`{ status, service, timestamp }`). Public (no Bearer token required). |
+| `POST /api/zwift/auth/token` | — | `secure.zwift.com/.../token` | `login`, `refresh` (`zwiftCore.ts`) | Same-origin enforced. Relays `password` and `refresh_token` grants using `client_id: Zwift_Mobile_Link`. |
 | `GET /api/zwift/api/profiles/me` | — | `us-or-rly101.zwift.com` | `fetchMyProfile` (`zwiftCore.ts`) | Requires `Authorization: Bearer <token>`. Falls back to `/api/profiles/{id}` and merges when `competitionMetrics` is null/missing. |
 | `GET /api/zwift/api/profiles/{riderId}` | — | `us-or-rly101.zwift.com` | `fetchProfileById` (`zwiftCore.ts`) | Public profile lookup for any rider ID (populates `competitionMetrics`). |
 | `GET /api/zwift/api/power-curve/power-profile` | — | `us-or-rly101.zwift.com` | `fetchPowerProfile` (`zwiftCore.ts`) | Authenticated user's Zwift Feed power curve (`cpBestEfforts` all-time, `relevantCpEfforts` rolling 90-day across all Zwift activities, `zftp`, `zmap`, `vo2max`). Also allowlists `/api/power-curve/(best-all-time\|all-time\|best)`. |
@@ -43,10 +43,10 @@ All browser calls hit same-origin `/api/*` endpoints exposed by [worker/index.ts
 | `GET /api/zwift/activities/{activityIdStr}/fitness-data` | `riderId` (optional) | `us-or-rly101.zwift.com` → `fitnessData.fullDataUrl` | `fetchActivityFitnessData` (`zwiftCore.ts`) | Resolves `fitnessData.fullDataUrl` (or `smallDataUrl`) server-side on allowlisted `zwift.com` / `amazonaws.com` / `cloudfront.net` hosts (forwarding `Authorization` only to `*.zwift.com`) as a telemetry JSON fallback. |
 | `GET /api/zwift/api/race-results/entries` | `event_subgroup_id` | `us-or-rly101.zwift.com` | `fetchRaceResults` (`zwiftCore.ts`) | Unfiltered finisher entries for a category subgroup. |
 | `GET /api/zwift/api/public/events/{eventId}` | — | `us-or-rly101.zwift.com` | `fetchPublicEvent` (`zwiftCore.ts`) | Event details and `eventSubgroups` mapping. |
-| `GET /api/zwiftpower/cache3/profile/{riderId}_all.json` | — | `zwiftpower.com` | `fetchZwiftPowerRaces` (`zwiftPower.ts`) | Full rider race history; Worker seeds CloudFront cookies and retries once on `403`. |
-| `GET /api/zwiftpower/cache3/results/{eventId}_(view\|zwift).json` | — | `zwiftpower.com` | `fetchZwiftPowerEventResults` (`zwiftPower.ts`) | Filtered (`_view`) or unfiltered (`_zwift`) event results on ZwiftPower. |
-| `GET /api/zwiftracing/riders/{riderId}` | — | `zwiftracing.app/riders/{riderId}` | `fetchZwiftRacingRider` (`zwiftRacing.ts`) | Scrapes SSR HTML via [seroval.ts](../worker/seroval.ts) (`self.$R`) and returns `{ rider, overview }`. |
-| `GET /api/zwiftracing/events/{eventId}` | — | `zwiftracing.app/events/{eventId}` | `fetchZwiftRacingEvent` (`zwiftRacing.ts`) | Scrapes SSR HTML via [seroval.ts](../worker/seroval.ts) and returns event metadata, ZRS pen ranges, and per-pen `riders[]` (with Mongoose `$__` internals stripped). |
+| `GET /api/zwiftpower/cache3/profile/{riderId}_all.json` | — | `zwiftpower.com` | `fetchZwiftPowerRaces` (`zwiftPower.ts`) | Requires verified `Authorization: Bearer <token>`. Full rider race history; Worker seeds CloudFront cookies and retries once on `403`. |
+| `GET /api/zwiftpower/cache3/results/{eventId}_(view\|zwift).json` | — | `zwiftpower.com` | `fetchZwiftPowerEventResults` (`zwiftPower.ts`) | Requires verified `Authorization: Bearer <token>`. Filtered (`_view`) or unfiltered (`_zwift`) event results on ZwiftPower. |
+| `GET /api/zwiftracing/riders/{riderId}` | — | `zwiftracing.app/riders/{riderId}` | `fetchZwiftRacingRider` (`zwiftRacing.ts`) | Requires verified `Authorization: Bearer <token>`. Scrapes SSR HTML via [seroval.ts](../worker/seroval.ts) (`self.$R`) and returns `{ rider, overview }`. |
+| `GET /api/zwiftracing/events/{eventId}` | — | `zwiftracing.app/events/{eventId}` | `fetchZwiftRacingEvent` (`zwiftRacing.ts`) | Requires verified `Authorization: Bearer <token>`. Scrapes SSR HTML via [seroval.ts](../worker/seroval.ts) and returns event metadata, ZRS pen ranges, and per-pen `riders[]` (with Mongoose `$__` internals stripped). |
 
 ---
 
@@ -133,7 +133,7 @@ ZwiftPower is a PHP-based platform backed by cached JSON files (`cache3/`) and d
 ZwiftRacing.app computes community **vELO ratings** (`v2` and legacy), **Compound Score**, **Power Phenotype**, and **true category standings** (retaining private/hidden Zwift riders that ZwiftPower drops).
 
 ### How We Fetch It Currently (`/api/zwiftracing/riders/{riderId}` & `/api/zwiftracing/events/{eventId}`)
-- Instead of requiring a developer API token upfront, `worker/index.ts` fetches the SSR HTML pages `https://zwiftracing.app/riders/{riderId}` and `https://zwiftracing.app/events/{eventId}` and [worker/seroval.ts](file:///Users/jamesandrelacour/Documents/GitHub/Zwift-Victims/worker/seroval.ts) parses the embedded `self.$R` seroval hydration stream (stripping Mongoose `$__` / `$isNew` / `_doc` metadata on event payloads).
+- Instead of requiring a developer API token upfront, `worker/index.ts` fetches the SSR HTML pages `https://zwiftracing.app/riders/{riderId}` and `https://zwiftracing.app/events/{eventId}` and [worker/seroval.ts](../worker/seroval.ts) parses the embedded `self.$R` seroval hydration stream (stripping Mongoose `$__` / `$isNew` / `_doc` metadata on event payloads).
 - **Window caveat:** `overview.history` on `/riders/{riderId}` covers roughly the last **~90 days** of scored races, whereas `/events/{eventId}` returns full event details, `pens[]` (with ZRS `rangeLabel`, GPX `velo.factorWeights`, official vELO v2 `points.sof`, and Legacy v1 `results.averageRating`), `rules`, `route`, `courseProfile`, and per-pen `riders[]` (`position`, top-level legacy/overall `expectedPosition` + `expectedPlaceRange`, `velo.elo.expectedPosition` [course-weighted v2], `velo.seed.expectedPosition` [power-seed], `velo.elo.eventRating` [rider's course-weighted vELO — NOT pen SOF], `ratingBefore`, `rating`, `ratingDelta`, `phenotype`, `velo`, `wkg5`–`wkg1200`, `didNotFinish`, `disqualified`). True vELO v2 pen SOF comes from `pen.points.sof` (with `pen.riders[]` pre-race average fallback).
 - Reference docs for their hosted API: `https://www.zwiftracing.app/reference`.
 

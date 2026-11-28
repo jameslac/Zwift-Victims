@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { AuthError, fetchMyProfile, login as zwiftLogin, refresh } from '../api/zwiftCore';
 import type { TokenSet, ZwiftProfile } from '../api/zwiftCore';
@@ -28,8 +28,12 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<ZwiftProfile | null>(null);
   const [loading, setLoading] = useState(() => loadTokens() !== null);
+  const refreshInFlightRef = useRef<Promise<TokenSet> | null>(null);
+  const sessionGenRef = useRef(0);
 
   const logout = useCallback(() => {
+    sessionGenRef.current += 1;
+    refreshInFlightRef.current = null;
     localStorage.removeItem(STORAGE_KEY);
     setProfile(null);
   }, []);
@@ -38,14 +42,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (tokens: TokenSet): Promise<TokenSet> => {
       // Refresh slightly early so API calls don't race expiry.
       if (tokens.expiresAt - Date.now() >= 60_000) return tokens;
-      try {
-        const refreshed = await refresh(tokens.refreshToken);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(refreshed));
-        return refreshed;
-      } catch (e) {
-        if (e instanceof AuthError) logout();
-        throw e;
-      }
+      if (refreshInFlightRef.current) return refreshInFlightRef.current;
+
+      const gen = sessionGenRef.current;
+      const req = refresh(tokens.refreshToken)
+        .then((refreshed) => {
+          if (sessionGenRef.current === gen) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(refreshed));
+          }
+          return refreshed;
+        })
+        .catch((e) => {
+          if (e instanceof AuthError && sessionGenRef.current === gen) {
+            logout();
+          }
+          throw e;
+        })
+        .finally(() => {
+          if (refreshInFlightRef.current === req) {
+            refreshInFlightRef.current = null;
+          }
+        });
+
+      refreshInFlightRef.current = req;
+      return req;
     },
     [logout],
   );
@@ -82,6 +102,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (username: string, password: string) => {
       const tokens = await zwiftLogin(username, password);
+      sessionGenRef.current += 1;
+      refreshInFlightRef.current = null;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(tokens));
       await loadWith(tokens);
     },

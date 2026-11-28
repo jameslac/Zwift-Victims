@@ -48,13 +48,17 @@ interface CachedActivitiesEntry {
 const activitiesCache = new Map<number, CachedActivitiesEntry>();
 const activitiesInFlight = new Map<number, Promise<CachedActivitiesEntry>>();
 
-function loadZpCached(riderId: number): Promise<ZwiftPowerRaceEntry[]> {
+function loadZpCached(
+  riderId: number,
+  getAccessToken: () => Promise<string>,
+): Promise<ZwiftPowerRaceEntry[]> {
   const cached = zpCache.get(riderId);
   if (cached) return Promise.resolve(cached);
   const existing = zpInFlight.get(riderId);
   if (existing) return existing;
 
-  const req = fetchZwiftPowerRaces(riderId)
+  const req = getAccessToken()
+    .then((token) => fetchZwiftPowerRaces(token, riderId))
     .then((data) => {
       zpCache.set(riderId, data);
       return data;
@@ -66,13 +70,17 @@ function loadZpCached(riderId: number): Promise<ZwiftPowerRaceEntry[]> {
   return req;
 }
 
-function loadZrCached(riderId: number): Promise<ZwiftRacingRiderResponse> {
+function loadZrCached(
+  riderId: number,
+  getAccessToken: () => Promise<string>,
+): Promise<ZwiftRacingRiderResponse> {
   const cached = zrCache.get(riderId);
   if (cached) return Promise.resolve(cached);
   const existing = zrInFlight.get(riderId);
   if (existing) return existing;
 
-  const req = fetchZwiftRacingRider(riderId)
+  const req = getAccessToken()
+    .then((token) => fetchZwiftRacingRider(token, riderId))
     .then((data) => {
       zrCache.set(riderId, data);
       return data;
@@ -189,7 +197,7 @@ export function useRiderRaceHistory(
   useEffect(() => {
     let cancelled = false;
 
-    loadZpCached(riderId)
+    loadZpCached(riderId, getAccessToken)
       .then((data) => {
         if (!cancelled) setZpEntry({ riderId, state: { status: 'loaded', data } });
       })
@@ -205,7 +213,7 @@ export function useRiderRaceHistory(
         }
       });
 
-    loadZrCached(riderId)
+    loadZrCached(riderId, getAccessToken)
       .then((data) => {
         if (!cancelled) setZrEntry({ riderId, state: { status: 'loaded', data } });
       })

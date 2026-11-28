@@ -33,7 +33,9 @@ We organize the app into distinct top-level pages with **Hybrid Navigation** (fi
 
 ## Existing checks
 - `ci.yml`: ESLint, typecheck + build, validators (lockfile sync, npm audit, config parse, gitleaks).
-- `ai-review.yml`: Centralized AI PR reviewer (`jameslac/github-workflows/.github/workflows/ai-review.yml@main`; auto-syncs the PR description to the latest diff and posts holistic + inline review comments).
+- `ai-daily-audit.yml`: Scheduled daily AI audit (`jameslac/github-workflows/.github/workflows/ai-daily-audit.yml@main`) that opens issues for findings.
+- `cleanup-preview.yml`: Automatically deletes Cloudflare Worker Previews when a non-fork PR closes or branch is deleted (`jameslac/github-workflows/.github/workflows/cloudflare-preview-cleanup.yml@main`).
+- `pr-merged-sync.yml`: Syncs merged non-fork PRs with GitHub issues and Trello (`jameslac/github-workflows/.github/workflows/pr-merged-sync.yml@main`).
 
 ## PR Description Hygiene (Keep PR Descriptions Realigned)
 Whenever you push code or logic updates to an open PR branch (whether during follow-up passes or interactive chat adjustments), **always realign the PR description** (`gh pr edit --body ...`) so it accurately describes the **current cumulative changes** on the branch rather than leaving stale first-pass notes or superseded assumptions.

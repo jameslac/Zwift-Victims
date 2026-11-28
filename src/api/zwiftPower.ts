@@ -1,3 +1,5 @@
+import { AuthError } from './zwiftCore';
+
 /** ZwiftPower metric tuple `[value, flaggedOrEstimated]` returned in cache3 JSON. */
 export type ZwiftPowerTuple<T = number | string> = [T, number];
 
@@ -91,8 +93,14 @@ export interface ZwiftPowerRaceEntry {
   [key: string]: unknown;
 }
 
-export async function fetchZwiftPowerRaces(riderId: number): Promise<ZwiftPowerRaceEntry[]> {
-  const res = await fetch(`/api/zwiftpower/cache3/profile/${riderId}_all.json`);
+export async function fetchZwiftPowerRaces(
+  accessToken: string,
+  riderId: number,
+): Promise<ZwiftPowerRaceEntry[]> {
+  const res = await fetch(`/api/zwiftpower/cache3/profile/${riderId}_all.json`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (res.status === 401) throw new AuthError('Session expired.');
   if (res.status === 404) return [];
   if (!res.ok) throw new Error(`Failed to load ZwiftPower history (${res.status}).`);
   const payload = (await res.json()) as { data?: ZwiftPowerRaceEntry[] };
@@ -107,12 +115,15 @@ function sortRank(entry: ZwiftPowerRaceEntry): number {
 }
 
 export async function fetchZwiftPowerEventResults(
+  accessToken: string,
   eventId: string | number,
   variant: 'view' | 'zwift' = 'view',
 ): Promise<ZwiftPowerRaceEntry[]> {
   const res = await fetch(
     `/api/zwiftpower/cache3/results/${encodeURIComponent(String(eventId))}_${variant}.json`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
   );
+  if (res.status === 401) throw new AuthError('Session expired.');
   if (res.status === 404) return [];
   if (!res.ok) throw new Error(`Failed to load ZwiftPower event results (${res.status}).`);
   const payload = (await res.json()) as ZwiftPowerRaceEntry[] | { data?: ZwiftPowerRaceEntry[] };
