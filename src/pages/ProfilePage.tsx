@@ -3,6 +3,7 @@ import { fetchPowerProfile, getCachedPowerProfile } from '../api/zwiftCore';
 import type { ZwiftPowerProfile, ZwiftProfile } from '../api/zwiftCore';
 import { useAuth } from '../auth/AuthContext';
 import { AppHeader } from '../components/AppShell';
+import McpConnectModal from '../components/McpConnectModal';
 import PowerBestsSection from '../components/PowerBestsSection';
 import ZwiftRacingProfileSection from '../components/ZwiftRacingProfileSection';
 import { useFavorites } from '../lib/FavoritesContext';
@@ -140,6 +141,7 @@ export default function ProfilePage({
   const { units, setUnits } = useUnits(profile.useMetric === false ? 'imperial' : 'metric');
   const { isFavorite, toggleFavorite } = useFavorites();
   const [subTab, setSubTab] = useState<ProfileSubTab>('overview');
+  const [mcpOpen, setMcpOpen] = useState(false);
 
   const { zpState, zrState } = useRiderRaceHistory(profile.id, {
     includeActivities: false,
@@ -399,6 +401,30 @@ export default function ProfilePage({
               <TelemetryTile label="Drops" value={formatDrops(profile.totalGold)} />
             </dl>
           </section>
+
+          {isOwnProfile && (
+            <section className="rounded-2xl bg-slate-900 border border-slate-800 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center rounded-full bg-accent/15 border border-accent/40 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-accent-text">
+                    Remote MCP
+                  </span>
+                  <h2 className="text-sm font-extrabold text-slate-100">Connect AI / MCP</h2>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Link Gemini CLI, Claude Code, or Claude Desktop to query your Zwift races and
+                  telemetry on demand.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMcpOpen(true)}
+                className="shrink-0 rounded-xl bg-accent px-4 py-2 text-xs font-extrabold text-accent-foreground hover:opacity-95 transition-opacity self-start sm:self-center"
+              >
+                Connect AI / MCP
+              </button>
+            </section>
+          )}
         </div>
       )}
 
@@ -421,6 +447,7 @@ export default function ProfilePage({
           zpState={zpState}
         />
       )}
+      {mcpOpen && <McpConnectModal onClose={() => setMcpOpen(false)} />}
     </main>
   );
 }

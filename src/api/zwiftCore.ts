@@ -311,7 +311,11 @@ async function tokenRequest(params: Record<string, string>): Promise<TokenSet> {
         : `Zwift login failed (${res.status}).`,
     );
   }
-  const data = await res.json();
+  const data = (await res.json()) as {
+    access_token: string;
+    refresh_token: string;
+    expires_in?: number;
+  };
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,

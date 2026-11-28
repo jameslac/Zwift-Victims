@@ -8,6 +8,7 @@ import { useTheme } from '../lib/ThemeContext';
 import { COLOR_SCHEMES } from '../lib/themeConfig';
 import { formatRiderName, getFavoriteCategory } from '../lib/useRiderProfile';
 import type { UnitSystem } from '../lib/units';
+import McpConnectModal from './McpConnectModal';
 
 export type ActiveNavTab = 'profile' | 'history' | 'victims' | 'detail';
 
@@ -197,6 +198,7 @@ export function AppHeader({
   const { colorScheme, setColorScheme, studioOpen, setStudioOpen } = useTheme();
   const [lookupId, setLookupId] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [mcpOpen, setMcpOpen] = useState(false);
 
   const currentScheme = COLOR_SCHEMES.find((s) => s.id === colorScheme) ?? COLOR_SCHEMES[0];
 
@@ -338,6 +340,34 @@ export function AppHeader({
 
           {/* Right: Theme Picker + Desktop Search & Controls + Mobile Menu Button */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {authProfile && (
+              <button
+                type="button"
+                onClick={() => setMcpOpen(true)}
+                title="Connect AI / MCP (Gemini CLI, Claude Code, Claude Desktop)"
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-slate-700/90 bg-slate-900/90 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:border-accent/60 hover:text-accent-text transition-colors"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="w-3.5 h-3.5 text-accent-text"
+                  aria-hidden="true"
+                >
+                  <path d="M12 2v4" />
+                  <path d="M12 18v4" />
+                  <path d="M4.93 4.93l2.83 2.83" />
+                  <path d="M16.24 16.24l2.83 2.83" />
+                  <path d="M2 12h4" />
+                  <path d="M18 12h4" />
+                </svg>
+                <span>Connect AI</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => setStudioOpen(true)}
@@ -623,7 +653,19 @@ export function AppHeader({
               </div>
             </div>
 
-            <div className="border-t border-slate-800 pt-4">
+            <div className="border-t border-slate-800 pt-4 space-y-2.5">
+              {authProfile && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDrawerOpen(false);
+                    setMcpOpen(true);
+                  }}
+                  className="w-full rounded-xl border border-accent/40 bg-accent/10 py-2.5 px-3 text-xs font-bold text-accent-text hover:bg-accent/20 transition-colors"
+                >
+                  Connect AI / MCP
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -674,6 +716,7 @@ export function AppHeader({
       </nav>
 
       {studioOpen && <ThemePreferencesModal onClose={() => setStudioOpen(false)} />}
+      {mcpOpen && <McpConnectModal onClose={() => setMcpOpen(false)} />}
     </>
   );
 }
