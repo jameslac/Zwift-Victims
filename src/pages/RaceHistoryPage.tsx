@@ -469,7 +469,7 @@ function MergedTab({
     activitiesState.status === 'loading';
 
   if (allSourcesLoading) {
-    return <p className="text-sm text-slate-400">Loading activity history…</p>;
+    return <p className="text-sm text-slate-400">Loading ride history…</p>;
   }
 
   if (
@@ -817,7 +817,7 @@ function RiderRaceHistoryView({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-lg sm:text-xl font-extrabold text-slate-100">
-              {isOwnProfile ? 'Activity & Race History' : `${riderName} · Activity & Race History`}
+              {isOwnProfile ? 'Ride History' : `${riderName} · Ride History`}
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">
               All Zwift activities merged across ZwiftPower, ZwiftRacing.app, and Zwift Core. Filter

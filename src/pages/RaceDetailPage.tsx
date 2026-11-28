@@ -976,7 +976,7 @@ export default function RaceDetailPage() {
         onUnitsChange={setUnits}
         onLogout={logout}
         backTo={historyPath}
-        backLabel="← History"
+        backLabel="← Ride History"
       />
 
       {/* Compact Race Hero Header */}
