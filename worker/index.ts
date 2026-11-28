@@ -12,6 +12,10 @@ const ZWIFTPOWER_BASE = 'https://zwiftpower.com';
 const ZWIFTPOWER_COOKIE_SEED_URL =
   `${ZWIFTPOWER_BASE}/ucp.php?mode=login&login=external&oauth_service=oauthzpsso`;
 const ZWIFTRACING_BASE = 'https://zwiftracing.app';
+const VERIFIED_TOKEN_TTL_MS = 5 * 60_000;
+const MAX_VERIFIED_TOKENS = 500;
+
+type TokenVerifyResult = 'ok' | 'unauthorized' | 'upstream_unavailable';
 
 // Only these Zwift Core API paths may be relayed (keeps the proxy from being an open relay).
 const ZWIFT_API_ALLOWLIST = [
@@ -37,12 +41,129 @@ const ZWIFTPOWER_ALLOWLIST = [
 ];
 
 let cachedZpCookies: string | null = null;
+const verifiedTokens = new Map<string, number>();
+const verifyInFlight = new Map<string, Promise<TokenVerifyResult>>();
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
   });
+}
+
+function isForbiddenCrossOrigin(request: Request, url: URL): boolean {
+  const origin = request.headers.get('Origin');
+  if (origin && origin !== url.origin) return true;
+  const fetchSite = request.headers.get('Sec-Fetch-Site');
+  if (fetchSite && fetchSite !== 'same-origin' && fetchSite !== 'none') return true;
+  return false;
+}
+
+function extractBearerToken(request: Request): string | null {
+  const auth = request.headers.get('Authorization');
+  if (!auth) return null;
+  const match = auth.match(/^Bearer\s+(\S+)$/);
+  return match?.[1] ?? null;
+}
+
+function parseZwiftJwtExp(token: string): number | null {
+  const parts = token.split('.');
+  if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padLength = (4 - (base64.length % 4)) % 4;
+    const padded = base64 + '='.repeat(padLength);
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+    const payload = JSON.parse(new TextDecoder().decode(bytes)) as {
+      exp?: unknown;
+      iss?: unknown;
+    };
+    if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp)) return null;
+    const expMs = payload.exp * 1000;
+    if (expMs <= Date.now()) return null;
+    if (typeof payload.iss !== 'string') return null;
+    const issHost = new URL(payload.iss).hostname.toLowerCase();
+    if (issHost !== 'secure.zwift.com' && !issHost.endsWith('.zwift.com')) return null;
+    return expMs;
+  } catch {
+    return null;
+  }
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function cacheVerifiedToken(tokenHash: string, jwtExpMs: number): void {
+  const now = Date.now();
+  const expiresAt = Math.min(jwtExpMs, now + VERIFIED_TOKEN_TTL_MS);
+  if (expiresAt <= now) return;
+  if (verifiedTokens.has(tokenHash)) {
+    verifiedTokens.delete(tokenHash);
+  } else if (verifiedTokens.size >= MAX_VERIFIED_TOKENS) {
+    for (const [k, exp] of verifiedTokens) {
+      if (exp <= now) verifiedTokens.delete(k);
+    }
+    while (verifiedTokens.size >= MAX_VERIFIED_TOKENS) {
+      const oldestKey = verifiedTokens.keys().next().value;
+      if (oldestKey === undefined) break;
+      verifiedTokens.delete(oldestKey);
+    }
+  }
+  verifiedTokens.set(tokenHash, expiresAt);
+}
+
+async function verifyZwiftBearerToken(request: Request): Promise<TokenVerifyResult> {
+  const token = extractBearerToken(request);
+  if (!token) return 'unauthorized';
+  const jwtExpMs = parseZwiftJwtExp(token);
+  if (jwtExpMs === null) return 'unauthorized';
+
+  const tokenHash = await sha256Hex(token);
+  const cachedExp = verifiedTokens.get(tokenHash);
+  if (cachedExp !== undefined) {
+    if (cachedExp > Date.now()) return 'ok';
+    verifiedTokens.delete(tokenHash);
+  }
+
+  const existing = verifyInFlight.get(tokenHash);
+  if (existing) return existing;
+
+  const check = (async (): Promise<TokenVerifyResult> => {
+    try {
+      const res = await fetch(`${ZWIFT_API_BASE}/api/profiles/me`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      });
+      await res.body?.cancel();
+      if (res.ok) {
+        cacheVerifiedToken(tokenHash, jwtExpMs);
+        return 'ok';
+      }
+      if (res.status === 401 || res.status === 403) {
+        verifiedTokens.delete(tokenHash);
+        return 'unauthorized';
+      }
+      return 'upstream_unavailable';
+    } catch {
+      return 'upstream_unavailable';
+    } finally {
+      verifyInFlight.delete(tokenHash);
+    }
+  })();
+
+  verifyInFlight.set(tokenHash, check);
+  return check;
+}
+
+async function requireVerifiedZwiftAuth(request: Request): Promise<Response | null> {
+  const status = await verifyZwiftBearerToken(request);
+  if (status === 'unauthorized') return json({ error: 'unauthorized' }, 401);
+  if (status === 'upstream_unavailable') {
+    return json({ error: 'auth_verification_unavailable' }, 503);
+  }
+  return null;
 }
 
 /**
@@ -89,8 +210,8 @@ async function handleCoreApi(
   if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405);
   if (!ZWIFT_API_ALLOWLIST.some((re) => re.test(path))) return json({ error: 'not_allowed' }, 403);
 
-  const auth = request.headers.get('Authorization');
-  if (!auth) return json({ error: 'unauthorized' }, 401);
+  const token = extractBearerToken(request);
+  if (!token) return json({ error: 'unauthorized' }, 401);
 
   const forwardedParams = new URLSearchParams();
   for (const [key, value] of searchParams) {
@@ -103,8 +224,18 @@ async function handleCoreApi(
   const targetUrl = `${ZWIFT_API_BASE}${path}${queryString ? `?${queryString}` : ''}`;
 
   const upstream = await fetch(targetUrl, {
-    headers: { Authorization: auth, Accept: 'application/json' },
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
   });
+
+  if (upstream.ok) {
+    const jwtExpMs = parseZwiftJwtExp(token);
+    if (jwtExpMs !== null) {
+      cacheVerifiedToken(await sha256Hex(token), jwtExpMs);
+    }
+  } else if (upstream.status === 401) {
+    verifiedTokens.delete(await sha256Hex(token));
+  }
+
   return new Response(upstream.body, {
     status: upstream.status,
     headers: {
@@ -137,6 +268,9 @@ async function fetchZwiftPowerWithCookies(path: string, forceRefresh = false): P
 async function handleZwiftPower(request: Request, path: string): Promise<Response> {
   if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405);
   if (!ZWIFTPOWER_ALLOWLIST.some((re) => re.test(path))) return json({ error: 'not_allowed' }, 403);
+
+  const authError = await requireVerifiedZwiftAuth(request);
+  if (authError) return authError;
 
   let upstream = await fetchZwiftPowerWithCookies(path, false);
   if (upstream.status === 403) {
@@ -174,6 +308,12 @@ async function handleZwiftRacing(request: Request, path: string): Promise<Respon
   if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405);
 
   const riderMatch = path.match(/^\/riders\/(\d+)$/);
+  const eventMatch = riderMatch ? null : path.match(/^\/events\/(\d+)$/);
+  if (!riderMatch && !eventMatch) return json({ error: 'not_allowed' }, 403);
+
+  const authError = await requireVerifiedZwiftAuth(request);
+  if (authError) return authError;
+
   if (riderMatch) {
     const htmlOrErr = await fetchZwiftRacingHtml(`/riders/${riderMatch[1]}`);
     if (htmlOrErr instanceof Response) return htmlOrErr;
@@ -184,7 +324,6 @@ async function handleZwiftRacing(request: Request, path: string): Promise<Respon
     return json(data, 200);
   }
 
-  const eventMatch = path.match(/^\/events\/(\d+)$/);
   if (eventMatch) {
     const htmlOrErr = await fetchZwiftRacingHtml(`/events/${eventMatch[1]}`);
     if (htmlOrErr instanceof Response) return htmlOrErr;
@@ -399,8 +538,9 @@ async function handleActivityFit(
   searchParams: URLSearchParams,
 ): Promise<Response> {
   if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405);
-  const auth = request.headers.get('Authorization');
-  if (!auth) return json({ error: 'unauthorized', message: 'Authorization required.' }, 401);
+  const token = extractBearerToken(request);
+  if (!token) return json({ error: 'unauthorized', message: 'Authorization required.' }, 401);
+  const auth = `Bearer ${token}`;
 
   const riderId = searchParams.get('riderId');
   const { meta, errorResponse } = await fetchZwiftActivityMeta(auth, activityId, riderId);
@@ -477,8 +617,9 @@ async function handleActivityFitnessData(
   searchParams: URLSearchParams,
 ): Promise<Response> {
   if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405);
-  const auth = request.headers.get('Authorization');
-  if (!auth) return json({ error: 'unauthorized', message: 'Authorization required.' }, 401);
+  const token = extractBearerToken(request);
+  if (!token) return json({ error: 'unauthorized', message: 'Authorization required.' }, 401);
+  const auth = `Bearer ${token}`;
 
   const riderId = searchParams.get('riderId');
   const { meta, errorResponse } = await fetchZwiftActivityMeta(auth, activityId, riderId);
@@ -548,6 +689,10 @@ export default {
         service: 'zwift-victims-worker',
         timestamp: new Date().toISOString(),
       });
+    }
+
+    if (url.pathname.startsWith('/api/') && isForbiddenCrossOrigin(request, url)) {
+      return json({ error: 'forbidden_origin' }, 403);
     }
 
     if (url.pathname === '/api/zwift/auth/token') return handleToken(request);

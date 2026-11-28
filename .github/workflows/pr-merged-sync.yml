@@ -11,6 +11,9 @@ permissions:
 
 jobs:
   sync:
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository
     uses: jameslac/github-workflows/.github/workflows/pr-merged-sync.yml@main
     secrets: inherit
     with:

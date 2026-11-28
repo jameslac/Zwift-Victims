@@ -172,7 +172,8 @@ export default function RaceDetailPage() {
         });
     }
 
-    fetchZwiftPowerRaces(targetRiderId)
+    getAccessToken()
+      .then((token) => fetchZwiftPowerRaces(token, targetRiderId))
       .then((data) => {
         if (!cancelled) setZpRacesRaw({ key: raceKey, state: { status: 'loaded', data } });
       })
@@ -185,7 +186,8 @@ export default function RaceDetailPage() {
         }
       });
 
-    fetchZwiftRacingRider(targetRiderId)
+    getAccessToken()
+      .then((token) => fetchZwiftRacingRider(token, targetRiderId))
       .then((data) => {
         if (!cancelled) setZrRiderRaw({ key: raceKey, state: { status: 'loaded', data } });
       })
@@ -198,7 +200,8 @@ export default function RaceDetailPage() {
         }
       });
 
-    fetchZwiftRacingEvent(eventId)
+    getAccessToken()
+      .then((token) => fetchZwiftRacingEvent(token, eventId))
       .then((data) => {
         if (!cancelled) setZrEventRaw({ key: raceKey, state: { status: 'loaded', data } });
       })
@@ -214,7 +217,8 @@ export default function RaceDetailPage() {
         }
       });
 
-    fetchZwiftPowerEventResults(eventId, 'view')
+    getAccessToken()
+      .then((token) => fetchZwiftPowerEventResults(token, eventId, 'view'))
       .then((data) => {
         if (!cancelled) setZpViewRaw({ key: raceKey, state: { status: 'loaded', data } });
       })
@@ -227,7 +231,8 @@ export default function RaceDetailPage() {
         }
       });
 
-    fetchZwiftPowerEventResults(eventId, 'zwift')
+    getAccessToken()
+      .then((token) => fetchZwiftPowerEventResults(token, eventId, 'zwift'))
       .then((data) => {
         if (!cancelled) setZpZwiftRaw({ key: raceKey, state: { status: 'loaded', data } });
       })

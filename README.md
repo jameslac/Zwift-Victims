@@ -45,12 +45,17 @@ If either secret is missing, the cleanup workflow emits a warning and skips dele
 ## Initial Roadmap
 1. **Milestone 1: Foundation & Authentication**
    - [x] Scaffold Vite + React + TypeScript + Tailwind + PWA + Unified Cloudflare Worker (`wrangler.jsonc`).
-   - [x] Implement `/api/zwift/*` proxy routes (token + allow-listed Core API) in `worker/index.ts`. (`/api/zwiftpower/*` still TODO)
-   - [x] Build the Login screen & local token management (`localStorage` + auto-refresh) and verify by fetching the logged-in user's Zwift profile and friends/followees list.
+   - [x] Implement authenticated, allow-listed `/api/zwift/*`, `/api/zwiftpower/*`, and `/api/zwiftracing/*` relay routes in `worker/index.ts`.
+   - [x] Build the Login screen & local token management (`localStorage` + auto-refresh) and verify by fetching the logged-in user's Zwift profile and stats.
 2. **Milestone 2: Head-to-Head ("Zwift Victims") Win/Loss Tracker**
-   - [ ] Select/manage the roster of friends (from Zwift followees or by Zwift ID search).
-   - [ ] Fetch shared race history and compute pairwise `1v1` Win/Loss records across every multi-friend race.
-   - [ ] Add race exclusion filters (e.g., team events like ZRL/TTT or manual race exclusions).
+   - [x] Select/manage the roster of favorited rivals (by Zwift ID search or from race standings).
+   - [ ] Import/browse friends directly from the Zwift followees list.
+   - [x] Fetch shared race history and compute pairwise `1v1` Win/Loss records across shared races.
+   - [x] Exclude team events (`ZRL` / `WTRL` / `TTT`) via toggle.
+   - [ ] Add manual per-race exclusions.
 3. **Milestone 3: Race Deep-Dive & Equipment Inspector**
-   - [ ] Inspect individual races, power splits (`15s`, `1m`, `5m`, `20m`), and equipped bike frames/wheels.
-   - [ ] Build an in-app **Share / Snapshot export** feature to generate clean, full-view images for sharing on iOS and Android (since native OS long screenshots are not reliably supported in mobile Chrome or installed PWAs).
+   - [x] Inspect individual races and activities, unified pen standings, interactive power curve (`5s`–`20m`), and vELO / ZRS / ZP ratings.
+   - [x] Parse `.fit` / fitness telemetry in the browser and export selected activities as per-second CSV and/or `.fit` bundles.
+   - [ ] Decode equipped bike frames/wheels (`frameId` / `wheelId` lookup).
+   - [x] Build an in-app **Share Interval Bests** card/PNG export.
+   - [ ] Extend in-app snapshot sharing to full-view race & head-to-head summaries on iOS and Android (since native OS long screenshots are not reliably supported in mobile Chrome or installed PWAs).
